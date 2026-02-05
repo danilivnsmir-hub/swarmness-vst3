@@ -77,16 +77,27 @@ jobs:
       run: |
         cmake --build build --config Release
     
+    - name: Debug - List build directory structure
+      run: |
+        echo "=== Build directory structure ==="
+        find build -name "*.vst3" -type d 2>/dev/null || echo "No .vst3 directories found"
+        echo ""
+        echo "=== Full Swarmness_artefacts structure ==="
+        ls -laR build/Swarmness_artefacts/ 2>/dev/null || echo "Swarmness_artefacts not found"
+    
     - name: Package VST3
       run: |
         mkdir -p artifacts/macos
+        # Copy the entire VST3 bundle
         cp -r build/Swarmness_artefacts/Release/VST3/Swarmness.vst3 artifacts/macos/
+        echo "=== Artifacts directory structure ==="
+        ls -laR artifacts/
     
     - name: Upload macOS VST3
       uses: actions/upload-artifact@v4
       with:
         name: swarmness-vst3-macos
-        path: artifacts/macos/Swarmness.vst3
+        path: artifacts/macos/
         retention-days: 30
 
   build-linux:
