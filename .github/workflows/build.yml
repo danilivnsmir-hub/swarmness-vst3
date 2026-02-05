@@ -29,10 +29,12 @@ jobs:
     - name: Configure CMake
       run: |
         cmake -B build -DCMAKE_BUILD_TYPE=Release -DJUCE_PATH=$JUCE_PATH
+      shell: bash
     
     - name: Build
       run: |
         cmake --build build --config Release
+      shell: bash
     
     - name: Package VST3
       run: |
@@ -110,7 +112,7 @@ jobs:
           libxinerama-dev \
           libxrandr-dev \
           libxrender-dev \
-          libwebkit2gtk-4.0-dev \
+          libwebkit2gtk-4.1-dev \
           libglu1-mesa-dev \
           mesa-common-dev
     
