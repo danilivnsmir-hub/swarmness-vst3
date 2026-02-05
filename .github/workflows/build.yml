@@ -39,7 +39,7 @@ jobs:
     - name: Package VST3
       run: |
         mkdir -p artifacts/windows
-        cp -r build/Source/Swarmness_artefacts/Release/VST3/Swarmness.vst3 artifacts/windows/
+        cp -r build/Swarmness_artefacts/Release/VST3/Swarmness.vst3 artifacts/windows/
       shell: bash
     
     - name: Upload Windows VST3
@@ -51,7 +51,7 @@ jobs:
 
   build-macos:
     name: Build macOS Universal Binary
-    runs-on: macos-latest
+    runs-on: macos-13
     
     steps:
     - name: Checkout code
@@ -78,7 +78,7 @@ jobs:
     - name: Package VST3
       run: |
         mkdir -p artifacts/macos
-        cp -r build/Source/Swarmness_artefacts/Release/VST3/Swarmness.vst3 artifacts/macos/
+        cp -r build/Swarmness_artefacts/Release/VST3/Swarmness.vst3 artifacts/macos/
     
     - name: Upload macOS VST3
       uses: actions/upload-artifact@v4
@@ -132,7 +132,7 @@ jobs:
     - name: Package VST3
       run: |
         mkdir -p artifacts/linux
-        cp -r build/Source/Swarmness_artefacts/Release/VST3/Swarmness.vst3 artifacts/linux/
+        cp -r build/Swarmness_artefacts/Release/VST3/Swarmness.vst3 artifacts/linux/
     
     - name: Upload Linux VST3
       uses: actions/upload-artifact@v4
