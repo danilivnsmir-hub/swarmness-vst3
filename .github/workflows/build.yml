@@ -1,0 +1,168 @@
+name: Build Swarmness VST3
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  release:
+    types: [ created ]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    name: Build Windows VST3
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+    
+    - name: Setup JUCE
+      run: |
+        git clone --depth 1 --branch 8.0.0 https://github.com/juce-framework/JUCE.git
+        echo "JUCE_DIR=${{ github.workspace }}/JUCE" >> $GITHUB_ENV
+      shell: bash
+    
+    - name: Configure CMake
+      run: |
+        cmake -B build -DCMAKE_BUILD_TYPE=Release
+    
+    - name: Build
+      run: |
+        cmake --build build --config Release
+    
+    - name: Package VST3
+      run: |
+        mkdir -p artifacts/windows
+        cp -r build/Source/Swarmness_artefacts/Release/VST3/Swarmness.vst3 artifacts/windows/
+      shell: bash
+    
+    - name: Upload Windows VST3
+      uses: actions/upload-artifact@v4
+      with:
+        name: swarmness-vst3-windows
+        path: artifacts/windows/Swarmness.vst3
+        retention-days: 30
+
+  build-macos:
+    name: Build macOS Universal Binary
+    runs-on: macos-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+    
+    - name: Setup JUCE
+      run: |
+        git clone --depth 1 --branch 8.0.0 https://github.com/juce-framework/JUCE.git
+        echo "JUCE_DIR=${{ github.workspace }}/JUCE" >> $GITHUB_ENV
+    
+    - name: Configure CMake (Universal Binary)
+      run: |
+        cmake -B build -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
+          -DCMAKE_OSX_DEPLOYMENT_TARGET=10.13
+    
+    - name: Build
+      run: |
+        cmake --build build --config Release
+    
+    - name: Package VST3
+      run: |
+        mkdir -p artifacts/macos
+        cp -r build/Source/Swarmness_artefacts/Release/VST3/Swarmness.vst3 artifacts/macos/
+    
+    - name: Upload macOS VST3
+      uses: actions/upload-artifact@v4
+      with:
+        name: swarmness-vst3-macos
+        path: artifacts/macos/Swarmness.vst3
+        retention-days: 30
+
+  build-linux:
+    name: Build Linux VST3
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          libasound2-dev \
+          libjack-jackd2-dev \
+          libcurl4-openssl-dev \
+          libfreetype6-dev \
+          libx11-dev \
+          libxcomposite-dev \
+          libxcursor-dev \
+          libxext-dev \
+          libxinerama-dev \
+          libxrandr-dev \
+          libxrender-dev \
+          libwebkit2gtk-4.0-dev \
+          libglu1-mesa-dev \
+          mesa-common-dev
+    
+    - name: Setup JUCE
+      run: |
+        git clone --depth 1 --branch 8.0.0 https://github.com/juce-framework/JUCE.git
+        echo "JUCE_DIR=${{ github.workspace }}/JUCE" >> $GITHUB_ENV
+    
+    - name: Configure CMake
+      run: |
+        cmake -B build -DCMAKE_BUILD_TYPE=Release
+    
+    - name: Build
+      run: |
+        cmake --build build --config Release
+    
+    - name: Package VST3
+      run: |
+        mkdir -p artifacts/linux
+        cp -r build/Source/Swarmness_artefacts/Release/VST3/Swarmness.vst3 artifacts/linux/
+    
+    - name: Upload Linux VST3
+      uses: actions/upload-artifact@v4
+      with:
+        name: swarmness-vst3-linux
+        path: artifacts/linux/Swarmness.vst3
+        retention-days: 30
+
+  create-release:
+    name: Create Release
+    needs: [build-windows, build-macos, build-linux]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+    
+    - name: Create release archives
+      run: |
+        cd artifacts
+        zip -r swarmness-vst3-windows.zip swarmness-vst3-windows/
+        zip -r swarmness-vst3-macos.zip swarmness-vst3-macos/
+        zip -r swarmness-vst3-linux.zip swarmness-vst3-linux/
+    
+    - name: Upload Release Assets
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          artifacts/swarmness-vst3-windows.zip
+          artifacts/swarmness-vst3-macos.zip
+          artifacts/swarmness-vst3-linux.zip
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
