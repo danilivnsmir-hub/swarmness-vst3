@@ -10,7 +10,7 @@ public:
 
     void prepare(double sampleRate, int blockSize);
     void reset();
-    void setOctaveMode(int mode); // 0: -2 oct, 1: -1 oct, 2: +1 oct, 3: +2 oct
+    void setOctaveMode(int mode); // 0: -2 oct, 1: -1 oct, 2: 0 (bypass), 3: +1 oct, 4: +2 oct
     void setEngage(bool engaged);
     void setRiseTime(float ms);
     void setPanic(float amount);     // 0-1

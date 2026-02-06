@@ -122,8 +122,9 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
     addAndMakeVisible(octaveModeBox);
     octaveModeBox.addItem("-2 OCT", 1);
     octaveModeBox.addItem("-1 OCT", 2);
-    octaveModeBox.addItem("+1 OCT", 3);
-    octaveModeBox.addItem("+2 OCT", 4);
+    octaveModeBox.addItem("0", 3);
+    octaveModeBox.addItem("+1 OCT", 4);
+    octaveModeBox.addItem("+2 OCT", 5);
     octaveModeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
         audioProcessor.getAPVTS(), "octaveMode", octaveModeBox);
 
@@ -391,7 +392,7 @@ void SwarmnesssAudioProcessorEditor::paint(juce::Graphics& g) {
     // Version number
     g.setColour(MetalLookAndFeel::getTextDim());
     g.setFont(juce::Font(11.0f));
-    g.drawText("v2.4.0", getWidth() - 70, 20, 60, 20, juce::Justification::centredRight);
+    g.drawText("v2.5.0", getWidth() - 70, 20, 60, 20, juce::Justification::centredRight);
 
     // Draw section frames
     // Top row

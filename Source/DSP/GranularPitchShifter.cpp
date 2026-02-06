@@ -29,14 +29,15 @@ void GranularPitchShifter::reset() {
 }
 
 void GranularPitchShifter::setOctaveMode(int mode) {
-    mOctaveMode = juce::jlimit(0, 3, mode);
+    mOctaveMode = juce::jlimit(0, 4, mode);
     float targetRatio;
     switch (mOctaveMode) {
         case 0: targetRatio = 0.25f; break; // -2 octaves
         case 1: targetRatio = 0.5f; break;  // -1 octave
-        case 2: targetRatio = 2.0f; break;  // +1 octave
-        case 3: targetRatio = 4.0f; break;  // +2 octaves
-        default: targetRatio = 2.0f;
+        case 2: targetRatio = 1.0f; break;  // 0 (no pitch shift)
+        case 3: targetRatio = 2.0f; break;  // +1 octave
+        case 4: targetRatio = 4.0f; break;  // +2 octaves
+        default: targetRatio = 1.0f;
     }
     mPitchRatio.setTargetValue(targetRatio);
 }
@@ -100,19 +101,21 @@ void GranularPitchShifter::process(juce::AudioBuffer<float>& buffer) {
         float basePitchRatio = mPitchRatio.getNextValue();
         float wetGain = mWetGain.getNextValue();
 
-        // Apply chaos modulation
+        // Apply chaos modulation (random pitch wobble - musical glitch character)
         float chaosModulation = 0.0f;
         if (mChaos > 0.0f) {
-            mChaosPhase += (5.0f + mRandom.nextFloat() * 10.0f) / static_cast<float>(mSampleRate);
+            mChaosPhase += (3.0f + mRandom.nextFloat() * 7.0f) / static_cast<float>(mSampleRate);
             if (mChaosPhase >= 1.0f) mChaosPhase -= 1.0f;
-            chaosModulation = mChaos * 0.3f * std::sin(mChaosPhase * juce::MathConstants<float>::twoPi);
-            chaosModulation += mChaos * 0.1f * (mRandom.nextFloat() * 2.0f - 1.0f);
+            // Slower, more musical chaos (±1.5 semitones max from LFO, ±0.5 from random)
+            chaosModulation = mChaos * 1.5f * std::sin(mChaosPhase * juce::MathConstants<float>::twoPi);
+            chaosModulation += mChaos * 0.5f * (mRandom.nextFloat() * 2.0f - 1.0f);
         }
 
-        // Apply panic modulation (rapid pitch fluctuation)
+        // Apply panic modulation (rapid pitch fluctuation - glitchy character)
         float panicModulation = 0.0f;
         if (mPanic > 0.0f) {
-            panicModulation = mPanic * 0.5f * (mRandom.nextFloat() * 2.0f - 1.0f);
+            // ±2 semitones max for more noticeable glitch effect
+            panicModulation = mPanic * 2.0f * (mRandom.nextFloat() * 2.0f - 1.0f);
         }
 
         float totalPitchRatio = basePitchRatio * dynamicRatio * 
