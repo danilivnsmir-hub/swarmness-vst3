@@ -15,17 +15,75 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
     
     // === Preset Dropdown (top-left) ===
     addAndMakeVisible(presetSelector);
-    auto& presetMgr = audioProcessor.getPresetManager();
-    auto presets = presetMgr.getPresetList();
-    int itemId = 1;
-    for (const auto& name : presets) {
-        presetSelector.addItem(name, itemId++);
-    }
-    int currentIdx = presets.indexOf(presetMgr.getCurrentPresetName());
-    if (currentIdx >= 0) presetSelector.setSelectedItemIndex(currentIdx);
+    refreshPresetList();
     presetSelector.onChange = [this]() {
         auto selectedName = presetSelector.getText();
         audioProcessor.getPresetManager().loadPreset(selectedName);
+    };
+    
+    // === Preset Buttons ===
+    addAndMakeVisible(savePresetButton);
+    savePresetButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff2a2a2a));
+    savePresetButton.setColour(juce::TextButton::textColourOffId, MetalLookAndFeel::getAccentRed());
+    savePresetButton.onClick = [this]() {
+        auto presetName = presetSelector.getText();
+        if (presetName.isEmpty()) presetName = "New Preset";
+        
+        auto* window = new juce::AlertWindow("Save Preset", "Enter preset name:",
+                                              juce::AlertWindow::QuestionIcon);
+        window->addTextEditor("name", presetName);
+        window->addButton("Save", 1, juce::KeyPress(juce::KeyPress::returnKey));
+        window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+        
+        window->enterModalState(true, juce::ModalCallbackFunction::create(
+            [this, window](int result) {
+                if (result == 1) {
+                    auto name = window->getTextEditorContents("name");
+                    if (name.isNotEmpty()) {
+                        audioProcessor.getPresetManager().savePreset(name);
+                        refreshPresetList();
+                    }
+                }
+                delete window;
+            }), true);
+    };
+    
+    addAndMakeVisible(exportPresetButton);
+    exportPresetButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff2a2a2a));
+    exportPresetButton.setColour(juce::TextButton::textColourOffId, MetalLookAndFeel::getTextLight());
+    exportPresetButton.onClick = [this]() {
+        auto chooser = std::make_shared<juce::FileChooser>(
+            "Export Preset",
+            audioProcessor.getPresetManager().getPresetsDirectory(),
+            "*.swpreset;*.json");
+        chooser->launchAsync(juce::FileBrowserComponent::saveMode,
+            [this, chooser](const juce::FileChooser& fc) {
+                auto file = fc.getResult();
+                if (file != juce::File{}) {
+                    auto path = file.getFullPathName();
+                    if (!path.endsWith(".swpreset") && !path.endsWith(".json"))
+                        path += ".swpreset";
+                    audioProcessor.getPresetManager().exportPreset(juce::File(path));
+                }
+            });
+    };
+    
+    addAndMakeVisible(importPresetButton);
+    importPresetButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff2a2a2a));
+    importPresetButton.setColour(juce::TextButton::textColourOffId, MetalLookAndFeel::getTextLight());
+    importPresetButton.onClick = [this]() {
+        auto chooser = std::make_shared<juce::FileChooser>(
+            "Import Preset",
+            audioProcessor.getPresetManager().getPresetsDirectory(),
+            "*.swpreset;*.json");
+        chooser->launchAsync(juce::FileBrowserComponent::openMode,
+            [this, chooser](const juce::FileChooser& fc) {
+                auto file = fc.getResult();
+                if (file.existsAsFile()) {
+                    audioProcessor.getPresetManager().importPreset(file);
+                    refreshPresetList();
+                }
+            });
     };
     
     // === Info Button (top-right) ===
@@ -333,7 +391,7 @@ void SwarmnesssAudioProcessorEditor::paint(juce::Graphics& g) {
     // Version number
     g.setColour(MetalLookAndFeel::getTextDim());
     g.setFont(juce::Font(11.0f));
-    g.drawText("v2.3.0", getWidth() - 70, 20, 60, 20, juce::Justification::centredRight);
+    g.drawText("v2.3.1", getWidth() - 70, 20, 60, 20, juce::Justification::centredRight);
 
     // Draw section frames
     // Top row
@@ -359,8 +417,11 @@ void SwarmnesssAudioProcessorEditor::resized() {
     const int comboHeight = 24;
     const int toggleSize = 28;
     
-    // === Preset Selector (top-left corner) ===
-    presetSelector.setBounds(20, 20, 150, 28);
+    // === Preset Selector and Buttons (top-left corner) ===
+    presetSelector.setBounds(20, 20, 140, 28);
+    savePresetButton.setBounds(165, 20, 50, 28);
+    exportPresetButton.setBounds(220, 20, 60, 28);
+    importPresetButton.setBounds(285, 20, 60, 28);
     
     // === Info Button (top-right corner) ===
     infoButton.setBounds(getWidth() - 45, 15, 30, 30);
@@ -467,4 +528,16 @@ void SwarmnesssAudioProcessorEditor::resized() {
         int footY = 545;
         bypassFootswitch.setBounds(footX, footY, footWidth, footHeight);
     }
+}
+
+void SwarmnesssAudioProcessorEditor::refreshPresetList() {
+    presetSelector.clear();
+    auto& presetMgr = audioProcessor.getPresetManager();
+    auto presets = presetMgr.getPresetList();
+    int itemId = 1;
+    for (const auto& name : presets) {
+        presetSelector.addItem(name, itemId++);
+    }
+    int currentIdx = presets.indexOf(presetMgr.getCurrentPresetName());
+    if (currentIdx >= 0) presetSelector.setSelectedItemIndex(currentIdx);
 }

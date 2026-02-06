@@ -68,11 +68,11 @@ public:
         y = panelBounds.getY() + 55;
         drawParamInfo(g, col2X, y, colWidth, "SWARM Section:", true);
         y += lineHeight;
-        drawParamInfo(g, col2X, y, colWidth, "CHORUS DEPTH - Modulation intensity");
+        drawParamInfo(g, col2X, y, colWidth, "DEPTH - Swarm modulation intensity");
         y += lineHeight;
-        drawParamInfo(g, col2X, y, colWidth, "CHORUS RATE - Modulation speed");
+        drawParamInfo(g, col2X, y, colWidth, "RATE - Swarm modulation speed");
         y += lineHeight;
-        drawParamInfo(g, col2X, y, colWidth, "WOW/FLUTTER - Chorus mix amount");
+        drawParamInfo(g, col2X, y, colWidth, "MIX - Dry chorus/modulated blend");
         y += lineHeight * 1.5f;
         
         drawParamInfo(g, col2X, y, colWidth, "FLOW Section:", true);

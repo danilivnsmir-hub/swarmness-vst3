@@ -32,6 +32,11 @@ private:
     // Preset Dropdown (simplified UI)
     juce::ComboBox presetSelector;
     
+    // Preset buttons
+    juce::TextButton savePresetButton{"SAVE"};
+    juce::TextButton exportPresetButton{"EXPORT"};
+    juce::TextButton importPresetButton{"IMPORT"};
+    
     // Info Panel
     InfoPanel infoPanel;
     juce::TextButton infoButton{"i"};
@@ -53,9 +58,9 @@ private:
     RotaryKnob midBoostKnob{"MID BOOST"};
 
     // === SWARM Section (Bottom Left) ===
-    RotaryKnob chorusDepthKnob{"CHORUS\nDEPTH"};
-    RotaryKnob chorusRateKnob{"CHORUS\nRATE"};
-    RotaryKnob wowFlutterKnob{"WOW/\nFLUTTER"};
+    RotaryKnob chorusDepthKnob{"DEPTH"};
+    RotaryKnob chorusRateKnob{"RATE"};
+    RotaryKnob wowFlutterKnob{"MIX"};
 
     // === FLOW Section (Bottom Center) ===
     RotaryKnob flowAmountKnob{"FLOW\nAMOUNT"};
@@ -128,6 +133,7 @@ private:
 
     void setupSectionLabel(juce::Label& label, const juce::String& text);
     void drawSectionFrame(juce::Graphics& g, juce::Rectangle<int> bounds, const juce::String& title);
+    void refreshPresetList();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SwarmnesssAudioProcessorEditor)
 };

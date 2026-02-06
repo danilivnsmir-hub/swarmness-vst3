@@ -1,7 +1,7 @@
 #include "PresetManager.h"
 
 const juce::String PresetManager::kPresetExtension = ".swpreset";
-const juce::String PresetManager::kPresetVersion = "2.3.0";
+const juce::String PresetManager::kPresetVersion = "2.3.1";
 
 PresetManager::PresetManager(juce::AudioProcessorValueTreeState& apvts)
     : mAPVTS(apvts)
@@ -160,12 +160,12 @@ void PresetManager::initializeFactoryPresets() {
         preset->setProperty("category", "Factory");
         
         auto params = std::make_unique<juce::DynamicObject>();
-        // Set defaults first
+        // Set defaults first - neutral starting point
         params->setProperty("octaveMode", 2.0f / 3.0f);  // +1 OCT (index 2 of 4)
         params->setProperty("engage", 1.0f);
         params->setProperty("rise", 0.05f);
-        params->setProperty("slideRange", 0.5f);
-        params->setProperty("slideTime", 0.1f);
+        params->setProperty("slideRange", 0.0f);
+        params->setProperty("slideTime", 0.0f);
         params->setProperty("slideDirection", 0.0f);
         params->setProperty("autoSlide", 0.0f);
         params->setProperty("slidePosition", 0.0f);
@@ -179,8 +179,8 @@ void PresetManager::initializeFactoryPresets() {
         params->setProperty("speed", 0.0f);
         params->setProperty("lowCut", 0.0f);
         params->setProperty("highCut", 1.0f);
-        params->setProperty("chorusRate", 0.2f);
-        params->setProperty("chorusDepth", 0.5f);
+        params->setProperty("chorusRate", 0.0f);
+        params->setProperty("chorusDepth", 0.0f);
         params->setProperty("chorusMix", 0.0f);
         params->setProperty("saturation", 0.0f);
         params->setProperty("mix", 1.0f);
@@ -189,6 +189,7 @@ void PresetManager::initializeFactoryPresets() {
         params->setProperty("flowMode", 1.0f);  // Pulse mode
         params->setProperty("flowAmount", 0.0f);
         params->setProperty("flowSpeed", 0.3f);
+        params->setProperty("globalBypass", 0.0f);
         
         // Override with preset-specific values
         for (const auto& [key, value] : paramValues) {
@@ -199,44 +200,65 @@ void PresetManager::initializeFactoryPresets() {
         return juce::var(preset.release());
     };
     
-    // Factory Preset 1: Init (default clean state)
+    // Init - нейтральные настройки, 100% wet, без эффектов
     mFactoryPresets["Init"] = createPreset(
-        "Init", "Default initialization - clean 100% wet octave up", {});
+        "Init", "Neutral settings, 100% wet, no effects active",
+        {{"octaveMode", 2.0f / 3.0f}, {"mix", 1.0f}, {"panic", 0.0f}, {"chaos", 0.0f},
+         {"chorusDepth", 0.0f}, {"chorusRate", 0.0f}, {"chorusMix", 0.0f},
+         {"flowAmount", 0.0f}});
     
-    // Factory Preset 2: Octave Up (classic octave up)
+    // Octave Up - +1 октава, минимальный drift, чистый pitch shift
     mFactoryPresets["Octave Up"] = createPreset(
-        "Octave Up", "Clean octave up effect",
-        {{"octaveMode", 2.0f / 3.0f}, {"panic", 0.0f}, {"chaos", 0.0f}});
+        "Octave Up", "Clean +1 octave pitch shift",
+        {{"octaveMode", 2.0f / 3.0f}, {"rise", 0.02f}, {"panic", 0.0f}, {"chaos", 0.0f}});
     
-    // Factory Preset 3: Octave Down (one octave down)
+    // Octave Down - -1 октава, минимальный drift
     mFactoryPresets["Octave Down"] = createPreset(
-        "Octave Down", "Clean octave down effect",
-        {{"octaveMode", 1.0f / 3.0f}});
+        "Octave Down", "Clean -1 octave pitch shift",
+        {{"octaveMode", 1.0f / 3.0f}, {"rise", 0.02f}, {"panic", 0.0f}, {"chaos", 0.0f}});
     
-    // Factory Preset 4: Glitch (chaotic glitchy effect)
-    mFactoryPresets["Glitch"] = createPreset(
-        "Glitch", "Chaotic glitchy pitch effect",
-        {{"panic", 0.7f}, {"chaos", 0.5f}, {"flowAmount", 0.4f}, {"flowSpeed", 0.7f}});
+    // Double Octave - +2 октавы
+    mFactoryPresets["Double Octave"] = createPreset(
+        "Double Octave", "+2 octaves for super high pitch",
+        {{"octaveMode", 1.0f}, {"rise", 0.03f}, {"panic", 0.0f}, {"chaos", 0.0f}});
     
-    // Factory Preset 5: Chorus Heavy (thick chorus effect)
-    mFactoryPresets["Chorus Heavy"] = createPreset(
-        "Chorus Heavy", "Thick lush chorus modulation",
-        {{"chorusMix", 0.8f}, {"chorusDepth", 0.7f}, {"chorusRate", 0.3f}});
+    // Glitch Madness - высокий drift, chaos, быстрый flow
+    mFactoryPresets["Glitch Madness"] = createPreset(
+        "Glitch Madness", "Chaotic glitchy madness with fast flow",
+        {{"panic", 0.85f}, {"chaos", 0.75f}, {"rise", 0.4f},
+         {"flowAmount", 0.7f}, {"flowSpeed", 0.85f}, {"flowMode", 1.0f},
+         {"saturation", 0.4f}});
     
-    // Factory Preset 6: Stutter Gate
+    // Tape Warble - wow/flutter эффект, медленная модуляция
+    mFactoryPresets["Tape Warble"] = createPreset(
+        "Tape Warble", "Vintage tape deck warble effect",
+        {{"chorusMix", 0.65f}, {"chorusDepth", 0.5f}, {"chorusRate", 0.12f},
+         {"panic", 0.15f}, {"chaos", 0.2f}, {"rise", 0.1f}});
+    
+    // Stutter Gate - активный flow с быстрым pulse
     mFactoryPresets["Stutter Gate"] = createPreset(
-        "Stutter Gate", "Rhythmic gating effect",
-        {{"flowAmount", 0.9f}, {"flowSpeed", 0.5f}, {"flowMode", 1.0f}});
+        "Stutter Gate", "Rhythmic stutter/gate effect",
+        {{"flowAmount", 0.95f}, {"flowSpeed", 0.7f}, {"flowMode", 1.0f},
+         {"panic", 0.1f}});
     
-    // Factory Preset 7: Djent
-    mFactoryPresets["Djent"] = createPreset(
-        "Djent", "Tight djent-style octave",
-        {{"octaveMode", 2.0f / 3.0f}, {"panic", 0.15f}, {"chaos", 0.1f}, 
-         {"lowCut", 0.2f}, {"saturation", 0.3f}});
+    // Djent Tight - -1 октава, минимальный grain, tight sound
+    mFactoryPresets["Djent Tight"] = createPreset(
+        "Djent Tight", "Tight low octave for djent/metal",
+        {{"octaveMode", 1.0f / 3.0f}, {"rise", 0.01f}, {"panic", 0.05f}, {"chaos", 0.0f},
+         {"lowCut", 0.15f}, {"saturation", 0.35f}, {"drive", 0.2f}});
     
-    // Factory Preset 8: Warped Tape
-    mFactoryPresets["Warped Tape"] = createPreset(
-        "Warped Tape", "Warped tape deck modulation",
-        {{"chorusMix", 0.5f}, {"chorusDepth", 0.4f}, {"chorusRate", 0.15f},
-         {"panic", 0.2f}, {"chaos", 0.3f}});
+    // Ambient Shimmer - +1 октава, много chorus, медленный rate
+    mFactoryPresets["Ambient Shimmer"] = createPreset(
+        "Ambient Shimmer", "Ethereal shimmer with lush modulation",
+        {{"octaveMode", 2.0f / 3.0f}, {"rise", 0.15f},
+         {"chorusMix", 0.7f}, {"chorusDepth", 0.6f}, {"chorusRate", 0.08f},
+         {"panic", 0.1f}, {"chaos", 0.15f}});
+    
+    // Lo-Fi Chaos - случайный pitch, много drift, saturation
+    mFactoryPresets["Lo-Fi Chaos"] = createPreset(
+        "Lo-Fi Chaos", "Degraded lo-fi with random pitch artifacts",
+        {{"panic", 0.6f}, {"chaos", 0.5f}, {"rise", 0.35f},
+         {"saturation", 0.6f}, {"drive", 0.4f},
+         {"chorusMix", 0.3f}, {"chorusDepth", 0.3f}, {"chorusRate", 0.2f},
+         {"lowCut", 0.1f}, {"highCut", 0.7f}});
 }
