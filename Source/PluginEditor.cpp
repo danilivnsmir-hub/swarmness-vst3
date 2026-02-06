@@ -24,7 +24,7 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
     // === Preset Buttons ===
     addAndMakeVisible(savePresetButton);
     savePresetButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff2a2a2a));
-    savePresetButton.setColour(juce::TextButton::textColourOffId, MetalLookAndFeel::getAccentRed());
+    savePresetButton.setColour(juce::TextButton::textColourOffId, MetalLookAndFeel::getAccentOrange());
     savePresetButton.onClick = [this]() {
         auto presetName = presetSelector.getText();
         if (presetName.isEmpty()) presetName = "New Preset";
@@ -89,7 +89,7 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
     // === Info Button (top-right) ===
     addAndMakeVisible(infoButton);
     infoButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff2a2a2a));
-    infoButton.setColour(juce::TextButton::textColourOffId, MetalLookAndFeel::getAccentRed());
+    infoButton.setColour(juce::TextButton::textColourOffId, MetalLookAndFeel::getAccentOrange());
     infoButton.onClick = [this]() {
         infoPanel.setVisible(true);
         infoPanel.toFront(true);
@@ -98,27 +98,9 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
     // Info Panel (overlay)
     addChildComponent(infoPanel);
 
-    // === VOLTAGE Section (maps to pitch/modulation controls) ===
-    setupSectionLabel(voltageSectionLabel, "VOLTAGE");
+    // === PITCH Section ===
+    setupSectionLabel(pitchSectionLabel, "PITCH");
     
-    addAndMakeVisible(grainKnob);
-    grainKnob.setValueSuffix("%");
-    grainKnob.setValueMultiplier(100.0f);
-    panicAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        audioProcessor.getAPVTS(), "panic", grainKnob.getSlider());
-
-    addAndMakeVisible(pitchKnob);
-    pitchKnob.setValueSuffix("%");
-    pitchKnob.setValueMultiplier(100.0f);
-    chaosAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        audioProcessor.getAPVTS(), "chaos", pitchKnob.getSlider());
-
-    addAndMakeVisible(driftKnob);
-    driftKnob.setValueSuffix("%");
-    driftKnob.setValueMultiplier(100.0f);
-    riseAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        audioProcessor.getAPVTS(), "rise", driftKnob.getSlider());
-
     addAndMakeVisible(octaveModeBox);
     octaveModeBox.addItem("-2 OCT", 1);
     octaveModeBox.addItem("-1 OCT", 2);
@@ -128,33 +110,113 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
     octaveModeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
         audioProcessor.getAPVTS(), "octaveMode", octaveModeBox);
 
-    // Hidden engage button
+    addAndMakeVisible(pitchRangeKnob);
+    pitchRangeKnob.setValueSuffix("%");
+    pitchRangeKnob.setValueMultiplier(100.0f);
+    randomRangeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        audioProcessor.getAPVTS(), "randomRange", pitchRangeKnob.getSlider());
+
+    addAndMakeVisible(pitchSpeedKnob);
+    pitchSpeedKnob.setValueSuffix("%");
+    pitchSpeedKnob.setValueMultiplier(100.0f);
+    randomRateAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        audioProcessor.getAPVTS(), "randomRate", pitchSpeedKnob.getSlider());
+
+    addAndMakeVisible(pitchOnButton);
+    pitchOnButton.setButtonText("");
+    engageAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+        audioProcessor.getAPVTS(), "engage", pitchOnButton);
+
+    // === MODULATION Section ===
+    setupSectionLabel(modulationSectionLabel, "MODULATION");
+
+    addAndMakeVisible(angerKnob);
+    angerKnob.setValueSuffix("%");
+    angerKnob.setValueMultiplier(100.0f);
+    chaosAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        audioProcessor.getAPVTS(), "chaos", angerKnob.getSlider());
+
+    addAndMakeVisible(rushKnob);
+    rushKnob.setValueSuffix("%");
+    rushKnob.setValueMultiplier(100.0f);
+    panicAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        audioProcessor.getAPVTS(), "panic", rushKnob.getSlider());
+
+    addAndMakeVisible(modRateKnob);
+    modRateKnob.setValueSuffix("%");
+    modRateKnob.setValueMultiplier(100.0f);
+    speedAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        audioProcessor.getAPVTS(), "speed", modRateKnob.getSlider());
+
+    // === TONE Section ===
+    setupSectionLabel(toneSectionLabel, "TONE");
+
+    addAndMakeVisible(lowCutKnob);
+    lowCutKnob.setValueSuffix("%");
+    lowCutKnob.setValueMultiplier(100.0f);
+    lowCutAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        audioProcessor.getAPVTS(), "lowCut", lowCutKnob.getSlider());
+
+    addAndMakeVisible(highCutKnob);
+    highCutKnob.setValueSuffix("%");
+    highCutKnob.setValueMultiplier(100.0f);
+    highCutAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        audioProcessor.getAPVTS(), "highCut", highCutKnob.getSlider());
+
+    addAndMakeVisible(midBoostKnob);
+    midBoostKnob.setValueSuffix("%");
+    midBoostKnob.setValueMultiplier(100.0f);
+    saturationAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        audioProcessor.getAPVTS(), "saturation", midBoostKnob.getSlider());
+
+    // === SWARM Section (Chorus) ===
+    setupSectionLabel(swarmSectionLabel, "SWARM");
+
+    addAndMakeVisible(swarmDepthKnob);
+    swarmDepthKnob.setValueSuffix("%");
+    swarmDepthKnob.setValueMultiplier(100.0f);
+    chorusDepthAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        audioProcessor.getAPVTS(), "chorusDepth", swarmDepthKnob.getSlider());
+
+    addAndMakeVisible(swarmRateKnob);
+    swarmRateKnob.setValueSuffix("%");
+    swarmRateKnob.setValueMultiplier(100.0f);
+    chorusRateAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        audioProcessor.getAPVTS(), "chorusRate", swarmRateKnob.getSlider());
+
+    addAndMakeVisible(swarmMixKnob);
+    swarmMixKnob.setValueSuffix("%");
+    swarmMixKnob.setValueMultiplier(100.0f);
+    chorusMixAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        audioProcessor.getAPVTS(), "chorusMix", swarmMixKnob.getSlider());
+
+    // Hidden chorus mode
+    chorusModeBox.setVisible(false);
+    addAndMakeVisible(chorusModeBox);
+    chorusModeBox.addItem("Classic", 1);
+    chorusModeBox.addItem("Deep", 2);
+    chorusModeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+        audioProcessor.getAPVTS(), "chorusMode", chorusModeBox);
+
+    // === OUTPUT Section ===
+    setupSectionLabel(outputSectionLabel, "OUTPUT");
+
+    addAndMakeVisible(mixKnob);
+    mixKnob.setValueSuffix("%");
+    mixKnob.setValueMultiplier(100.0f);
+    mixAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        audioProcessor.getAPVTS(), "mix", mixKnob.getSlider());
+
+    addAndMakeVisible(volumeKnob);
+    volumeKnob.setValueSuffix("%");
+    volumeKnob.setValueMultiplier(100.0f);
+    outputGainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        audioProcessor.getAPVTS(), "outputGain", volumeKnob.getSlider());
+
+    // Hidden controls (maintain parameter connections for preset compatibility)
     engageButton.setVisible(false);
     addAndMakeVisible(engageButton);
-    engageAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
-        audioProcessor.getAPVTS(), "engage", engageButton);
 
-    // === PULSE Section (maps to slide controls) ===
-    setupSectionLabel(pulseSectionLabel, "PULSE");
-
-    addAndMakeVisible(slideTimeKnob);
-    slideTimeKnob.setValueSuffix("%");
-    slideTimeKnob.setValueMultiplier(100.0f);
-    slideTimeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        audioProcessor.getAPVTS(), "slideTime", slideTimeKnob.getSlider());
-
-    addAndMakeVisible(slideRangeKnob);
-    slideRangeKnob.setValueSuffix("%");
-    slideRangeKnob.setValueMultiplier(100.0f);
-    slideRangeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        audioProcessor.getAPVTS(), "slideRange", slideRangeKnob.getSlider());
-
-    addAndMakeVisible(slideOnButton);
-    slideOnButton.setButtonText("");
-    autoSlideAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
-        audioProcessor.getAPVTS(), "autoSlide", slideOnButton);
-
-    // Hidden slide controls
     slidePositionKnob.setVisible(false);
     addAndMakeVisible(slidePositionKnob);
     slidePositionAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
@@ -170,22 +232,13 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
 
     autoSlideButton.setVisible(false);
     addAndMakeVisible(autoSlideButton);
+    autoSlideAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+        audioProcessor.getAPVTS(), "autoSlide", autoSlideButton);
 
     slideReturnButton.setVisible(false);
     addAndMakeVisible(slideReturnButton);
     slideReturnAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
         audioProcessor.getAPVTS(), "slideReturn", slideReturnButton);
-
-    // Hidden random controls
-    randomRangeKnob.setVisible(false);
-    addAndMakeVisible(randomRangeKnob);
-    randomRangeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        audioProcessor.getAPVTS(), "randomRange", randomRangeKnob.getSlider());
-
-    randomRateKnob.setVisible(false);
-    addAndMakeVisible(randomRateKnob);
-    randomRateAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        audioProcessor.getAPVTS(), "randomRate", randomRateKnob.getSlider());
 
     randomSmoothKnob.setVisible(false);
     addAndMakeVisible(randomSmoothKnob);
@@ -199,75 +252,32 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
     randomModeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
         audioProcessor.getAPVTS(), "randomMode", randomModeBox);
 
-    // === HIVE FILTER Section ===
-    setupSectionLabel(hiveFilterSectionLabel, "HIVE FILTER");
+    slideTimeKnob.setVisible(false);
+    addAndMakeVisible(slideTimeKnob);
+    slideTimeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        audioProcessor.getAPVTS(), "slideTime", slideTimeKnob.getSlider());
 
-    addAndMakeVisible(cutoffKnob);
-    cutoffKnob.setValueSuffix("%");
-    cutoffKnob.setValueMultiplier(100.0f);
-    lowCutAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        audioProcessor.getAPVTS(), "lowCut", cutoffKnob.getSlider());
+    slideRangeKnob.setVisible(false);
+    addAndMakeVisible(slideRangeKnob);
+    slideRangeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        audioProcessor.getAPVTS(), "slideRange", slideRangeKnob.getSlider());
 
-    addAndMakeVisible(resonanceKnob);
-    resonanceKnob.setValueSuffix("%");
-    resonanceKnob.setValueMultiplier(100.0f);
-    highCutAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        audioProcessor.getAPVTS(), "highCut", resonanceKnob.getSlider());
+    slideOnButton.setVisible(false);
+    addAndMakeVisible(slideOnButton);
 
-    addAndMakeVisible(midBoostKnob);
-    midBoostKnob.setValueSuffix("%");
-    midBoostKnob.setValueMultiplier(100.0f);
-    saturationAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        audioProcessor.getAPVTS(), "saturation", midBoostKnob.getSlider());
-
-    // === SWARM Section (Chorus) ===
-    setupSectionLabel(swarmSectionLabel, "SWARM");
-
-    addAndMakeVisible(chorusDepthKnob);
-    chorusDepthKnob.setValueSuffix("%");
-    chorusDepthKnob.setValueMultiplier(100.0f);
-    chorusDepthAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        audioProcessor.getAPVTS(), "chorusDepth", chorusDepthKnob.getSlider());
-
-    addAndMakeVisible(chorusRateKnob);
-    chorusRateKnob.setValueSuffix("%");
-    chorusRateKnob.setValueMultiplier(100.0f);
-    chorusRateAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        audioProcessor.getAPVTS(), "chorusRate", chorusRateKnob.getSlider());
-
-    addAndMakeVisible(wowFlutterKnob);
-    wowFlutterKnob.setValueSuffix("%");
-    wowFlutterKnob.setValueMultiplier(100.0f);
-    chorusMixAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        audioProcessor.getAPVTS(), "chorusMix", wowFlutterKnob.getSlider());
-
-    // Hidden chorus mode
-    chorusModeBox.setVisible(false);
-    addAndMakeVisible(chorusModeBox);
-    chorusModeBox.addItem("Classic", 1);
-    chorusModeBox.addItem("Deep", 2);
-    chorusModeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
-        audioProcessor.getAPVTS(), "chorusMode", chorusModeBox);
-
-    // === FLOW Section (stutter/gate) ===
-    setupSectionLabel(flowSectionLabel, "FLOW");
-
+    flowAmountKnob.setVisible(false);
     addAndMakeVisible(flowAmountKnob);
-    flowAmountKnob.setValueSuffix("%");
-    flowAmountKnob.setValueMultiplier(100.0f);
     flowAmountAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         audioProcessor.getAPVTS(), "flowAmount", flowAmountKnob.getSlider());
 
+    flowSpeedKnob.setVisible(false);
     addAndMakeVisible(flowSpeedKnob);
-    flowSpeedKnob.setValueSuffix("%");
-    flowSpeedKnob.setValueMultiplier(100.0f);
     flowSpeedAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         audioProcessor.getAPVTS(), "flowSpeed", flowSpeedKnob.getSlider());
 
+    flowModeButton.setVisible(false);
     addAndMakeVisible(flowModeButton);
-    flowModeButton.setButtonText("");
 
-    // Hidden flow mode box
     flowModeBox.setVisible(false);
     addAndMakeVisible(flowModeBox);
     flowModeBox.addItem("Static", 1);
@@ -275,31 +285,16 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
     flowModeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
         audioProcessor.getAPVTS(), "flowMode", flowModeBox);
 
-    speedKnob.setVisible(false);
-    addAndMakeVisible(speedKnob);
-    speedAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        audioProcessor.getAPVTS(), "speed", speedKnob.getSlider());
-
-    // === OUTPUT Section ===
-    setupSectionLabel(outputSectionLabel, "OUTPUT");
-
-    addAndMakeVisible(mixKnob);
-    mixKnob.setValueSuffix("%");
-    mixKnob.setValueMultiplier(100.0f);
-    mixAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        audioProcessor.getAPVTS(), "mix", mixKnob.getSlider());
-
+    driveKnob.setVisible(false);
     addAndMakeVisible(driveKnob);
-    driveKnob.setValueSuffix("%");
-    driveKnob.setValueMultiplier(100.0f);
     driveAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         audioProcessor.getAPVTS(), "drive", driveKnob.getSlider());
 
-    addAndMakeVisible(outputLevelKnob);
-    outputLevelKnob.setValueSuffix("%");
-    outputLevelKnob.setValueMultiplier(100.0f);
-    outputGainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        audioProcessor.getAPVTS(), "outputGain", outputLevelKnob.getSlider());
+    riseAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        audioProcessor.getAPVTS(), "rise", randomSmoothKnob.getSlider());
+
+    pulseFootswitch.setVisible(false);
+    addAndMakeVisible(pulseFootswitch);
 
     // === BYPASS Footswitch ===
     addAndMakeVisible(bypassFootswitch);
@@ -309,10 +304,6 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
             param->setValueNotifyingHost(isOn ? 0.0f : 1.0f);
         }
     };
-
-    // Hidden pulse footswitch
-    pulseFootswitch.setVisible(false);
-    addAndMakeVisible(pulseFootswitch);
 
     // Start timer for LED updates
     startTimerHz(30);
@@ -329,7 +320,7 @@ SwarmnesssAudioProcessorEditor::~SwarmnesssAudioProcessorEditor() {
 void SwarmnesssAudioProcessorEditor::setupSectionLabel(juce::Label& label, const juce::String& text) {
     label.setText(text, juce::dontSendNotification);
     label.setJustificationType(juce::Justification::centred);
-    label.setColour(juce::Label::textColourId, MetalLookAndFeel::getAccentRed());
+    label.setColour(juce::Label::textColourId, MetalLookAndFeel::getAccentOrange());
     label.setFont(juce::Font(14.0f, juce::Font::bold));
     addAndMakeVisible(label);
 }
@@ -349,12 +340,12 @@ void SwarmnesssAudioProcessorEditor::drawSectionFrame(juce::Graphics& g, juce::R
     g.setColour(juce::Colour(0x99000000));
     g.fillRoundedRectangle(bounds.toFloat(), cornerSize);
     
-    // Red border
-    g.setColour(MetalLookAndFeel::getAccentRed());
+    // Orange border (yellow-orange theme)
+    g.setColour(MetalLookAndFeel::getAccentOrange());
     g.drawRoundedRectangle(bounds.toFloat().reduced(borderWidth * 0.5f), cornerSize, borderWidth);
     
     // Section title
-    g.setColour(MetalLookAndFeel::getAccentRed());
+    g.setColour(MetalLookAndFeel::getAccentOrange());
     g.setFont(juce::Font(13.0f, juce::Font::bold));
     g.drawText(title, bounds.getX() + 10, bounds.getY() + 4, bounds.getWidth() - 20, 18, 
                juce::Justification::centredLeft, false);
@@ -383,8 +374,8 @@ void SwarmnesssAudioProcessorEditor::paint(juce::Graphics& g) {
         g.drawImage(logoImage, logoX, logoY, logoWidth, logoHeight,
                     0, 0, logoImage.getWidth(), logoImage.getHeight());
     } else {
-        // Fallback text logo
-        g.setColour(MetalLookAndFeel::getTextLight());
+        // Fallback text logo with yellow-orange color
+        g.setColour(MetalLookAndFeel::getAccentOrangeBright());
         g.setFont(juce::Font(32.0f, juce::Font::bold));
         g.drawText("SWARMNESS", 0, 15, getWidth(), 45, juce::Justification::centred);
     }
@@ -392,20 +383,19 @@ void SwarmnesssAudioProcessorEditor::paint(juce::Graphics& g) {
     // Version number
     g.setColour(MetalLookAndFeel::getTextDim());
     g.setFont(juce::Font(11.0f));
-    g.drawText("v3.1.0", getWidth() - 70, 20, 60, 20, juce::Justification::centredRight);
+    g.drawText("v3.0.0", getWidth() - 70, 20, 60, 20, juce::Justification::centredRight);
 
-    // Draw section frames
-    // Top row
-    drawSectionFrame(g, juce::Rectangle<int>(15, 80, 310, 230), "VOLTAGE");
-    drawSectionFrame(g, juce::Rectangle<int>(340, 80, 310, 230), "PULSE");
-    drawSectionFrame(g, juce::Rectangle<int>(665, 80, 320, 230), "HIVE FILTER");
+    // Draw 5 section frames (v3.0.0 layout)
+    // Top row: PITCH, MODULATION, TONE
+    drawSectionFrame(g, juce::Rectangle<int>(15, 80, 310, 230), "PITCH");
+    drawSectionFrame(g, juce::Rectangle<int>(340, 80, 310, 230), "MODULATION");
+    drawSectionFrame(g, juce::Rectangle<int>(665, 80, 320, 230), "TONE");
     
-    // Bottom row
-    drawSectionFrame(g, juce::Rectangle<int>(15, 325, 310, 200), "SWARM");
-    drawSectionFrame(g, juce::Rectangle<int>(340, 325, 310, 200), "FLOW");
-    drawSectionFrame(g, juce::Rectangle<int>(665, 325, 320, 200), "OUTPUT");
+    // Bottom row: SWARM and OUTPUT (wider sections)
+    drawSectionFrame(g, juce::Rectangle<int>(15, 325, 475, 200), "SWARM");
+    drawSectionFrame(g, juce::Rectangle<int>(510, 325, 475, 200), "OUTPUT");
 
-    // Bypass label under footswitch (larger footswitch)
+    // Bypass label under footswitch
     g.setColour(MetalLookAndFeel::getTextLight());
     g.setFont(juce::Font(14.0f, juce::Font::bold));
     g.drawText("BYPASS", getWidth()/2 - 60, 655, 120, 25, juce::Justification::centred);
@@ -413,7 +403,6 @@ void SwarmnesssAudioProcessorEditor::paint(juce::Graphics& g) {
 
 void SwarmnesssAudioProcessorEditor::resized() {
     const int knobSize = 75;
-    const int smallKnobSize = 70;
     const int comboWidth = 100;
     const int comboHeight = 24;
     const int toggleSize = 28;
@@ -433,10 +422,8 @@ void SwarmnesssAudioProcessorEditor::resized() {
     // Section bounds
     const int topRowY = 80;
     const int bottomRowY = 325;
-    const int sectionHeight = 230;
-    const int bottomSectionHeight = 200;
 
-    // === VOLTAGE Section (15, 80, 310, 230) ===
+    // === PITCH Section (15, 80, 310, 230) ===
     {
         int baseX = 15;
         int baseY = topRowY;
@@ -444,30 +431,30 @@ void SwarmnesssAudioProcessorEditor::resized() {
         // Dropdown at top left of section
         octaveModeBox.setBounds(baseX + 20, baseY + 28, comboWidth, comboHeight);
         
-        // 3 knobs in a row
+        // 2 knobs + toggle
         int knobY = baseY + 70;
         int spacing = 95;
-        grainKnob.setBounds(baseX + 20, knobY, knobSize, knobSize + 30);
-        pitchKnob.setBounds(baseX + 20 + spacing, knobY, knobSize, knobSize + 30);
-        driftKnob.setBounds(baseX + 20 + spacing * 2, knobY, knobSize, knobSize + 30);
+        pitchRangeKnob.setBounds(baseX + 20, knobY, knobSize, knobSize + 30);
+        pitchSpeedKnob.setBounds(baseX + 20 + spacing, knobY, knobSize, knobSize + 30);
+        
+        // ON/OFF Toggle
+        pitchOnButton.setBounds(baseX + 20 + spacing * 2 + 15, knobY + 20, toggleSize + 20, toggleSize);
     }
 
-    // === PULSE Section (340, 80, 310, 230) ===
+    // === MODULATION Section (340, 80, 310, 230) ===
     {
         int baseX = 340;
         int baseY = topRowY;
         
-        // 2 knobs + toggle
+        // 3 knobs in a row
         int knobY = baseY + 70;
         int spacing = 95;
-        slideTimeKnob.setBounds(baseX + 20, knobY, knobSize, knobSize + 30);
-        slideRangeKnob.setBounds(baseX + 20 + spacing, knobY, knobSize, knobSize + 30);
-        
-        // Toggle
-        slideOnButton.setBounds(baseX + 20 + spacing * 2 + 15, knobY + 20, toggleSize + 20, toggleSize);
+        angerKnob.setBounds(baseX + 20, knobY, knobSize, knobSize + 30);
+        rushKnob.setBounds(baseX + 20 + spacing, knobY, knobSize, knobSize + 30);
+        modRateKnob.setBounds(baseX + 20 + spacing * 2, knobY, knobSize, knobSize + 30);
     }
 
-    // === HIVE FILTER Section (665, 80, 320, 230) ===
+    // === TONE Section (665, 80, 320, 230) ===
     {
         int baseX = 665;
         int baseY = topRowY;
@@ -475,53 +462,37 @@ void SwarmnesssAudioProcessorEditor::resized() {
         // 3 knobs in a row
         int knobY = baseY + 70;
         int spacing = 100;
-        cutoffKnob.setBounds(baseX + 15, knobY, knobSize, knobSize + 30);
-        resonanceKnob.setBounds(baseX + 15 + spacing, knobY, knobSize, knobSize + 30);
+        lowCutKnob.setBounds(baseX + 15, knobY, knobSize, knobSize + 30);
+        highCutKnob.setBounds(baseX + 15 + spacing, knobY, knobSize, knobSize + 30);
         midBoostKnob.setBounds(baseX + 15 + spacing * 2, knobY, knobSize, knobSize + 30);
     }
 
-    // === SWARM Section (15, 325, 310, 200) ===
+    // === SWARM Section (15, 325, 475, 200) ===
     {
         int baseX = 15;
         int baseY = bottomRowY;
         
-        // 3 knobs in a row
+        // 3 knobs in a row (wider section)
         int knobY = baseY + 50;
-        int spacing = 95;
-        chorusDepthKnob.setBounds(baseX + 20, knobY, knobSize, knobSize + 30);
-        chorusRateKnob.setBounds(baseX + 20 + spacing, knobY, knobSize, knobSize + 30);
-        wowFlutterKnob.setBounds(baseX + 20 + spacing * 2, knobY, knobSize, knobSize + 30);
+        int spacing = 140;
+        swarmDepthKnob.setBounds(baseX + 40, knobY, knobSize, knobSize + 30);
+        swarmRateKnob.setBounds(baseX + 40 + spacing, knobY, knobSize, knobSize + 30);
+        swarmMixKnob.setBounds(baseX + 40 + spacing * 2, knobY, knobSize, knobSize + 30);
     }
 
-    // === FLOW Section (340, 325, 310, 200) ===
+    // === OUTPUT Section (510, 325, 475, 200) ===
     {
-        int baseX = 340;
+        int baseX = 510;
         int baseY = bottomRowY;
         
-        // 2 knobs + toggle
+        // 2 knobs (wider section)
         int knobY = baseY + 50;
-        int spacing = 95;
-        flowAmountKnob.setBounds(baseX + 20, knobY, knobSize, knobSize + 30);
-        flowSpeedKnob.setBounds(baseX + 20 + spacing, knobY, knobSize, knobSize + 30);
-        
-        // Toggle
-        flowModeButton.setBounds(baseX + 20 + spacing * 2 + 15, knobY + 20, toggleSize + 20, toggleSize);
+        int spacing = 180;
+        mixKnob.setBounds(baseX + 80, knobY, knobSize, knobSize + 30);
+        volumeKnob.setBounds(baseX + 80 + spacing, knobY, knobSize, knobSize + 30);
     }
 
-    // === OUTPUT Section (665, 325, 320, 200) ===
-    {
-        int baseX = 665;
-        int baseY = bottomRowY;
-        
-        // 3 knobs in a row
-        int knobY = baseY + 50;
-        int spacing = 100;
-        mixKnob.setBounds(baseX + 15, knobY, knobSize, knobSize + 30);
-        driveKnob.setBounds(baseX + 15 + spacing, knobY, knobSize, knobSize + 30);
-        outputLevelKnob.setBounds(baseX + 15 + spacing * 2, knobY, knobSize, knobSize + 30);
-    }
-
-    // === BYPASS Footswitch (bottom center) - LARGER ===
+    // === BYPASS Footswitch (bottom center) ===
     {
         int footWidth = 110;
         int footHeight = 110;
