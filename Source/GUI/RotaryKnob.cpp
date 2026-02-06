@@ -9,18 +9,21 @@ RotaryKnob::RotaryKnob(const juce::String& labelText) {
 
     mLabel.setText(labelText, juce::dontSendNotification);
     mLabel.setJustificationType(juce::Justification::centred);
-    mLabel.setFont(juce::Font(10.0f));
+    mLabel.setFont(juce::Font(9.0f));  // Smaller font to fit all labels
     mLabel.setColour(juce::Label::textColourId, MetalLookAndFeel::getTextLight());
+    mLabel.setMinimumHorizontalScale(0.7f);  // Allow text to shrink if needed
     addAndMakeVisible(mLabel);
 }
 
 void RotaryKnob::resized() {
     auto bounds = getLocalBounds();
-    const int labelHeight = 14;
+    const int labelHeight = 18;  // Increased height for text
     const int ledSpace = 4;
     
-    // Label at bottom
-    mLabel.setBounds(bounds.removeFromBottom(labelHeight));
+    // Label at bottom with extra horizontal space
+    auto labelBounds = bounds.removeFromBottom(labelHeight);
+    labelBounds = labelBounds.expanded(8, 0);  // Expand horizontally for longer labels
+    mLabel.setBounds(labelBounds);
     
     // Slider takes the rest (minus LED space)
     bounds.removeFromBottom(ledSpace);
@@ -30,7 +33,7 @@ void RotaryKnob::resized() {
 void RotaryKnob::paint(juce::Graphics& g) {
     // Draw small red LED dot indicator below the knob
     auto bounds = getLocalBounds();
-    const int labelHeight = 14;
+    const int labelHeight = 18;  // Match resized() value
     
     const float ledSize = 5.0f;
     const float ledX = bounds.getCentreX() - ledSize * 0.5f;

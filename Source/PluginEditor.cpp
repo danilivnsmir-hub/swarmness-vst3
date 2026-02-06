@@ -250,13 +250,18 @@ void SwarmnesssAudioProcessorEditor::paint(juce::Graphics& g) {
     } else {
         g.fillAll(MetalLookAndFeel::getBackgroundDark());
     }
+    
+    // Dark overlay to make background less distracting (60% opacity black)
+    g.setColour(juce::Colour(0x99000000));
+    g.fillRect(getLocalBounds());
 
-    // Draw logo at top center
+    // Draw logo at top center - preserve aspect ratio
     if (logoImage.isValid()) {
-        const int logoWidth = 280;
-        const int logoHeight = 50;
+        const float originalAspect = (float)logoImage.getWidth() / (float)logoImage.getHeight();
+        const int logoHeight = 55;
+        const int logoWidth = (int)(logoHeight * originalAspect);
         const int logoX = (getWidth() - logoWidth) / 2;
-        const int logoY = 15;
+        const int logoY = 12;
         g.drawImage(logoImage, logoX, logoY, logoWidth, logoHeight,
                     0, 0, logoImage.getWidth(), logoImage.getHeight());
     } else {
@@ -269,7 +274,7 @@ void SwarmnesssAudioProcessorEditor::paint(juce::Graphics& g) {
     // Version number
     g.setColour(MetalLookAndFeel::getTextDim());
     g.setFont(juce::Font(11.0f));
-    g.drawText("v2.2.0", getWidth() - 70, 20, 60, 20, juce::Justification::centredRight);
+    g.drawText("v2.2.1", getWidth() - 70, 20, 60, 20, juce::Justification::centredRight);
 
     // Draw section frames
     // Top row
