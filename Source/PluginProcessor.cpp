@@ -280,9 +280,9 @@ void SwarmnesssAudioProcessor::setStateInformation(const void* data, int sizeInB
 juce::AudioProcessorValueTreeState::ParameterLayout SwarmnesssAudioProcessor::createParameterLayout() {
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
 
-    // === VOLTAGE Section (Pitch controls) ===
+    // === PITCH Section (Octave + randomizer) ===
     params.push_back(std::make_unique<juce::AudioParameterChoice>(
-        "octaveMode", "Octave Mode", juce::StringArray{"-2 OCT", "-1 OCT", "+1 OCT", "+2 OCT"}, 2));
+        "octaveMode", "Octave Mode", juce::StringArray{"-2 OCT", "-1 OCT", "0", "+1 OCT", "+2 OCT"}, 2));
     params.push_back(std::make_unique<juce::AudioParameterBool>(
         "engage", "Engage", true));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(

@@ -29,14 +29,15 @@ void GranularPitchShifter::reset() {
 }
 
 void GranularPitchShifter::setOctaveMode(int mode) {
-    mOctaveMode = juce::jlimit(0, 3, mode);
+    mOctaveMode = juce::jlimit(0, 4, mode);
     float targetRatio;
     switch (mOctaveMode) {
         case 0: targetRatio = 0.25f; break; // -2 octaves
         case 1: targetRatio = 0.5f; break;  // -1 octave
-        case 2: targetRatio = 2.0f; break;  // +1 octave
-        case 3: targetRatio = 4.0f; break;  // +2 octaves
-        default: targetRatio = 2.0f;
+        case 2: targetRatio = 1.0f; break;  // 0 (no shift/bypass)
+        case 3: targetRatio = 2.0f; break;  // +1 octave
+        case 4: targetRatio = 4.0f; break;  // +2 octaves
+        default: targetRatio = 1.0f;
     }
     mPitchRatio.setTargetValue(targetRatio);
 }

@@ -11,8 +11,8 @@ MetalLookAndFeel::MetalLookAndFeel() {
     setColour(juce::ComboBox::outlineColourId, getMetalDark());
     setColour(juce::PopupMenu::backgroundColourId, getPanelBackground());
     setColour(juce::PopupMenu::textColourId, getTextLight());
-    setColour(juce::PopupMenu::highlightedBackgroundColourId, getAccentRed());
-    setColour(juce::PopupMenu::highlightedTextColourId, juce::Colours::white);
+    setColour(juce::PopupMenu::highlightedBackgroundColourId, getAccentOrange());
+    setColour(juce::PopupMenu::highlightedTextColourId, juce::Colours::black);
     setColour(juce::TextButton::buttonColourId, getMetalDark());
     setColour(juce::TextButton::textColourOffId, getTextLight());
     setColour(juce::TextButton::textColourOnId, juce::Colours::white);
@@ -50,25 +50,25 @@ void MetalLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int wid
         g.strokePath(hexPath, juce::PathStrokeType(1.5f));
     }
 
-    // === RED ARC INDICATOR (behind knob) ===
+    // === ORANGE ARC INDICATOR (behind knob) ===
     const float arcRadius = radius - 1.0f;
     const float arcThickness = 3.5f;
     
-    // Background arc (dark)
+    // Background arc (dim orange)
     {
         juce::Path bgArc;
         bgArc.addCentredArc(centreX, centreY, arcRadius, arcRadius,
                             0.0f, rotaryStartAngle, rotaryEndAngle, true);
-        g.setColour(getAccentRedDim());
+        g.setColour(getAccentOrangeDim());
         g.strokePath(bgArc, juce::PathStrokeType(arcThickness, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
     }
     
-    // Value arc (bright red)
+    // Value arc (bright orange)
     {
         juce::Path valueArc;
         valueArc.addCentredArc(centreX, centreY, arcRadius, arcRadius,
                                0.0f, rotaryStartAngle, angle, true);
-        g.setColour(getAccentRedBright());
+        g.setColour(getAccentOrangeBright());
         g.strokePath(valueArc, juce::PathStrokeType(arcThickness, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
     }
 
@@ -142,11 +142,11 @@ void MetalLookAndFeel::drawButtonBackground(juce::Graphics& g, juce::Button& but
                                              bool shouldDrawButtonAsDown) {
     auto bounds = button.getLocalBounds().toFloat().reduced(1.0f);
 
-    juce::Colour baseColour = shouldDrawButtonAsDown ? getAccentRed().darker(0.2f) :
+    juce::Colour baseColour = shouldDrawButtonAsDown ? getAccentOrange().darker(0.2f) :
                               shouldDrawButtonAsHighlighted ? getMetalGrey() : getMetalDark();
 
     if (button.getToggleState())
-        baseColour = getAccentRed();
+        baseColour = getAccentOrange();
 
     // Draw with gradient for depth
     juce::ColourGradient grad(baseColour.brighter(0.1f), bounds.getX(), bounds.getY(),
@@ -169,11 +169,11 @@ void MetalLookAndFeel::drawComboBox(juce::Graphics& g, int width, int height,
     g.setGradientFill(grad);
     g.fillRoundedRectangle(bounds, 3.0f);
     
-    // Red accent border
-    g.setColour(getAccentRedDim());
+    // Orange accent border
+    g.setColour(getAccentOrangeDim());
     g.drawRoundedRectangle(bounds.reduced(0.5f), 3.0f, 1.0f);
 
-    // Arrow (red)
+    // Arrow (orange)
     juce::Path arrow;
     float arrowSize = 5.0f;
     float arrowX = width - 12.0f;
@@ -181,13 +181,13 @@ void MetalLookAndFeel::drawComboBox(juce::Graphics& g, int width, int height,
     arrow.addTriangle(arrowX - arrowSize, arrowY - arrowSize * 0.4f,
                       arrowX + arrowSize, arrowY - arrowSize * 0.4f,
                       arrowX, arrowY + arrowSize * 0.6f);
-    g.setColour(getAccentRedBright());
+    g.setColour(getAccentOrangeBright());
     g.fillPath(arrow);
 }
 
 void MetalLookAndFeel::drawPopupMenuBackground(juce::Graphics& g, int width, int height) {
     g.fillAll(getPanelBackground());
-    g.setColour(getAccentRedDim());
+    g.setColour(getAccentOrangeDim());
     g.drawRect(0, 0, width, height, 1);
 }
 
@@ -207,9 +207,9 @@ void MetalLookAndFeel::drawPopupMenuItem(juce::Graphics& g, const juce::Rectangl
     auto r = area.reduced(1);
 
     if (isHighlighted && isActive) {
-        g.setColour(getAccentRed());
+        g.setColour(getAccentOrange());
         g.fillRect(r);
-        g.setColour(juce::Colours::white);
+        g.setColour(juce::Colours::black);
     } else {
         g.setColour(isActive ? getTextLight() : getTextDim());
     }
@@ -240,7 +240,7 @@ void MetalLookAndFeel::drawToggleButton(juce::Graphics& g, juce::ToggleButton& b
     const float cornerSize = 3.0f;
     
     // Background
-    juce::Colour bgColour = button.getToggleState() ? getAccentRed() : getMetalDark();
+    juce::Colour bgColour = button.getToggleState() ? getAccentOrange() : getMetalDark();
     if (shouldDrawButtonAsHighlighted)
         bgColour = bgColour.brighter(0.1f);
     if (shouldDrawButtonAsDown)
@@ -250,7 +250,7 @@ void MetalLookAndFeel::drawToggleButton(juce::Graphics& g, juce::ToggleButton& b
     g.fillRoundedRectangle(bounds.reduced(1), cornerSize);
     
     // Border
-    g.setColour(button.getToggleState() ? getAccentRedBright() : getMetalGrey());
+    g.setColour(button.getToggleState() ? getAccentOrangeBright() : getMetalGrey());
     g.drawRoundedRectangle(bounds.reduced(1), cornerSize, 1.0f);
     
     // Small LED indicator on left
@@ -258,11 +258,11 @@ void MetalLookAndFeel::drawToggleButton(juce::Graphics& g, juce::ToggleButton& b
     const float ledX = bounds.getX() + 6.0f;
     const float ledY = bounds.getCentreY() - ledSize * 0.5f;
     
-    g.setColour(button.getToggleState() ? getAccentRedBright() : getAccentRedDim());
+    g.setColour(button.getToggleState() ? getAccentOrangeBright() : getAccentOrangeDim());
     g.fillEllipse(ledX, ledY, ledSize, ledSize);
     
     // Text
-    g.setColour(getTextLight());
+    g.setColour(button.getToggleState() ? juce::Colours::black : getTextLight());
     g.setFont(juce::Font(10.0f));
     auto textBounds = bounds.reduced(2).withTrimmedLeft(ledSize + 6);
     g.drawText(button.getButtonText(), textBounds, juce::Justification::centred, false);

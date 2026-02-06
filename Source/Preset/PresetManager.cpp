@@ -1,7 +1,7 @@
 #include "PresetManager.h"
 
 const juce::String PresetManager::kPresetExtension = ".swpreset";
-const juce::String PresetManager::kPresetVersion = "2.4.0";
+const juce::String PresetManager::kPresetVersion = "3.0.0";
 
 PresetManager::PresetManager(juce::AudioProcessorValueTreeState& apvts)
     : mAPVTS(apvts)
@@ -150,18 +150,21 @@ void PresetManager::loadFactoryPreset(const juce::String& name) {
 
 void PresetManager::initializeFactoryPresets() {
     // Helper lambda to create a preset
+    // v3.0.0: octaveMode now has 5 options: -2, -1, 0, +1, +2
+    // Index mapping: 0=-2, 1=-1, 2=0, 3=+1, 4=+2
     auto createPreset = [](const juce::String& name, const juce::String& desc,
                            std::initializer_list<std::pair<juce::String, float>> paramValues) {
         auto preset = std::make_unique<juce::DynamicObject>();
         preset->setProperty("name", name);
-        preset->setProperty("author", "OpenAudio");
+        preset->setProperty("author", "Swarmness");
         preset->setProperty("description", desc);
         preset->setProperty("version", kPresetVersion);
         preset->setProperty("category", "Factory");
         
         auto params = std::make_unique<juce::DynamicObject>();
         // Set defaults first - neutral starting point
-        params->setProperty("octaveMode", 2.0f / 3.0f);  // +1 OCT (index 2 of 4)
+        // octaveMode: 3/4 = +1 OCT (index 3 of 5)
+        params->setProperty("octaveMode", 3.0f / 4.0f);
         params->setProperty("engage", 1.0f);
         params->setProperty("rise", 0.05f);
         params->setProperty("slideRange", 0.0f);
@@ -186,7 +189,7 @@ void PresetManager::initializeFactoryPresets() {
         params->setProperty("mix", 1.0f);
         params->setProperty("drive", 0.0f);
         params->setProperty("outputGain", 0.8f);
-        params->setProperty("flowMode", 1.0f);  // Pulse mode
+        params->setProperty("flowMode", 1.0f);
         params->setProperty("flowAmount", 0.0f);
         params->setProperty("flowSpeed", 0.3f);
         params->setProperty("globalBypass", 0.0f);
@@ -200,113 +203,76 @@ void PresetManager::initializeFactoryPresets() {
         return juce::var(preset.release());
     };
     
-    // Init - нейтральные настройки, 100% wet, без эффектов
-    mFactoryPresets["Init"] = createPreset(
-        "Init", "Neutral settings, 100% wet, no effects active",
-        {{"octaveMode", 2.0f / 3.0f}, {"mix", 1.0f}, {"panic", 0.0f}, {"chaos", 0.0f},
-         {"chorusDepth", 0.0f}, {"chorusRate", 0.0f}, {"chorusMix", 0.0f},
-         {"flowAmount", 0.0f}});
+    // ========== v3.0.0 PRESETS ==========
     
-    // Octave Up - +1 октава, минимальный drift, чистый pitch shift
+    // Init - neutral settings, no effects
+    mFactoryPresets["Init"] = createPreset(
+        "Init", "Neutral settings - 100% wet, no effects active",
+        {{"octaveMode", 2.0f / 4.0f}, // 0 (no shift)
+         {"mix", 1.0f}, 
+         {"chaos", 0.0f}, {"panic", 0.0f},
+         {"chorusDepth", 0.0f}, {"chorusRate", 0.0f}, {"chorusMix", 0.0f}});
+    
+    // Octave Up - +1 octave, clean pitch shift
     mFactoryPresets["Octave Up"] = createPreset(
         "Octave Up", "Clean +1 octave pitch shift",
-        {{"octaveMode", 2.0f / 3.0f}, {"rise", 0.02f}, {"panic", 0.0f}, {"chaos", 0.0f}});
+        {{"octaveMode", 3.0f / 4.0f}, // +1 OCT
+         {"chaos", 0.0f}, {"panic", 0.0f}});
     
-    // Octave Down - -1 октава, минимальный drift
+    // Octave Down - -1 octave, clean
     mFactoryPresets["Octave Down"] = createPreset(
         "Octave Down", "Clean -1 octave pitch shift",
-        {{"octaveMode", 1.0f / 3.0f}, {"rise", 0.02f}, {"panic", 0.0f}, {"chaos", 0.0f}});
+        {{"octaveMode", 1.0f / 4.0f}, // -1 OCT
+         {"chaos", 0.0f}, {"panic", 0.0f}});
     
-    // Double Octave - +2 октавы
-    mFactoryPresets["Double Octave"] = createPreset(
-        "Double Octave", "+2 octaves for super high pitch",
-        {{"octaveMode", 1.0f}, {"rise", 0.03f}, {"panic", 0.0f}, {"chaos", 0.0f}});
+    // Glitch - high chaos and panic
+    mFactoryPresets["Glitch"] = createPreset(
+        "Glitch", "Glitchy octave shift with chaos",
+        {{"octaveMode", 3.0f / 4.0f}, // +1 OCT
+         {"chaos", 0.7f}, {"panic", 0.6f}, {"speed", 0.5f},
+         {"randomRange", 0.3f}, {"randomRate", 0.4f}});
     
-    // Glitch Madness - высокий drift, chaos, быстрый flow
-    mFactoryPresets["Glitch Madness"] = createPreset(
-        "Glitch Madness", "Chaotic glitchy madness with fast flow",
-        {{"panic", 0.85f}, {"chaos", 0.75f}, {"rise", 0.4f},
-         {"flowAmount", 0.7f}, {"flowSpeed", 0.85f}, {"flowMode", 1.0f},
-         {"saturation", 0.4f}});
+    // Chorus Heavy - full chorus wet
+    mFactoryPresets["Chorus Heavy"] = createPreset(
+        "Chorus Heavy", "Lush heavy chorus effect",
+        {{"octaveMode", 2.0f / 4.0f}, // 0 (no shift)
+         {"chorusDepth", 0.8f}, {"chorusRate", 0.3f}, {"chorusMix", 0.9f}});
     
-    // Tape Warble - wow/flutter эффект, медленная модуляция
-    mFactoryPresets["Tape Warble"] = createPreset(
-        "Tape Warble", "Vintage tape deck warble effect",
-        {{"chorusMix", 0.65f}, {"chorusDepth", 0.5f}, {"chorusRate", 0.12f},
-         {"panic", 0.15f}, {"chaos", 0.2f}, {"rise", 0.1f}});
+    // The Noise Classic - aggressive glitchy octave
+    mFactoryPresets["The Noise Classic"] = createPreset(
+        "The Noise Classic", "Classic Noise pedal tone - aggressive glitchy octave",
+        {{"octaveMode", 3.0f / 4.0f}, // +1 OCT
+         {"chaos", 0.65f}, {"panic", 0.5f},
+         {"speed", 0.4f},
+         {"mix", 1.0f},
+         {"saturation", 0.25f}});
     
-    // Stutter Gate - активный flow с быстрым pulse
-    mFactoryPresets["Stutter Gate"] = createPreset(
-        "Stutter Gate", "Rhythmic stutter/gate effect",
-        {{"flowAmount", 0.95f}, {"flowSpeed", 0.7f}, {"flowMode", 1.0f},
-         {"panic", 0.1f}});
-    
-    // Djent Tight - -1 октава, минимальный grain, tight sound
-    mFactoryPresets["Djent Tight"] = createPreset(
-        "Djent Tight", "Tight low octave for djent/metal",
-        {{"octaveMode", 1.0f / 3.0f}, {"rise", 0.01f}, {"panic", 0.05f}, {"chaos", 0.0f},
-         {"lowCut", 0.15f}, {"saturation", 0.35f}, {"drive", 0.2f}});
-    
-    // Ambient Shimmer - +1 октава, много chorus, медленный rate
+    // Ambient Shimmer - ethereal modulation
     mFactoryPresets["Ambient Shimmer"] = createPreset(
         "Ambient Shimmer", "Ethereal shimmer with lush modulation",
-        {{"octaveMode", 2.0f / 3.0f}, {"rise", 0.15f},
+        {{"octaveMode", 3.0f / 4.0f}, // +1 OCT
          {"chorusMix", 0.7f}, {"chorusDepth", 0.6f}, {"chorusRate", 0.08f},
-         {"panic", 0.1f}, {"chaos", 0.15f}});
+         {"chaos", 0.1f}, {"panic", 0.1f}});
     
-    // Lo-Fi Chaos - случайный pitch, много drift, saturation
-    mFactoryPresets["Lo-Fi Chaos"] = createPreset(
-        "Lo-Fi Chaos", "Degraded lo-fi with random pitch artifacts",
-        {{"panic", 0.6f}, {"chaos", 0.5f}, {"rise", 0.35f},
-         {"saturation", 0.6f}, {"drive", 0.4f},
+    // Lo-Fi - degraded sound
+    mFactoryPresets["Lo-Fi"] = createPreset(
+        "Lo-Fi", "Degraded lo-fi with pitch artifacts",
+        {{"octaveMode", 2.0f / 4.0f}, // 0
+         {"chaos", 0.5f}, {"panic", 0.4f},
+         {"saturation", 0.6f},
          {"chorusMix", 0.3f}, {"chorusDepth", 0.3f}, {"chorusRate", 0.2f},
          {"lowCut", 0.1f}, {"highCut", 0.7f}});
     
-    // ========== THE NOISE STYLE PRESETS ==========
+    // Double Octave - +2 octaves
+    mFactoryPresets["Double Octave"] = createPreset(
+        "Double Octave", "+2 octaves for super high pitch",
+        {{"octaveMode", 1.0f}, // +2 OCT
+         {"chaos", 0.0f}, {"panic", 0.0f}});
     
-    // The Noise Classic - Immediate glitchy octave shift, 100% wet
-    mFactoryPresets["The Noise Classic"] = createPreset(
-        "The Noise Classic", "Classic Noise pedal tone - aggressive glitchy octave",
-        {{"octaveMode", 2.0f / 3.0f},  // +1 OCT
-         {"engage", 1.0f},
-         {"rise", 0.0f},               // Instant response
-         {"panic", 0.65f},             // High grain for glitchy texture
-         {"chaos", 0.3f},              // Some pitch instability
-         {"mix", 1.0f},                // 100% wet
-         {"flowAmount", 0.4f},         // Active flow for stutter
-         {"flowSpeed", 0.5f},
-         {"flowMode", 1.0f},           // Pulse mode
-         {"saturation", 0.25f},
-         {"drive", 0.15f}});
-    
-    // The Noise Chaos - Random octave madness, maximum aggression
-    mFactoryPresets["The Noise Chaos"] = createPreset(
-        "The Noise Chaos", "Maximum chaos - random octave shifts with fast stutter",
-        {{"octaveMode", 0.0f},         // -2 OCT for crazy lows
-         {"engage", 1.0f},
-         {"rise", 0.02f},              // Near-instant
-         {"panic", 0.9f},              // Maximum grain chaos
-         {"chaos", 0.85f},             // High drift/randomness
-         {"mix", 1.0f},                // 100% wet
-         {"flowAmount", 0.85f},        // Aggressive stutter
-         {"flowSpeed", 0.9f},          // Fast flow
-         {"flowMode", 1.0f},           // Pulse mode
-         {"saturation", 0.5f},
-         {"drive", 0.35f},
-         {"randomRange", 0.5f},        // Random pitch jumps
-         {"randomRate", 0.6f}});
-    
-    // The Noise Clean - Simple octave, minimal effects
-    mFactoryPresets["The Noise Clean"] = createPreset(
-        "The Noise Clean", "Clean octave shift with minimal coloration",
-        {{"octaveMode", 2.0f / 3.0f},  // +1 OCT
-         {"engage", 1.0f},
-         {"rise", 0.01f},              // Very fast rise
-         {"panic", 0.1f},              // Minimal grain
-         {"chaos", 0.05f},             // Minimal drift
-         {"mix", 1.0f},                // 100% wet
-         {"flowAmount", 0.0f},         // No flow
-         {"saturation", 0.0f},
-         {"drive", 0.0f},
-         {"chorusMix", 0.0f}});
+    // Sub Bass - -2 octaves
+    mFactoryPresets["Sub Bass"] = createPreset(
+        "Sub Bass", "-2 octaves for deep sub bass",
+        {{"octaveMode", 0.0f}, // -2 OCT
+         {"chaos", 0.0f}, {"panic", 0.0f},
+         {"lowCut", 0.0f}, {"highCut", 0.5f}});
 }
