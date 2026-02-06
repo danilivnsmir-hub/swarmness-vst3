@@ -395,10 +395,6 @@ void SwarmnesssAudioProcessorEditor::paint(juce::Graphics& g) {
     drawSectionFrame(g, juce::Rectangle<int>(15, 325, 475, 200), "SWARM");
     drawSectionFrame(g, juce::Rectangle<int>(510, 325, 475, 200), "OUTPUT");
 
-    // Bypass label under footswitch
-    g.setColour(MetalLookAndFeel::getTextLight());
-    g.setFont(juce::Font(14.0f, juce::Font::bold));
-    g.drawText("BYPASS", getWidth()/2 - 60, 655, 120, 25, juce::Justification::centred);
 }
 
 void SwarmnesssAudioProcessorEditor::resized() {

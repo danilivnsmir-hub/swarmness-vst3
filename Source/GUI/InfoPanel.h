@@ -24,7 +24,7 @@ public:
         // Title
         g.setColour(MetalLookAndFeel::getAccentRed());
         g.setFont(juce::Font(20.0f, juce::Font::bold));
-        g.drawText("SWARMNESS v3.0.1 - Parameter Guide", panelBounds.getX() + 20, panelBounds.getY() + 15, 
+        g.drawText("SWARMNESS v3.1.3 - Parameter Guide", panelBounds.getX() + 20, panelBounds.getY() + 15, 
                    panelBounds.getWidth() - 40, 30, juce::Justification::centred);
         
         // Parameter descriptions
@@ -38,60 +38,50 @@ public:
         int colWidth = (panelBounds.getWidth() - 60) / 2;
         
         // Left column
-        drawParamInfo(g, col1X, y, colWidth, "VOLTAGE Section:", true);
+        drawParamInfo(g, col1X, y, colWidth, "PITCH Section:", true);
         y += lineHeight;
-        drawParamInfo(g, col1X, y, colWidth, "GRAIN - Granular fragment variation");
+        drawParamInfo(g, col1X, y, colWidth, "OCTAVE - Pitch shift (-2, -1, 0, +1, +2 octaves)");
         y += lineHeight;
-        drawParamInfo(g, col1X, y, colWidth, "PITCH - Pitch instability amount");
+        drawParamInfo(g, col1X, y, colWidth, "RANGE - Random pitch variation range");
         y += lineHeight;
-        drawParamInfo(g, col1X, y, colWidth, "DRIFT - Pitch rise/fall time");
+        drawParamInfo(g, col1X, y, colWidth, "SPEED - Speed of random pitch changes");
         y += lineHeight;
-        drawParamInfo(g, col1X, y, colWidth, "OCT SELECT - Octave shift direction");
+        drawParamInfo(g, col1X, y, colWidth, "ON/OFF - Enable/disable pitch shifter");
         y += lineHeight * 1.5f;
         
-        drawParamInfo(g, col1X, y, colWidth, "PULSE Section:", true);
+        drawParamInfo(g, col1X, y, colWidth, "MODULATION Section:", true);
         y += lineHeight;
-        drawParamInfo(g, col1X, y, colWidth, "SLIDE TIME - Pitch glide duration");
+        drawParamInfo(g, col1X, y, colWidth, "ANGER - Chaos intensity, unpredictable pitch");
         y += lineHeight;
-        drawParamInfo(g, col1X, y, colWidth, "SLIDE RANGE - Pitch glide range");
+        drawParamInfo(g, col1X, y, colWidth, "RUSH - Glitch intensity, stuttering artifacts");
+        y += lineHeight;
+        drawParamInfo(g, col1X, y, colWidth, "RATE - Modulation speed");
         y += lineHeight * 1.5f;
         
-        drawParamInfo(g, col1X, y, colWidth, "HIVE FILTER Section:", true);
+        drawParamInfo(g, col1X, y, colWidth, "TONE Section:", true);
         y += lineHeight;
-        drawParamInfo(g, col1X, y, colWidth, "CUTOFF - High-pass filter frequency");
+        drawParamInfo(g, col1X, y, colWidth, "LOW CUT - High-pass filter frequency");
         y += lineHeight;
-        drawParamInfo(g, col1X, y, colWidth, "RESONANCE - Low-pass filter frequency");
+        drawParamInfo(g, col1X, y, colWidth, "HIGH CUT - Low-pass filter frequency");
         y += lineHeight;
-        drawParamInfo(g, col1X, y, colWidth, "MID BOOST - Saturation/warmth");
+        drawParamInfo(g, col1X, y, colWidth, "MID BOOST - Mid frequency boost amount");
         
         // Right column
         y = panelBounds.getY() + 55;
-        drawParamInfo(g, col2X, y, colWidth, "SWARM Section (Modulation):", true);
+        drawParamInfo(g, col2X, y, colWidth, "SWARM Section (Chorus):", true);
         y += lineHeight;
-        drawParamInfo(g, col2X, y, colWidth, "CHORUS DEPTH - Modulation intensity");
+        drawParamInfo(g, col2X, y, colWidth, "DEPTH - Chorus depth/intensity");
         y += lineHeight;
-        drawParamInfo(g, col2X, y, colWidth, "CHORUS RATE - Modulation LFO speed");
+        drawParamInfo(g, col2X, y, colWidth, "RATE - Chorus modulation rate");
         y += lineHeight;
-        drawParamInfo(g, col2X, y, colWidth, "WOW/FLUTTER - Tape-style pitch wobble");
-        y += lineHeight * 1.5f;
-        
-        drawParamInfo(g, col2X, y, colWidth, "FLOW Section:", true);
-        y += lineHeight;
-        drawParamInfo(g, col2X, y, colWidth, "FLOW AMOUNT - Gate/stutter depth");
-        y += lineHeight;
-        drawParamInfo(g, col2X, y, colWidth, "FLOW SPEED - Stutter rate (Hz)");
+        drawParamInfo(g, col2X, y, colWidth, "MIX - Chorus wet/dry mix");
         y += lineHeight * 1.5f;
         
         drawParamInfo(g, col2X, y, colWidth, "OUTPUT Section:", true);
         y += lineHeight;
-        drawParamInfo(g, col2X, y, colWidth, "MIX - Wet/dry balance");
+        drawParamInfo(g, col2X, y, colWidth, "MIX - Overall wet/dry balance");
         y += lineHeight;
-        drawParamInfo(g, col2X, y, colWidth, "DRIVE - Output saturation");
-        y += lineHeight;
-        drawParamInfo(g, col2X, y, colWidth, "OUTPUT LEVEL - Master volume");
-        y += lineHeight * 1.5f;
-        
-        drawParamInfo(g, col2X, y, colWidth, "BYPASS - Enable/disable effect");
+        drawParamInfo(g, col2X, y, colWidth, "VOLUME - Output level");
         
         // Close hint
         g.setColour(MetalLookAndFeel::getTextDim());
