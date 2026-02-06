@@ -159,8 +159,9 @@ void GranularPitchShifter::process(juce::AudioBuffer<float>& buffer) {
             // Normalize by number of overlapping grains
             grainOutput /= (kNumGrains * 0.5f);
 
-            // Mix wet/dry
-            channelData[sample] = inputSample + grainOutput * wetGain;
+            // FIXED: Proper wet/dry mix - 100% wet when wetGain=1.0
+            // When engaged, output is purely the pitch-shifted signal
+            channelData[sample] = inputSample * (1.0f - wetGain) + grainOutput * wetGain;
         }
 
         mWritePos = (mWritePos + 1) % kMaxDelayLength;

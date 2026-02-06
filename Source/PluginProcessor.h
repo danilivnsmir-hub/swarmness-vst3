@@ -93,8 +93,8 @@ private:
     std::atomic<float>* pDrive = nullptr;
     std::atomic<float>* pOutputGain = nullptr;
     std::atomic<float>* pFlowMode = nullptr;
-    std::atomic<float>* pPulseRate = nullptr;
-    std::atomic<float>* pPulseProbability = nullptr;
+    std::atomic<float>* pFlowAmount = nullptr;
+    std::atomic<float>* pFlowSpeed = nullptr;
     std::atomic<float>* pGlobalBypass = nullptr;
 
     juce::AudioBuffer<float> mDryBuffer;

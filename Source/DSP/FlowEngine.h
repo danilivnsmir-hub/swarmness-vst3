@@ -11,18 +11,20 @@ public:
     void prepare(const juce::dsp::ProcessSpec& spec);
     void reset();
     void setMode(Mode mode);
-    void setStaticState(bool on);   // For footswitch
-    void setPulseRate(float hz);    // 0.1-10 Hz
-    void setPulseProbability(float prob);  // 0-1
-    bool isCurrentlyOn() const;     // For LED indicator
-    float process();                // Returns smoothed gain (0-1)
+    void setStaticState(bool on);       // For footswitch
+    void setPulseRate(float hz);        // 0.1-20 Hz
+    void setPulseProbability(float prob);  // 0-1 (duty cycle)
+    void setFlowAmount(float amount);   // 0-1 (depth of effect)
+    bool isCurrentlyOn() const;         // For LED indicator
+    float process();                    // Returns smoothed gain (0-1)
 
 private:
     double mSampleRate = 44100.0;
-    Mode mMode = Static;
+    Mode mMode = Pulse;                 // Default to Pulse for obvious effect
     bool mStaticOn = true;
     float mPulseRate = 2.0f;
     float mPulseProbability = 0.5f;
+    float mFlowAmount = 0.0f;           // Depth of gate effect
 
     float mLFOPhase = 0.0f;
     bool mCurrentState = true;

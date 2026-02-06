@@ -5,6 +5,7 @@
 #include "GUI/RotaryKnob.h"
 #include "GUI/FootswitchButton.h"
 #include "GUI/PresetPanel.h"
+#include "GUI/InfoPanel.h"
 #include "BinaryData.h"
 
 class SwarmnesssAudioProcessorEditor : public juce::AudioProcessorEditor,
@@ -30,35 +31,35 @@ private:
     
     // Preset Dropdown (simplified UI)
     juce::ComboBox presetSelector;
+    
+    // Info Panel
+    InfoPanel infoPanel;
+    juce::TextButton infoButton{"i"};
 
     // === VOLTAGE Section (Top Left) ===
-    // Maps to PITCH controls - renamed per prototype
-    RotaryKnob grainKnob{"GRAIN"};      // panic
-    RotaryKnob pitchKnob{"PITCH"};      // chaos (repurposed)
-    RotaryKnob driftKnob{"DRIFT"};      // rise
+    RotaryKnob grainKnob{"GRAIN"};
+    RotaryKnob pitchKnob{"PITCH"};
+    RotaryKnob driftKnob{"DRIFT"};
     juce::ComboBox octaveModeBox;
 
     // === PULSE Section (Top Center) ===
-    // Maps to SLIDE controls
     RotaryKnob slideTimeKnob{"SLIDE TIME"};
     RotaryKnob slideRangeKnob{"SLIDE RANGE"};
     juce::ToggleButton slideOnButton{"SLIDE ON/OFF"};
 
     // === HIVE FILTER Section (Top Right) ===
-    // Filter controls
-    RotaryKnob cutoffKnob{"CUTOFF"};        // lowCut
-    RotaryKnob resonanceKnob{"RESONANCE"};  // highCut repurposed
-    RotaryKnob midBoostKnob{"MID BOOST"};   // New or repurposed
+    RotaryKnob cutoffKnob{"CUTOFF"};
+    RotaryKnob resonanceKnob{"RESONANCE"};
+    RotaryKnob midBoostKnob{"MID BOOST"};
 
     // === SWARM Section (Bottom Left) ===
-    // Chorus controls
     RotaryKnob chorusDepthKnob{"CHORUS\nDEPTH"};
     RotaryKnob chorusRateKnob{"CHORUS\nRATE"};
     RotaryKnob wowFlutterKnob{"WOW/\nFLUTTER"};
 
     // === FLOW Section (Bottom Center) ===
-    RotaryKnob flowAmountKnob{"FLOW AMOUNT"};
-    RotaryKnob flowSpeedKnob{"FLOW SPEED"};
+    RotaryKnob flowAmountKnob{"FLOW\nAMOUNT"};
+    RotaryKnob flowSpeedKnob{"FLOW\nSPEED"};
     juce::ToggleButton flowModeButton{"FLOW MODE"};
 
     // === OUTPUT Section (Bottom Right) ===
@@ -82,8 +83,6 @@ private:
     juce::ComboBox chorusModeBox;
     RotaryKnob chorusMixKnob{"CHMIX"};
     juce::ComboBox flowModeBox;
-    RotaryKnob pulseRateKnob{"RATE"};
-    RotaryKnob pulseProbabilityKnob{"PROB"};
     FootswitchButton pulseFootswitch;
     RotaryKnob speedKnob{"SPEED"};
     RotaryKnob highCutKnob{"HIGH CUT"};
@@ -124,8 +123,8 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> mixAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> outputGainAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> flowModeAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> pulseRateAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> pulseProbabilityAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> flowAmountAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> flowSpeedAttachment;
 
     void setupSectionLabel(juce::Label& label, const juce::String& text);
     void drawSectionFrame(juce::Graphics& g, juce::Rectangle<int> bounds, const juce::String& title);

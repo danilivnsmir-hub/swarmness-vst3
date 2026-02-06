@@ -1,7 +1,7 @@
 #include "PresetManager.h"
 
 const juce::String PresetManager::kPresetExtension = ".swpreset";
-const juce::String PresetManager::kPresetVersion = "2.1.0";
+const juce::String PresetManager::kPresetVersion = "2.3.0";
 
 PresetManager::PresetManager(juce::AudioProcessorValueTreeState& apvts)
     : mAPVTS(apvts)
@@ -161,11 +161,11 @@ void PresetManager::initializeFactoryPresets() {
         
         auto params = std::make_unique<juce::DynamicObject>();
         // Set defaults first
-        params->setProperty("octaveMode", 0.0f);
+        params->setProperty("octaveMode", 2.0f / 3.0f);  // +1 OCT (index 2 of 4)
         params->setProperty("engage", 1.0f);
-        params->setProperty("rise", 100.0f / 2000.0f);
-        params->setProperty("slideRange", 0.5f);  // 12st normalized
-        params->setProperty("slideTime", 0.1f);   // 500ms normalized
+        params->setProperty("rise", 0.05f);
+        params->setProperty("slideRange", 0.5f);
+        params->setProperty("slideTime", 0.1f);
         params->setProperty("slideDirection", 0.0f);
         params->setProperty("autoSlide", 0.0f);
         params->setProperty("slidePosition", 0.0f);
@@ -184,10 +184,11 @@ void PresetManager::initializeFactoryPresets() {
         params->setProperty("chorusMix", 0.0f);
         params->setProperty("saturation", 0.0f);
         params->setProperty("mix", 1.0f);
-        params->setProperty("outputGain", 0.5f);  // 0dB normalized
-        params->setProperty("flowMode", 0.0f);
-        params->setProperty("pulseRate", 0.2f);
-        params->setProperty("pulseProbability", 0.5f);
+        params->setProperty("drive", 0.0f);
+        params->setProperty("outputGain", 0.8f);
+        params->setProperty("flowMode", 1.0f);  // Pulse mode
+        params->setProperty("flowAmount", 0.0f);
+        params->setProperty("flowSpeed", 0.3f);
         
         // Override with preset-specific values
         for (const auto& [key, value] : paramValues) {
@@ -198,28 +199,44 @@ void PresetManager::initializeFactoryPresets() {
         return juce::var(preset.release());
     };
     
-    // Factory Preset 1: Init
+    // Factory Preset 1: Init (default clean state)
     mFactoryPresets["Init"] = createPreset(
-        "Init", "Default initialization", {});
+        "Init", "Default initialization - clean 100% wet octave up", {});
     
-    // Factory Preset 2: Djent Classic
-    mFactoryPresets["Djent Classic"] = createPreset(
-        "Djent Classic", "Tight octave for djent",
-        {{"panic", 0.15f}, {"chaos", 0.1f}, {"lowCut", 0.2f}, {"chorusMix", 0.15f}});
+    // Factory Preset 2: Octave Up (classic octave up)
+    mFactoryPresets["Octave Up"] = createPreset(
+        "Octave Up", "Clean octave up effect",
+        {{"octaveMode", 2.0f / 3.0f}, {"panic", 0.0f}, {"chaos", 0.0f}});
     
-    // Factory Preset 3: Metalcore Mayhem
-    mFactoryPresets["Metalcore Mayhem"] = createPreset(
-        "Metalcore Mayhem", "Wide stereo aggressive",
-        {{"octaveMode", 1.0f}, {"panic", 0.4f}, {"chorusMix", 0.5f}, {"saturation", 0.4f}});
+    // Factory Preset 3: Octave Down (one octave down)
+    mFactoryPresets["Octave Down"] = createPreset(
+        "Octave Down", "Clean octave down effect",
+        {{"octaveMode", 1.0f / 3.0f}});
     
-    // Factory Preset 4: Ricochet Up
-    mFactoryPresets["Ricochet Up"] = createPreset(
-        "Ricochet Up", "Auto slide up effect",
-        {{"autoSlide", 1.0f}, {"slideRange", 0.5f}, {"slideTime", 0.1f}});
+    // Factory Preset 4: Glitch (chaotic glitchy effect)
+    mFactoryPresets["Glitch"] = createPreset(
+        "Glitch", "Chaotic glitchy pitch effect",
+        {{"panic", 0.7f}, {"chaos", 0.5f}, {"flowAmount", 0.4f}, {"flowSpeed", 0.7f}});
     
-    // Factory Preset 5: Glitch Apocalypse
-    mFactoryPresets["Glitch Apocalypse"] = createPreset(
-        "Glitch Apocalypse", "Maximum chaos",
-        {{"octaveMode", 1.0f}, {"panic", 0.7f}, {"chaos", 0.6f},
-         {"randomRange", 0.5f}, {"randomRate", 0.8f}, {"saturation", 0.6f}});
+    // Factory Preset 5: Chorus Heavy (thick chorus effect)
+    mFactoryPresets["Chorus Heavy"] = createPreset(
+        "Chorus Heavy", "Thick lush chorus modulation",
+        {{"chorusMix", 0.8f}, {"chorusDepth", 0.7f}, {"chorusRate", 0.3f}});
+    
+    // Factory Preset 6: Stutter Gate
+    mFactoryPresets["Stutter Gate"] = createPreset(
+        "Stutter Gate", "Rhythmic gating effect",
+        {{"flowAmount", 0.9f}, {"flowSpeed", 0.5f}, {"flowMode", 1.0f}});
+    
+    // Factory Preset 7: Djent
+    mFactoryPresets["Djent"] = createPreset(
+        "Djent", "Tight djent-style octave",
+        {{"octaveMode", 2.0f / 3.0f}, {"panic", 0.15f}, {"chaos", 0.1f}, 
+         {"lowCut", 0.2f}, {"saturation", 0.3f}});
+    
+    // Factory Preset 8: Warped Tape
+    mFactoryPresets["Warped Tape"] = createPreset(
+        "Warped Tape", "Warped tape deck modulation",
+        {{"chorusMix", 0.5f}, {"chorusDepth", 0.4f}, {"chorusRate", 0.15f},
+         {"panic", 0.2f}, {"chaos", 0.3f}});
 }

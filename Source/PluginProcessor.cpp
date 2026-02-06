@@ -44,8 +44,8 @@ SwarmnesssAudioProcessor::SwarmnesssAudioProcessor()
     pDrive = mAPVTS.getRawParameterValue("drive");
     pOutputGain = mAPVTS.getRawParameterValue("outputGain");
     pFlowMode = mAPVTS.getRawParameterValue("flowMode");
-    pPulseRate = mAPVTS.getRawParameterValue("pulseRate");
-    pPulseProbability = mAPVTS.getRawParameterValue("pulseProbability");
+    pFlowAmount = mAPVTS.getRawParameterValue("flowAmount");
+    pFlowSpeed = mAPVTS.getRawParameterValue("flowSpeed");
     pGlobalBypass = mAPVTS.getRawParameterValue("globalBypass");
 }
 
@@ -131,12 +131,12 @@ void SwarmnesssAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
         return;
     }
 
-    // Store dry signal for mixing
+    // Store dry signal for final mix
     mDryBuffer.makeCopyOf(buffer, true);
 
     // === Update DSP parameters ===
     
-    // Pitch Shifter
+    // Pitch Shifter - ALWAYS engaged for 100% wet signal
     mPitchShifter.setOctaveMode(static_cast<int>(*pOctaveMode));
     mPitchShifter.setEngage(*pEngage > 0.5f);
     mPitchShifter.setRiseTime(*pRise * 2000.0f);  // Normalize to ms
@@ -166,7 +166,7 @@ void SwarmnesssAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
     mFilterEngine.setLowCut(20.0f + *pLowCut * 480.0f);    // 20-500 Hz
     mFilterEngine.setHighCut(1000.0f + *pHighCut * 19000.0f);  // 1k-20k Hz
 
-    // Chorus
+    // Chorus (SWARM section)
     mChorusEngine.setMode(static_cast<ChorusEngine::Mode>(static_cast<int>(*pChorusMode)));
     mChorusEngine.setRate(0.1f + *pChorusRate * 4.9f);  // 0.1-5 Hz
     mChorusEngine.setDepth(*pChorusDepth);
@@ -176,10 +176,10 @@ void SwarmnesssAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
     mSaturation.setDrive(*pSaturation);
     mSaturation.setMix(1.0f);
 
-    // Flow
+    // Flow (stutter/gate) - Improved controls
     mFlowEngine.setMode(static_cast<FlowEngine::Mode>(static_cast<int>(*pFlowMode)));
-    mFlowEngine.setPulseRate(0.1f + *pPulseRate * 9.9f);  // 0.1-10 Hz
-    mFlowEngine.setPulseProbability(*pPulseProbability);
+    mFlowEngine.setFlowAmount(*pFlowAmount);  // Depth of gate effect
+    mFlowEngine.setPulseRate(0.5f + *pFlowSpeed * 19.5f);  // 0.5-20 Hz for stutters
 
     // === Process Audio ===
     
@@ -196,7 +196,7 @@ void SwarmnesssAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
     }
     mPitchShifter.setDynamicPitchOffset(totalPitchOffset);
 
-    // 1. Granular Pitch Shifter
+    // 1. Granular Pitch Shifter (does its own wet/dry internally)
     mPitchShifter.process(buffer);
 
     // 2. Analog Filter Engine (HPF + LPF)
@@ -207,7 +207,7 @@ void SwarmnesssAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
         mSaturation.process(buffer);
     }
 
-    // 4. Chorus
+    // 4. Chorus/SWARM modulation
     if (*pChorusMix > 0.01f) {
         mChorusEngine.process(buffer);
     }
@@ -215,17 +215,17 @@ void SwarmnesssAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
     // 5. DC Blocker
     mDCBlocker.process(buffer);
 
-    // 6. Wet/Dry Mix
-    float mix = *pMix;
-    for (int ch = 0; ch < numChannels; ++ch) {
-        auto* wet = buffer.getWritePointer(ch);
-        const auto* dry = mDryBuffer.getReadPointer(ch);
-        for (int i = 0; i < numSamples; ++i) {
-            wet[i] = dry[i] * (1.0f - mix) + wet[i] * mix;
+    // 6. Flow Engine (stutter/gate) - applied AFTER other processing
+    if (*pFlowAmount > 0.01f) {
+        for (int sample = 0; sample < numSamples; ++sample) {
+            float flowGain = mFlowEngine.process();
+            for (int ch = 0; ch < numChannels; ++ch) {
+                buffer.getWritePointer(ch)[sample] *= flowGain;
+            }
         }
     }
 
-    // 6.5 Output Drive (soft clipping)
+    // 7. Output Drive (soft clipping)
     float drive = *pDrive;
     if (drive > 0.01f) {
         float driveAmount = 1.0f + drive * 4.0f;  // 1x to 5x gain
@@ -238,15 +238,19 @@ void SwarmnesssAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
         }
     }
 
-    // 7. Flow Engine Gate
-    for (int sample = 0; sample < numSamples; ++sample) {
-        float flowGain = mFlowEngine.process();
+    // 8. Final Wet/Dry Mix
+    float mix = *pMix;
+    if (mix < 0.999f) {  // Only mix if not 100% wet
         for (int ch = 0; ch < numChannels; ++ch) {
-            buffer.getWritePointer(ch)[sample] *= flowGain;
+            auto* wet = buffer.getWritePointer(ch);
+            const auto* dry = mDryBuffer.getReadPointer(ch);
+            for (int i = 0; i < numSamples; ++i) {
+                wet[i] = dry[i] * (1.0f - mix) + wet[i] * mix;
+            }
         }
     }
 
-    // 8. Output Gain (-24 to +6 dB)
+    // 9. Output Gain (-24 to +6 dB)
     float outputGainDb = *pOutputGain * 30.0f - 24.0f;  // Normalize to dB
     float outputGain = juce::Decibels::decibelsToGain(outputGainDb);
     buffer.applyGain(outputGain);
@@ -276,7 +280,7 @@ void SwarmnesssAudioProcessor::setStateInformation(const void* data, int sizeInB
 juce::AudioProcessorValueTreeState::ParameterLayout SwarmnesssAudioProcessor::createParameterLayout() {
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
 
-    // === PITCH Section (was VOLTAGE) ===
+    // === VOLTAGE Section (Pitch controls) ===
     params.push_back(std::make_unique<juce::AudioParameterChoice>(
         "octaveMode", "Octave Mode", juce::StringArray{"-2 OCT", "-1 OCT", "+1 OCT", "+2 OCT"}, 2));
     params.push_back(std::make_unique<juce::AudioParameterBool>(
@@ -284,7 +288,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout SwarmnesssAudioProcessor::cr
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         "rise", "Rise", 0.0f, 1.0f, 0.05f));
 
-    // Slide Sub-section
+    // Slide Sub-section (PULSE)
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         "slideRange", "Slide Range", 0.0f, 1.0f, 0.5f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
@@ -316,7 +320,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout SwarmnesssAudioProcessor::cr
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         "speed", "Speed", 0.0f, 1.0f, 0.0f));
 
-    // === TONE SHAPING Section ===
+    // === HIVE FILTER Section ===
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         "lowCut", "Low Cut", 0.0f, 1.0f, 0.0f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
@@ -334,19 +338,19 @@ juce::AudioProcessorValueTreeState::ParameterLayout SwarmnesssAudioProcessor::cr
 
     // === OUTPUT Section ===
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "mix", "Mix", 0.0f, 1.0f, 1.0f));
+        "mix", "Mix", 0.0f, 1.0f, 1.0f));  // Default 100% wet
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "drive", "Drive", 0.0f, 1.0f, 0.0f));  // Output stage drive
+        "drive", "Drive", 0.0f, 1.0f, 0.0f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "outputGain", "Output Gain", 0.0f, 1.0f, 0.8f));  // Maps to -24 to +6 dB
+        "outputGain", "Output Gain", 0.0f, 1.0f, 0.8f));
 
-    // === PULSE Section (was FLOW) ===
+    // === FLOW Section (stutter/gate) ===
     params.push_back(std::make_unique<juce::AudioParameterChoice>(
-        "flowMode", "Pulse Mode", juce::StringArray{"Static", "Pulse"}, 0));
+        "flowMode", "Flow Mode", juce::StringArray{"Static", "Pulse"}, 1));  // Default Pulse
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "pulseRate", "Pulse Rate", 0.0f, 1.0f, 0.2f));
+        "flowAmount", "Flow Amount", 0.0f, 1.0f, 0.0f));  // Depth of gate effect
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "pulseProbability", "Pulse Probability", 0.0f, 1.0f, 0.5f));
+        "flowSpeed", "Flow Speed", 0.0f, 1.0f, 0.3f));  // Rate of stutters
 
     // === GLOBAL ===
     params.push_back(std::make_unique<juce::AudioParameterBool>(
