@@ -1,6 +1,7 @@
 #pragma once
 #include <JuceHeader.h>
 #include "DSP/GranularPitchShifter.h"
+#include "DSP/ModulationGenerator.h"
 #include "DSP/PitchSlideEngine.h"
 #include "DSP/PitchRandomizer.h"
 #include "DSP/Modulation.h"
@@ -54,8 +55,13 @@ private:
     juce::AudioProcessorValueTreeState mAPVTS;
     std::unique_ptr<PresetManager> mPresetManager;
 
-    // DSP Modules
+    // DSP Modules - Original Noise Glitch algorithm
     GranularPitchShifter mPitchShifter;
+    ModulationGenerator mModGen;
+    RingModulator mRingModL;
+    RingModulator mRingModR;
+    
+    // Additional Swarmness modules
     PitchSlideEngine mPitchSlide;
     PitchRandomizer mPitchRandomizer;
     Modulation mModulation;
@@ -64,6 +70,14 @@ private:
     FlowEngine mFlowEngine;
     DCBlocker mDCBlocker;
     Saturation mSaturation;
+    
+    // DC Blocker filters
+    juce::dsp::IIR::Filter<float> mDCBlockerL;
+    juce::dsp::IIR::Filter<float> mDCBlockerR;
+    
+    // Smoothed values
+    juce::SmoothedValue<float> mMixSmoothed;
+    juce::SmoothedValue<float> mGainSmoothed;
 
     // Parameter pointers
     std::atomic<float>* pOctaveMode = nullptr;
@@ -98,6 +112,7 @@ private:
     std::atomic<float>* pGlobalBypass = nullptr;
 
     juce::AudioBuffer<float> mDryBuffer;
+    double mCurrentSampleRate = 44100.0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SwarmnesssAudioProcessor)
 };

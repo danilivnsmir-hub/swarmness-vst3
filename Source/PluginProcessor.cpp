@@ -58,7 +58,7 @@ const juce::String SwarmnesssAudioProcessor::getName() const {
 bool SwarmnesssAudioProcessor::acceptsMidi() const { return false; }
 bool SwarmnesssAudioProcessor::producesMidi() const { return false; }
 bool SwarmnesssAudioProcessor::isMidiEffect() const { return false; }
-double SwarmnesssAudioProcessor::getTailLengthSeconds() const { return 0.0; }
+double SwarmnesssAudioProcessor::getTailLengthSeconds() const { return 0.1; }
 
 int SwarmnesssAudioProcessor::getNumPrograms() { return 1; }
 int SwarmnesssAudioProcessor::getCurrentProgram() { return 0; }
@@ -67,12 +67,31 @@ const juce::String SwarmnesssAudioProcessor::getProgramName(int index) { return 
 void SwarmnesssAudioProcessor::changeProgramName(int index, const juce::String& newName) {}
 
 void SwarmnesssAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
+    mCurrentSampleRate = sampleRate;
+    
     juce::dsp::ProcessSpec spec;
     spec.sampleRate = sampleRate;
     spec.maximumBlockSize = static_cast<juce::uint32>(samplesPerBlock);
     spec.numChannels = static_cast<juce::uint32>(getTotalNumOutputChannels());
 
+    // Prepare original Noise Glitch DSP modules
     mPitchShifter.prepare(sampleRate, samplesPerBlock);
+    mModGen.prepare(sampleRate);
+    mRingModL.prepare(sampleRate);
+    mRingModR.prepare(sampleRate);
+    
+    // Prepare DC blockers (high-pass at 20Hz)
+    auto dcCoeffs = juce::dsp::IIR::Coefficients<float>::makeHighPass(sampleRate, 20.0);
+    mDCBlockerL.coefficients = dcCoeffs;
+    mDCBlockerR.coefficients = dcCoeffs;
+    mDCBlockerL.reset();
+    mDCBlockerR.reset();
+    
+    // Prepare smoothed values
+    mMixSmoothed.reset(sampleRate, 0.02);  // 20ms smoothing
+    mGainSmoothed.reset(sampleRate, 0.02);
+
+    // Prepare additional Swarmness modules
     mPitchSlide.prepare(sampleRate);
     mPitchRandomizer.prepare(sampleRate);
     mModulation.prepare(sampleRate);
@@ -87,6 +106,9 @@ void SwarmnesssAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBl
 
 void SwarmnesssAudioProcessor::releaseResources() {
     mPitchShifter.reset();
+    mModGen.reset();
+    mRingModL.reset();
+    mRingModR.reset();
     mPitchSlide.reset();
     mPitchRandomizer.reset();
     mModulation.reset();
@@ -119,6 +141,7 @@ bool SwarmnesssAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts
 
 void SwarmnesssAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {
     juce::ScopedNoDenormals noDenormals;
+    
     const int numChannels = buffer.getNumChannels();
     const int numSamples = buffer.getNumSamples();
 
@@ -131,92 +154,110 @@ void SwarmnesssAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
         return;
     }
 
-    // Store dry signal for final mix
-    mDryBuffer.makeCopyOf(buffer, true);
-
-    // === Update DSP parameters ===
+    // Get parameter values
+    const int octaveMode = static_cast<int>(*pOctaveMode);
+    const bool octaveActive = *pEngage > 0.5f;
+    const float riseMs = *pRise * 2000.0f;  // 0-2000ms
+    const float panic = *pPanic;             // 0-1 normalized
+    const float chaos = *pChaos;             // 0-1 normalized
+    const float speed = *pSpeed;             // 0-1 normalized
+    const float mix = *pMix;
+    const float outputGainDb = *pOutputGain * 30.0f - 24.0f;  // -24 to +6 dB
     
-    // Pitch Shifter - ALWAYS engaged for 100% wet signal
-    mPitchShifter.setOctaveMode(static_cast<int>(*pOctaveMode));
-    mPitchShifter.setEngage(*pEngage > 0.5f);
-    mPitchShifter.setRiseTime(*pRise * 2000.0f);  // Normalize to ms
-    mPitchShifter.setPanic(*pPanic);
-    mPitchShifter.setChaos(*pChaos);
-
-    // Pitch Slide
-    mPitchSlide.setSlideRange(*pSlideRange * 48.0f - 24.0f);  // -24 to +24 st
-    mPitchSlide.setSlideTime(50.0f + *pSlideTime * 4950.0f);  // 50-5000 ms
-    mPitchSlide.setDirection(static_cast<PitchSlideEngine::Direction>(static_cast<int>(*pSlideDirection)));
-    mPitchSlide.setAutoSlide(*pAutoSlide > 0.5f);
-    mPitchSlide.setPosition(*pSlidePosition);
-    mPitchSlide.setReturn(*pSlideReturn > 0.5f);
-
-    // Pitch Randomizer
-    mPitchRandomizer.setRandomRange(*pRandomRange * 24.0f);  // 0-24 st
-    mPitchRandomizer.setRandomRate(0.1f + *pRandomRate * 9.9f);  // 0.1-10 Hz
-    mPitchRandomizer.setSmooth(*pRandomSmooth);
-    mPitchRandomizer.setMode(static_cast<PitchRandomizer::Mode>(static_cast<int>(*pRandomMode)));
-
-    // Modulation
-    mModulation.setLFORate(*pSpeed);
-    mModulation.setLFODepth(*pPanic);
-    mModulation.setRandomAmount(*pChaos);
-
-    // Filters
+    // Update smoothed parameters
+    mMixSmoothed.setTargetValue(mix);
+    mGainSmoothed.setTargetValue(juce::Decibels::decibelsToGain(outputGainDb));
+    
+    // Update pitch shifter
+    mPitchShifter.setOctaveMode(octaveMode);
+    mPitchShifter.setEngage(octaveActive);
+    mPitchShifter.setRiseTime(riseMs);
+    
+    // Update modulation generator (original Noise Glitch algorithm)
+    mModGen.setParams(panic, chaos, speed);
+    
+    // Update ring modulators for Speed effect
+    float ringFreq = 20.0f + speed * 300.0f;  // 20-320 Hz
+    mRingModL.setFrequency(ringFreq);
+    mRingModR.setFrequency(ringFreq);
+    mRingModL.setAmount(speed);
+    mRingModR.setAmount(speed);
+    
+    // Store dry signal
+    mDryBuffer.makeCopyOf(buffer, true);
+    
+    // Get channel pointers
+    float* channelL = buffer.getWritePointer(0);
+    float* channelR = numChannels > 1 ? buffer.getWritePointer(1) : channelL;
+    
+    // === ORIGINAL NOISE GLITCH PROCESSING FLOW ===
+    // Per-sample processing for modulation
+    for (int sample = 0; sample < numSamples; ++sample)
+    {
+        // Get modulation values (Panic + Chaos combined pitch modulation)
+        float pitchMod = mModGen.getPitchModulation();
+        
+        // Apply pitch modulation to shifter
+        mPitchShifter.setModulation(pitchMod);
+    }
+    
+    // Process pitch shifting (stereo)
+    mPitchShifter.processStereo(channelL, channelR, numSamples);
+    
+    // Per-sample post-processing
+    for (int sample = 0; sample < numSamples; ++sample)
+    {
+        // Apply ring modulation (Speed effect)
+        channelL[sample] = mRingModL.processSample(channelL[sample]);
+        if (numChannels > 1)
+            channelR[sample] = mRingModR.processSample(channelR[sample]);
+        
+        // Apply DC blocking
+        channelL[sample] = mDCBlockerL.processSample(channelL[sample]);
+        if (numChannels > 1)
+            channelR[sample] = mDCBlockerR.processSample(channelR[sample]);
+        
+        // Get dry samples
+        float dryL = mDryBuffer.getSample(0, sample);
+        float dryR = numChannels > 1 ? mDryBuffer.getSample(1, sample) : dryL;
+        
+        // Mix dry/wet
+        float currentMix = mMixSmoothed.getNextValue();
+        float currentGain = mGainSmoothed.getNextValue();
+        
+        channelL[sample] = (dryL * (1.0f - currentMix) + channelL[sample] * currentMix) * currentGain;
+        if (numChannels > 1)
+            channelR[sample] = (dryR * (1.0f - currentMix) + channelR[sample] * currentMix) * currentGain;
+    }
+    
+    // === ADDITIONAL SWARMNESS PROCESSING ===
+    
+    // Filters (TONE section)
     mFilterEngine.setLowCut(20.0f + *pLowCut * 480.0f);    // 20-500 Hz
     mFilterEngine.setHighCut(1000.0f + *pHighCut * 19000.0f);  // 1k-20k Hz
-
-    // Chorus (SWARM section)
-    mChorusEngine.setMode(static_cast<ChorusEngine::Mode>(static_cast<int>(*pChorusMode)));
-    mChorusEngine.setRate(0.1f + *pChorusRate * 4.9f);  // 0.1-5 Hz
-    mChorusEngine.setDepth(*pChorusDepth);
-    mChorusEngine.setMix(*pChorusMix);
-
-    // Saturation
-    mSaturation.setDrive(*pSaturation);
-    mSaturation.setMix(1.0f);
-
-    // Flow (stutter/gate) - Improved controls
-    mFlowEngine.setMode(static_cast<FlowEngine::Mode>(static_cast<int>(*pFlowMode)));
-    mFlowEngine.setFlowAmount(*pFlowAmount);  // Depth of gate effect
-    mFlowEngine.setPulseRate(0.5f + *pFlowSpeed * 19.5f);  // 0.5-20 Hz for stutters
-
-    // === Process Audio ===
-    
-    // Calculate dynamic pitch offset from slide, randomizer, and modulation
-    float totalPitchOffset = 0.0f;
-    float modulationOffset = 0.0f;
-    for (int sample = 0; sample < numSamples; ++sample) {
-        float slideOffset = mPitchSlide.process();
-        float randomOffset = mPitchRandomizer.process();
-        // Get modulation value and scale it to semitones (±12 semitones max)
-        float modValue = mModulation.getNextModulationValue();
-        modulationOffset = modValue * 12.0f;  // ±12 semitones based on modulation
-        totalPitchOffset = slideOffset + randomOffset + modulationOffset;
-    }
-    mPitchShifter.setDynamicPitchOffset(totalPitchOffset);
-
-    // 1. Granular Pitch Shifter (does its own wet/dry internally)
-    mPitchShifter.process(buffer);
-
-    // 2. Analog Filter Engine (HPF + LPF)
     mFilterEngine.process(buffer);
-
-    // 3. Saturation
+    
+    // Saturation (MID BOOST)
     if (*pSaturation > 0.01f) {
+        mSaturation.setDrive(*pSaturation);
+        mSaturation.setMix(1.0f);
         mSaturation.process(buffer);
     }
-
-    // 4. Chorus/SWARM modulation
+    
+    // Chorus/SWARM modulation
     if (*pChorusMix > 0.01f) {
+        mChorusEngine.setMode(static_cast<ChorusEngine::Mode>(static_cast<int>(*pChorusMode)));
+        mChorusEngine.setRate(0.1f + *pChorusRate * 4.9f);  // 0.1-5 Hz
+        mChorusEngine.setDepth(*pChorusDepth);
+        mChorusEngine.setMix(*pChorusMix);
         mChorusEngine.process(buffer);
     }
-
-    // 5. DC Blocker
-    mDCBlocker.process(buffer);
-
-    // 6. Flow Engine (stutter/gate) - applied AFTER other processing
+    
+    // Flow Engine (stutter/gate)
     if (*pFlowAmount > 0.01f) {
+        mFlowEngine.setMode(static_cast<FlowEngine::Mode>(static_cast<int>(*pFlowMode)));
+        mFlowEngine.setFlowAmount(*pFlowAmount);
+        mFlowEngine.setPulseRate(0.5f + *pFlowSpeed * 19.5f);
         for (int sample = 0; sample < numSamples; ++sample) {
             float flowGain = mFlowEngine.process();
             for (int ch = 0; ch < numChannels; ++ch) {
@@ -224,36 +265,28 @@ void SwarmnesssAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
             }
         }
     }
-
-    // 7. Output Drive (soft clipping)
+    
+    // Drive (soft clipping)
     float drive = *pDrive;
     if (drive > 0.01f) {
-        float driveAmount = 1.0f + drive * 4.0f;  // 1x to 5x gain
+        float driveAmount = 1.0f + drive * 4.0f;
         for (int ch = 0; ch < numChannels; ++ch) {
             auto* data = buffer.getWritePointer(ch);
             for (int i = 0; i < numSamples; ++i) {
-                // Soft clipping with tanh
                 data[i] = std::tanh(data[i] * driveAmount) / std::tanh(driveAmount);
             }
         }
     }
-
-    // 8. Final Wet/Dry Mix
-    float mix = *pMix;
-    if (mix < 0.999f) {  // Only mix if not 100% wet
-        for (int ch = 0; ch < numChannels; ++ch) {
-            auto* wet = buffer.getWritePointer(ch);
-            const auto* dry = mDryBuffer.getReadPointer(ch);
-            for (int i = 0; i < numSamples; ++i) {
-                wet[i] = dry[i] * (1.0f - mix) + wet[i] * mix;
-            }
+    
+    // Final soft clip to prevent harsh clipping (original Noise Glitch)
+    for (int ch = 0; ch < numChannels; ++ch)
+    {
+        float* channel = buffer.getWritePointer(ch);
+        for (int sample = 0; sample < numSamples; ++sample)
+        {
+            channel[sample] = std::tanh(channel[sample]);
         }
     }
-
-    // 9. Output Gain (-24 to +6 dB)
-    float outputGainDb = *pOutputGain * 30.0f - 24.0f;  // Normalize to dB
-    float outputGain = juce::Decibels::decibelsToGain(outputGainDb);
-    buffer.applyGain(outputGain);
 }
 
 bool SwarmnesssAudioProcessor::hasEditor() const { return true; }
@@ -282,7 +315,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout SwarmnesssAudioProcessor::cr
 
     // === PITCH Section (Octave + randomizer) ===
     params.push_back(std::make_unique<juce::AudioParameterChoice>(
-        "octaveMode", "Octave Mode", juce::StringArray{"-2 OCT", "-1 OCT", "0", "+1 OCT", "+2 OCT"}, 2));
+        "octaveMode", "Octave Mode", juce::StringArray{"-2 OCT", "-1 OCT", "0", "+1 OCT", "+2 OCT"}, 3));
     params.push_back(std::make_unique<juce::AudioParameterBool>(
         "engage", "Engage", true));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(

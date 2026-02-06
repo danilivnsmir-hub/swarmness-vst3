@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(Swarmness VERSION 3.0.0)
+project(Swarmness VERSION 3.1.0)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -92,7 +92,6 @@ target_sources(Swarmness
     PRIVATE
         Source/PluginProcessor.cpp
         Source/PluginEditor.cpp
-        Source/DSP/GranularPitchShifter.cpp
         Source/DSP/PitchSlideEngine.cpp
         Source/DSP/PitchRandomizer.cpp
         Source/DSP/Modulation.cpp
