@@ -5,7 +5,6 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
     : AudioProcessorEditor(&p), audioProcessor(p)
 {
     setLookAndFeel(&metalLookAndFeel);
-    setSize(950, 750);
 
     // Preset Panel
     presetPanel = std::make_unique<PresetPanel>(audioProcessor.getPresetManager());
@@ -154,6 +153,10 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
 
     // Start timer for LED updates
     startTimerHz(30);
+
+    // IMPORTANT: setSize() must be called LAST after all components are initialized
+    // because it triggers resized() which accesses all components
+    setSize(950, 750);
 }
 
 SwarmnesssAudioProcessorEditor::~SwarmnesssAudioProcessorEditor() {
