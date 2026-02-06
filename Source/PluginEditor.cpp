@@ -391,7 +391,7 @@ void SwarmnesssAudioProcessorEditor::paint(juce::Graphics& g) {
     // Version number
     g.setColour(MetalLookAndFeel::getTextDim());
     g.setFont(juce::Font(11.0f));
-    g.drawText("v2.3.1", getWidth() - 70, 20, 60, 20, juce::Justification::centredRight);
+    g.drawText("v2.4.0", getWidth() - 70, 20, 60, 20, juce::Justification::centredRight);
 
     // Draw section frames
     // Top row
@@ -404,10 +404,10 @@ void SwarmnesssAudioProcessorEditor::paint(juce::Graphics& g) {
     drawSectionFrame(g, juce::Rectangle<int>(340, 325, 310, 200), "FLOW");
     drawSectionFrame(g, juce::Rectangle<int>(665, 325, 320, 200), "OUTPUT");
 
-    // Bypass label under footswitch
+    // Bypass label under footswitch (larger footswitch)
     g.setColour(MetalLookAndFeel::getTextLight());
-    g.setFont(juce::Font(12.0f, juce::Font::bold));
-    g.drawText("BYPASS", getWidth()/2 - 50, 640, 100, 20, juce::Justification::centred);
+    g.setFont(juce::Font(14.0f, juce::Font::bold));
+    g.drawText("BYPASS", getWidth()/2 - 60, 655, 120, 25, juce::Justification::centred);
 }
 
 void SwarmnesssAudioProcessorEditor::resized() {
@@ -520,12 +520,12 @@ void SwarmnesssAudioProcessorEditor::resized() {
         outputLevelKnob.setBounds(baseX + 15 + spacing * 2, knobY, knobSize, knobSize + 30);
     }
 
-    // === BYPASS Footswitch (bottom center) ===
+    // === BYPASS Footswitch (bottom center) - LARGER ===
     {
-        int footWidth = 90;
-        int footHeight = 90;
+        int footWidth = 110;
+        int footHeight = 110;
         int footX = (getWidth() - footWidth) / 2;
-        int footY = 545;
+        int footY = 540;
         bypassFootswitch.setBounds(footX, footY, footWidth, footHeight);
     }
 }

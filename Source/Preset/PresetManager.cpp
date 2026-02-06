@@ -1,7 +1,7 @@
 #include "PresetManager.h"
 
 const juce::String PresetManager::kPresetExtension = ".swpreset";
-const juce::String PresetManager::kPresetVersion = "2.3.1";
+const juce::String PresetManager::kPresetVersion = "2.4.0";
 
 PresetManager::PresetManager(juce::AudioProcessorValueTreeState& apvts)
     : mAPVTS(apvts)
@@ -261,4 +261,52 @@ void PresetManager::initializeFactoryPresets() {
          {"saturation", 0.6f}, {"drive", 0.4f},
          {"chorusMix", 0.3f}, {"chorusDepth", 0.3f}, {"chorusRate", 0.2f},
          {"lowCut", 0.1f}, {"highCut", 0.7f}});
+    
+    // ========== THE NOISE STYLE PRESETS ==========
+    
+    // The Noise Classic - Immediate glitchy octave shift, 100% wet
+    mFactoryPresets["The Noise Classic"] = createPreset(
+        "The Noise Classic", "Classic Noise pedal tone - aggressive glitchy octave",
+        {{"octaveMode", 2.0f / 3.0f},  // +1 OCT
+         {"engage", 1.0f},
+         {"rise", 0.0f},               // Instant response
+         {"panic", 0.65f},             // High grain for glitchy texture
+         {"chaos", 0.3f},              // Some pitch instability
+         {"mix", 1.0f},                // 100% wet
+         {"flowAmount", 0.4f},         // Active flow for stutter
+         {"flowSpeed", 0.5f},
+         {"flowMode", 1.0f},           // Pulse mode
+         {"saturation", 0.25f},
+         {"drive", 0.15f}});
+    
+    // The Noise Chaos - Random octave madness, maximum aggression
+    mFactoryPresets["The Noise Chaos"] = createPreset(
+        "The Noise Chaos", "Maximum chaos - random octave shifts with fast stutter",
+        {{"octaveMode", 0.0f},         // -2 OCT for crazy lows
+         {"engage", 1.0f},
+         {"rise", 0.02f},              // Near-instant
+         {"panic", 0.9f},              // Maximum grain chaos
+         {"chaos", 0.85f},             // High drift/randomness
+         {"mix", 1.0f},                // 100% wet
+         {"flowAmount", 0.85f},        // Aggressive stutter
+         {"flowSpeed", 0.9f},          // Fast flow
+         {"flowMode", 1.0f},           // Pulse mode
+         {"saturation", 0.5f},
+         {"drive", 0.35f},
+         {"randomRange", 0.5f},        // Random pitch jumps
+         {"randomRate", 0.6f}});
+    
+    // The Noise Clean - Simple octave, minimal effects
+    mFactoryPresets["The Noise Clean"] = createPreset(
+        "The Noise Clean", "Clean octave shift with minimal coloration",
+        {{"octaveMode", 2.0f / 3.0f},  // +1 OCT
+         {"engage", 1.0f},
+         {"rise", 0.01f},              // Very fast rise
+         {"panic", 0.1f},              // Minimal grain
+         {"chaos", 0.05f},             // Minimal drift
+         {"mix", 1.0f},                // 100% wet
+         {"flowAmount", 0.0f},         // No flow
+         {"saturation", 0.0f},
+         {"drive", 0.0f},
+         {"chorusMix", 0.0f}});
 }

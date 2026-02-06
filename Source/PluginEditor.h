@@ -58,9 +58,9 @@ private:
     RotaryKnob midBoostKnob{"MID BOOST"};
 
     // === SWARM Section (Bottom Left) ===
-    RotaryKnob chorusDepthKnob{"DEPTH"};
-    RotaryKnob chorusRateKnob{"RATE"};
-    RotaryKnob wowFlutterKnob{"MIX"};
+    RotaryKnob chorusDepthKnob{"CHORUS\nDEPTH"};
+    RotaryKnob chorusRateKnob{"CHORUS\nRATE"};
+    RotaryKnob wowFlutterKnob{"WOW/\nFLUTTER"};
 
     // === FLOW Section (Bottom Center) ===
     RotaryKnob flowAmountKnob{"FLOW\nAMOUNT"};
