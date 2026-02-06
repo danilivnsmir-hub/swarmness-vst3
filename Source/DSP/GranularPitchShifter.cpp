@@ -29,12 +29,13 @@ void GranularPitchShifter::reset() {
 }
 
 void GranularPitchShifter::setOctaveMode(int mode) {
-    mOctaveMode = juce::jlimit(0, 2, mode);
+    mOctaveMode = juce::jlimit(0, 3, mode);
     float targetRatio;
     switch (mOctaveMode) {
-        case 0: targetRatio = 2.0f; break;  // +1 octave
-        case 1: targetRatio = 4.0f; break;  // +2 octaves
-        case 2: targetRatio = 0.5f; break;  // -1 octave
+        case 0: targetRatio = 0.25f; break; // -2 octaves
+        case 1: targetRatio = 0.5f; break;  // -1 octave
+        case 2: targetRatio = 2.0f; break;  // +1 octave
+        case 3: targetRatio = 4.0f; break;  // +2 octaves
         default: targetRatio = 2.0f;
     }
     mPitchRatio.setTargetValue(targetRatio);
@@ -135,7 +136,8 @@ void GranularPitchShifter::process(juce::AudioBuffer<float>& buffer) {
                 if (readPos < 0) readPos += kMaxDelayLength;
 
                 // Pitch shift by adjusting read increment
-                float readIncrement = 1.0f / totalPitchRatio;
+                // Higher pitch ratio = faster reading = higher pitch
+                float readIncrement = totalPitchRatio;
                 grain.readPos += readIncrement;
 
                 // Get interpolated sample

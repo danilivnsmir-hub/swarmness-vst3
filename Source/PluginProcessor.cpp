@@ -44,6 +44,7 @@ SwarmnesssAudioProcessor::SwarmnesssAudioProcessor()
     pFlowMode = mAPVTS.getRawParameterValue("flowMode");
     pPulseRate = mAPVTS.getRawParameterValue("pulseRate");
     pPulseProbability = mAPVTS.getRawParameterValue("pulseProbability");
+    pGlobalBypass = mAPVTS.getRawParameterValue("globalBypass");
 }
 
 SwarmnesssAudioProcessor::~SwarmnesssAudioProcessor() {}
@@ -123,6 +124,11 @@ void SwarmnesssAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
     for (int i = getTotalNumInputChannels(); i < getTotalNumOutputChannels(); ++i)
         buffer.clear(i, 0, numSamples);
 
+    // Global Bypass - pass input through unchanged
+    if (*pGlobalBypass > 0.5f) {
+        return;
+    }
+
     // Store dry signal for mixing
     mDryBuffer.makeCopyOf(buffer, true);
 
@@ -174,12 +180,16 @@ void SwarmnesssAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
 
     // === Process Audio ===
     
-    // Calculate dynamic pitch offset from slide and randomizer
+    // Calculate dynamic pitch offset from slide, randomizer, and modulation
     float totalPitchOffset = 0.0f;
+    float modulationOffset = 0.0f;
     for (int sample = 0; sample < numSamples; ++sample) {
         float slideOffset = mPitchSlide.process();
         float randomOffset = mPitchRandomizer.process();
-        totalPitchOffset = slideOffset + randomOffset;
+        // Get modulation value and scale it to semitones (±12 semitones max)
+        float modValue = mModulation.getNextModulationValue();
+        modulationOffset = modValue * 12.0f;  // ±12 semitones based on modulation
+        totalPitchOffset = slideOffset + randomOffset + modulationOffset;
     }
     mPitchShifter.setDynamicPitchOffset(totalPitchOffset);
 
@@ -250,9 +260,9 @@ void SwarmnesssAudioProcessor::setStateInformation(const void* data, int sizeInB
 juce::AudioProcessorValueTreeState::ParameterLayout SwarmnesssAudioProcessor::createParameterLayout() {
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
 
-    // === VOLTAGE Section ===
+    // === PITCH Section (was VOLTAGE) ===
     params.push_back(std::make_unique<juce::AudioParameterChoice>(
-        "octaveMode", "Octave Mode", juce::StringArray{"+1 OCT", "+2 OCT", "-1 OCT"}, 0));
+        "octaveMode", "Octave Mode", juce::StringArray{"-2 OCT", "-1 OCT", "+1 OCT", "+2 OCT"}, 2));
     params.push_back(std::make_unique<juce::AudioParameterBool>(
         "engage", "Engage", true));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
@@ -310,13 +320,17 @@ juce::AudioProcessorValueTreeState::ParameterLayout SwarmnesssAudioProcessor::cr
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         "outputGain", "Output Gain", 0.0f, 1.0f, 0.8f));  // Maps to -24 to +6 dB
 
-    // === FLOW Section ===
+    // === PULSE Section (was FLOW) ===
     params.push_back(std::make_unique<juce::AudioParameterChoice>(
-        "flowMode", "Flow Mode", juce::StringArray{"Static", "Pulse"}, 0));
+        "flowMode", "Pulse Mode", juce::StringArray{"Static", "Pulse"}, 0));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         "pulseRate", "Pulse Rate", 0.0f, 1.0f, 0.2f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         "pulseProbability", "Pulse Probability", 0.0f, 1.0f, 0.5f));
+
+    // === GLOBAL ===
+    params.push_back(std::make_unique<juce::AudioParameterBool>(
+        "globalBypass", "Global Bypass", false));
 
     return {params.begin(), params.end()};
 }

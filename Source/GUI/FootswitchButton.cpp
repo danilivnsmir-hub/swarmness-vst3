@@ -46,6 +46,12 @@ void FootswitchButton::paint(juce::Graphics& g) {
             ledColour = mBlinkState ? MetalLookAndFeel::getLEDOrange() 
                                     : MetalLookAndFeel::getMetalGrey().darker();
             break;
+        case DimRed:
+            ledColour = MetalLookAndFeel::getLEDRed().withAlpha(0.3f);
+            break;
+        case BrightRed:
+            ledColour = MetalLookAndFeel::getLEDRed();
+            break;
     }
 
     if (mLEDState != Off) {

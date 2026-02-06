@@ -4,7 +4,7 @@
 class FootswitchButton : public juce::Component,
                          public juce::Timer {
 public:
-    enum LEDState { Off, Green, Red, OrangeBlinking };
+    enum LEDState { Off, Green, Red, OrangeBlinking, DimRed, BrightRed };
 
     FootswitchButton();
     ~FootswitchButton() override = default;

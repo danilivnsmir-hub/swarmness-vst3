@@ -11,20 +11,21 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
     addAndMakeVisible(*presetPanel);
 
     // === Setup Labels ===
-    setupLabel(voltageSectionLabel, "VOLTAGE");
+    setupLabel(pitchSectionLabel, "PITCH");           // was VOLTAGE
     setupLabel(slideSectionLabel, "SLIDE", false);
     setupLabel(randomSectionLabel, "RANDOM", false);
     setupLabel(modulationSectionLabel, "MODULATION");
     setupLabel(toneSectionLabel, "TONE SHAPING");
     setupLabel(chorusSectionLabel, "CHORUS", false);
     setupLabel(outputSectionLabel, "OUTPUT");
-    setupLabel(flowSectionLabel, "FLOW");
+    setupLabel(pulseSectionLabel, "PULSE");           // was FLOW
 
-    // === VOLTAGE Section ===
+    // === PITCH Section (was VOLTAGE) ===
     addAndMakeVisible(octaveModeBox);
-    octaveModeBox.addItem("+1 OCT", 1);
-    octaveModeBox.addItem("+2 OCT", 2);
-    octaveModeBox.addItem("-1 OCT", 3);
+    octaveModeBox.addItem("-2 OCT", 1);
+    octaveModeBox.addItem("-1 OCT", 2);
+    octaveModeBox.addItem("+1 OCT", 3);
+    octaveModeBox.addItem("+2 OCT", 4);
     octaveModeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
         audioProcessor.getAPVTS(), "octaveMode", octaveModeBox);
 
@@ -131,7 +132,7 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
     outputGainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         audioProcessor.getAPVTS(), "outputGain", outputGainKnob.getSlider());
 
-    // === FLOW Section ===
+    // === PULSE Section (was FLOW) ===
     addAndMakeVisible(flowModeBox);
     flowModeBox.addItem("Static", 1);
     flowModeBox.addItem("Pulse", 2);
@@ -146,17 +147,26 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
     pulseProbabilityAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         audioProcessor.getAPVTS(), "pulseProbability", pulseProbabilityKnob.getSlider());
 
-    addAndMakeVisible(footswitch);
-    footswitch.onClick = [this](bool isOn) {
+    // Pulse Footswitch (left)
+    addAndMakeVisible(pulseFootswitch);
+    pulseFootswitch.onClick = [this](bool isOn) {
         audioProcessor.getFlowEngine().setStaticState(isOn);
+    };
+
+    // Bypass Footswitch (right)
+    addAndMakeVisible(bypassFootswitch);
+    bypassFootswitch.onClick = [this](bool isOn) {
+        auto* param = audioProcessor.getAPVTS().getParameter("globalBypass");
+        if (param) {
+            param->setValueNotifyingHost(isOn ? 1.0f : 0.0f);
+        }
     };
 
     // Start timer for LED updates
     startTimerHz(30);
 
     // IMPORTANT: setSize() must be called LAST after all components are initialized
-    // because it triggers resized() which accesses all components
-    setSize(950, 750);
+    setSize(900, 600);
 }
 
 SwarmnesssAudioProcessorEditor::~SwarmnesssAudioProcessorEditor() {
@@ -174,14 +184,20 @@ void SwarmnesssAudioProcessorEditor::setupLabel(juce::Label& label, const juce::
 }
 
 void SwarmnesssAudioProcessorEditor::timerCallback() {
-    // Update footswitch LED based on flow engine state
+    // Update pulse footswitch LED based on flow engine state
+    // Dim red when off/inactive, bright red when on/active
     auto flowMode = static_cast<int>(*audioProcessor.getAPVTS().getRawParameterValue("flowMode"));
     if (flowMode == 1) {  // Pulse mode
-        footswitch.setLEDState(FootswitchButton::OrangeBlinking);
+        pulseFootswitch.setLEDState(FootswitchButton::OrangeBlinking);
     } else {
-        footswitch.setLEDState(audioProcessor.getFlowEngine().isCurrentlyOn() ? 
-            FootswitchButton::Green : FootswitchButton::Red);
+        pulseFootswitch.setLEDState(audioProcessor.getFlowEngine().isCurrentlyOn() ? 
+            FootswitchButton::BrightRed : FootswitchButton::DimRed);
     }
+    
+    // Update bypass footswitch LED - dim red (off/processing), bright red (on/bypassed)
+    auto bypassed = *audioProcessor.getAPVTS().getRawParameterValue("globalBypass") > 0.5f;
+    bypassFootswitch.setLEDState(bypassed ? FootswitchButton::BrightRed : FootswitchButton::DimRed);
+    bypassFootswitch.setOn(bypassed);
 }
 
 void SwarmnesssAudioProcessorEditor::paint(juce::Graphics& g) {
@@ -190,128 +206,127 @@ void SwarmnesssAudioProcessorEditor::paint(juce::Graphics& g) {
 
     // Title
     g.setColour(MetalLookAndFeel::getTextLight());
-    g.setFont(juce::Font(28.0f, juce::Font::bold));
-    g.drawText("SWARMNESS", 0, 50, getWidth(), 30, juce::Justification::centred);
+    g.setFont(juce::Font(24.0f, juce::Font::bold));
+    g.drawText("SWARMNESS", 0, 8, getWidth(), 25, juce::Justification::centred);
 
     g.setColour(MetalLookAndFeel::getTextDim());
-    g.setFont(juce::Font(12.0f));
-    g.drawText("v2.1.0 • Tone Shaping Edition", 0, 78, getWidth(), 20, juce::Justification::centred);
+    g.setFont(juce::Font(10.0f));
+    g.drawText("v2.2.0", 0, 30, getWidth(), 15, juce::Justification::centred);
 
-    // Section backgrounds
-    auto drawSectionBg = [&](juce::Rectangle<int> bounds, const juce::String& title = "") {
+    // Section backgrounds - each section on its own row
+    auto drawSectionBg = [&](juce::Rectangle<int> bounds) {
         g.setColour(MetalLookAndFeel::getMetalGrey().withAlpha(0.3f));
         g.fillRoundedRectangle(bounds.toFloat(), 6.0f);
         g.setColour(MetalLookAndFeel::getMetalLight().withAlpha(0.5f));
         g.drawRoundedRectangle(bounds.toFloat().reduced(0.5f), 6.0f, 1.0f);
     };
 
-    // VOLTAGE section
-    drawSectionBg(juce::Rectangle<int>(15, 105, 430, 280));
+    // Row 1: PITCH section
+    drawSectionBg(juce::Rectangle<int>(10, 50, 880, 130));
     
-    // MODULATION section
-    drawSectionBg(juce::Rectangle<int>(455, 105, 220, 120));
+    // Row 2: MODULATION section
+    drawSectionBg(juce::Rectangle<int>(10, 185, 880, 85));
     
-    // TONE SHAPING section
-    drawSectionBg(juce::Rectangle<int>(15, 395, 540, 170));
+    // Row 3: TONE SHAPING + OUTPUT section
+    drawSectionBg(juce::Rectangle<int>(10, 275, 650, 95));
+    drawSectionBg(juce::Rectangle<int>(670, 275, 220, 95));
     
-    // OUTPUT section
-    drawSectionBg(juce::Rectangle<int>(565, 395, 170, 170));
+    // Row 4: PULSE section
+    drawSectionBg(juce::Rectangle<int>(10, 375, 880, 85));
     
-    // FLOW section
-    drawSectionBg(juce::Rectangle<int>(565, 235, 370, 150));
+    // Row 5: Footswitches
+    drawSectionBg(juce::Rectangle<int>(10, 465, 880, 125));
 
     // Footer
     g.setColour(MetalLookAndFeel::getTextDim().withAlpha(0.5f));
-    g.setFont(juce::Font(10.0f));
+    g.setFont(juce::Font(9.0f));
     g.drawText("© 2026 OpenAudio • Pitch Shifter for Metalcore/Djent", 
-               0, getHeight() - 25, getWidth(), 20, juce::Justification::centred);
+               0, getHeight() - 15, getWidth(), 15, juce::Justification::centred);
 }
 
 void SwarmnesssAudioProcessorEditor::resized() {
-    const int knobSize = 70;
-    const int smallKnobSize = 60;
-    const int comboHeight = 24;
-    const int toggleHeight = 24;
-    const int labelHeight = 20;
+    const int knobSize = 60;
+    const int smallKnobSize = 55;
+    const int comboHeight = 22;
+    const int toggleHeight = 22;
+    const int labelHeight = 18;
     const int margin = 10;
+    const int sectionPadding = 8;
 
-    // Preset Panel
-    presetPanel->setBounds(15, 10, getWidth() - 30, 35);
+    // Preset Panel (top)
+    presetPanel->setBounds(10, 5, getWidth() - 20, 30);
 
-    // === VOLTAGE Section ===
-    int voltageX = 25;
-    int voltageY = 110;
+    // === ROW 1: PITCH Section (y=50, height=130) ===
+    int pitchY = 55;
     
-    voltageSectionLabel.setBounds(voltageX, voltageY, 100, labelHeight);
+    pitchSectionLabel.setBounds(20, pitchY, 60, labelHeight);
     
     // Core pitch controls
-    octaveModeBox.setBounds(voltageX, voltageY + 25, 80, comboHeight);
-    engageButton.setBounds(voltageX + 90, voltageY + 25, 50, toggleHeight);
-    riseKnob.setBounds(voltageX + 150, voltageY + 15, knobSize, knobSize + 16);
+    octaveModeBox.setBounds(20, pitchY + 20, 75, comboHeight);
+    engageButton.setBounds(100, pitchY + 20, 45, toggleHeight);
+    riseKnob.setBounds(150, pitchY + 12, knobSize, knobSize + 14);
 
     // SLIDE subsection
-    slideSectionLabel.setBounds(voltageX, voltageY + 95, 60, labelHeight);
-    
-    slideRangeKnob.setBounds(voltageX, voltageY + 115, smallKnobSize, smallKnobSize + 16);
-    slideTimeKnob.setBounds(voltageX + 65, voltageY + 115, smallKnobSize, smallKnobSize + 16);
-    slidePositionKnob.setBounds(voltageX + 130, voltageY + 115, smallKnobSize, smallKnobSize + 16);
-    
-    slideDirectionBox.setBounds(voltageX + 200, voltageY + 115, 70, comboHeight);
-    autoSlideButton.setBounds(voltageX + 200, voltageY + 145, 55, toggleHeight);
-    slideReturnButton.setBounds(voltageX + 260, voltageY + 145, 50, toggleHeight);
+    slideSectionLabel.setBounds(230, pitchY, 50, labelHeight);
+    slideRangeKnob.setBounds(220, pitchY + 18, smallKnobSize, smallKnobSize + 12);
+    slideTimeKnob.setBounds(280, pitchY + 18, smallKnobSize, smallKnobSize + 12);
+    slidePositionKnob.setBounds(340, pitchY + 18, smallKnobSize, smallKnobSize + 12);
+    slideDirectionBox.setBounds(405, pitchY + 22, 60, comboHeight);
+    autoSlideButton.setBounds(405, pitchY + 48, 50, toggleHeight);
+    slideReturnButton.setBounds(458, pitchY + 48, 45, toggleHeight);
 
     // RANDOM subsection
-    randomSectionLabel.setBounds(voltageX, voltageY + 195, 70, labelHeight);
-    
-    randomRangeKnob.setBounds(voltageX, voltageY + 215, smallKnobSize, smallKnobSize + 16);
-    randomRateKnob.setBounds(voltageX + 65, voltageY + 215, smallKnobSize, smallKnobSize + 16);
-    randomSmoothKnob.setBounds(voltageX + 130, voltageY + 215, smallKnobSize, smallKnobSize + 16);
-    randomModeBox.setBounds(voltageX + 200, voltageY + 230, 70, comboHeight);
+    randomSectionLabel.setBounds(525, pitchY, 60, labelHeight);
+    randomRangeKnob.setBounds(515, pitchY + 18, smallKnobSize, smallKnobSize + 12);
+    randomRateKnob.setBounds(575, pitchY + 18, smallKnobSize, smallKnobSize + 12);
+    randomSmoothKnob.setBounds(635, pitchY + 18, smallKnobSize, smallKnobSize + 12);
+    randomModeBox.setBounds(700, pitchY + 35, 60, comboHeight);
 
-    // === MODULATION Section ===
-    int modX = 465;
-    int modY = 110;
-    
-    modulationSectionLabel.setBounds(modX, modY, 100, labelHeight);
-    
-    panicKnob.setBounds(modX, modY + 25, knobSize, knobSize + 16);
-    chaosKnob.setBounds(modX + 70, modY + 25, knobSize, knobSize + 16);
-    speedKnob.setBounds(modX + 140, modY + 25, knobSize, knobSize + 16);
+    // OUTPUT section (inline with PITCH row, right side)
+    outputSectionLabel.setBounds(780, pitchY, 80, labelHeight);
+    mixKnob.setBounds(770, pitchY + 18, smallKnobSize, smallKnobSize + 12);
+    outputGainKnob.setBounds(830, pitchY + 18, smallKnobSize, smallKnobSize + 12);
 
-    // === FLOW Section ===
-    int flowX = 575;
-    int flowY = 240;
+    // === ROW 2: MODULATION Section (y=185, height=85) ===
+    int modY = 190;
     
-    flowSectionLabel.setBounds(flowX, flowY, 60, labelHeight);
-    
-    flowModeBox.setBounds(flowX, flowY + 25, 80, comboHeight);
-    pulseRateKnob.setBounds(flowX + 90, flowY + 15, smallKnobSize, smallKnobSize + 16);
-    pulseProbabilityKnob.setBounds(flowX + 155, flowY + 15, smallKnobSize, smallKnobSize + 16);
-    footswitch.setBounds(flowX + 230, flowY + 10, 100, 80);
+    modulationSectionLabel.setBounds(20, modY, 100, labelHeight);
+    panicKnob.setBounds(20, modY + 18, knobSize, knobSize + 14);
+    chaosKnob.setBounds(90, modY + 18, knobSize, knobSize + 14);
+    speedKnob.setBounds(160, modY + 18, knobSize, knobSize + 14);
 
-    // === TONE SHAPING Section ===
-    int toneX = 25;
-    int toneY = 400;
+    // === ROW 3: TONE SHAPING Section (y=275, height=95) ===
+    int toneY = 280;
     
-    toneSectionLabel.setBounds(toneX, toneY, 120, labelHeight);
-    
-    lowCutKnob.setBounds(toneX, toneY + 25, knobSize, knobSize + 16);
-    highCutKnob.setBounds(toneX + 80, toneY + 25, knobSize, knobSize + 16);
-    saturationKnob.setBounds(toneX + 160, toneY + 25, knobSize, knobSize + 16);
+    toneSectionLabel.setBounds(20, toneY, 110, labelHeight);
+    lowCutKnob.setBounds(20, toneY + 18, smallKnobSize, smallKnobSize + 12);
+    highCutKnob.setBounds(80, toneY + 18, smallKnobSize, smallKnobSize + 12);
+    saturationKnob.setBounds(140, toneY + 18, smallKnobSize, smallKnobSize + 12);
 
     // CHORUS subsection
-    chorusSectionLabel.setBounds(toneX + 260, toneY, 70, labelHeight);
-    
-    chorusRateKnob.setBounds(toneX + 250, toneY + 25, smallKnobSize, smallKnobSize + 16);
-    chorusDepthKnob.setBounds(toneX + 315, toneY + 25, smallKnobSize, smallKnobSize + 16);
-    chorusMixKnob.setBounds(toneX + 380, toneY + 25, smallKnobSize, smallKnobSize + 16);
+    chorusSectionLabel.setBounds(220, toneY, 60, labelHeight);
+    chorusRateKnob.setBounds(210, toneY + 18, smallKnobSize, smallKnobSize + 12);
+    chorusDepthKnob.setBounds(270, toneY + 18, smallKnobSize, smallKnobSize + 12);
+    chorusMixKnob.setBounds(330, toneY + 18, smallKnobSize, smallKnobSize + 12);
 
-    // === OUTPUT Section ===
-    int outX = 575;
-    int outY = 400;
+    // === ROW 4: PULSE Section (y=375, height=85) ===
+    int pulseY = 380;
     
-    outputSectionLabel.setBounds(outX, outY, 80, labelHeight);
+    pulseSectionLabel.setBounds(20, pulseY, 60, labelHeight);
+    flowModeBox.setBounds(20, pulseY + 22, 70, comboHeight);
+    pulseRateKnob.setBounds(100, pulseY + 12, smallKnobSize, smallKnobSize + 12);
+    pulseProbabilityKnob.setBounds(160, pulseY + 12, smallKnobSize, smallKnobSize + 12);
+
+    // === ROW 5: Footswitches (y=465, height=125) ===
+    int footY = 475;
+    int footWidth = 100;
+    int footHeight = 100;
+    int footSpacing = 150;
+    int footCenterX = getWidth() / 2;
     
-    mixKnob.setBounds(outX, outY + 25, knobSize, knobSize + 16);
-    outputGainKnob.setBounds(outX + 80, outY + 25, knobSize, knobSize + 16);
+    // PULSE footswitch (left)
+    pulseFootswitch.setBounds(footCenterX - footSpacing - footWidth/2, footY, footWidth, footHeight);
+    
+    // BYPASS footswitch (right)
+    bypassFootswitch.setBounds(footCenterX + footSpacing - footWidth/2, footY, footWidth, footHeight);
 }

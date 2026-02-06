@@ -59,21 +59,22 @@ private:
     RotaryKnob mixKnob{"MIX"};
     RotaryKnob outputGainKnob{"OUTPUT"};
 
-    // === FLOW Section ===
+    // === PULSE Section (was FLOW) ===
     juce::ComboBox flowModeBox;
     RotaryKnob pulseRateKnob{"RATE"};
     RotaryKnob pulseProbabilityKnob{"PROB"};
-    FootswitchButton footswitch;
+    FootswitchButton pulseFootswitch;
+    FootswitchButton bypassFootswitch;
 
     // Labels for sections
-    juce::Label voltageSectionLabel;
+    juce::Label pitchSectionLabel;   // was voltageSectionLabel
     juce::Label slideSectionLabel;
     juce::Label randomSectionLabel;
     juce::Label modulationSectionLabel;
     juce::Label toneSectionLabel;
     juce::Label chorusSectionLabel;
     juce::Label outputSectionLabel;
-    juce::Label flowSectionLabel;
+    juce::Label pulseSectionLabel;   // was flowSectionLabel
 
     // Parameter Attachments
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> octaveModeAttachment;
