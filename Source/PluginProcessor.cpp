@@ -41,6 +41,7 @@ SwarmnesssAudioProcessor::SwarmnesssAudioProcessor()
     pChorusMix = mAPVTS.getRawParameterValue("chorusMix");
     pSaturation = mAPVTS.getRawParameterValue("saturation");
     pMix = mAPVTS.getRawParameterValue("mix");
+    pDrive = mAPVTS.getRawParameterValue("drive");
     pOutputGain = mAPVTS.getRawParameterValue("outputGain");
     pFlowMode = mAPVTS.getRawParameterValue("flowMode");
     pPulseRate = mAPVTS.getRawParameterValue("pulseRate");
@@ -224,6 +225,19 @@ void SwarmnesssAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
         }
     }
 
+    // 6.5 Output Drive (soft clipping)
+    float drive = *pDrive;
+    if (drive > 0.01f) {
+        float driveAmount = 1.0f + drive * 4.0f;  // 1x to 5x gain
+        for (int ch = 0; ch < numChannels; ++ch) {
+            auto* data = buffer.getWritePointer(ch);
+            for (int i = 0; i < numSamples; ++i) {
+                // Soft clipping with tanh
+                data[i] = std::tanh(data[i] * driveAmount) / std::tanh(driveAmount);
+            }
+        }
+    }
+
     // 7. Flow Engine Gate
     for (int sample = 0; sample < numSamples; ++sample) {
         float flowGain = mFlowEngine.process();
@@ -321,6 +335,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout SwarmnesssAudioProcessor::cr
     // === OUTPUT Section ===
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         "mix", "Mix", 0.0f, 1.0f, 1.0f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        "drive", "Drive", 0.0f, 1.0f, 0.0f));  // Output stage drive
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         "outputGain", "Output Gain", 0.0f, 1.0f, 0.8f));  // Maps to -24 to +6 dB
 

@@ -13,6 +13,22 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
     // Preset Panel (hidden by default, can be shown if needed)
     presetPanel = std::make_unique<PresetPanel>(audioProcessor.getPresetManager());
     // addAndMakeVisible(*presetPanel); // Uncomment if needed
+    
+    // === Preset Dropdown (top-left) ===
+    addAndMakeVisible(presetSelector);
+    auto& presetMgr = audioProcessor.getPresetManager();
+    auto presets = presetMgr.getPresetList();
+    int itemId = 1;
+    for (const auto& name : presets) {
+        presetSelector.addItem(name, itemId++);
+    }
+    // Set current preset
+    int currentIdx = presets.indexOf(presetMgr.getCurrentPresetName());
+    if (currentIdx >= 0) presetSelector.setSelectedItemIndex(currentIdx);
+    presetSelector.onChange = [this]() {
+        auto selectedName = presetSelector.getText();
+        audioProcessor.getPresetManager().loadPreset(selectedName);
+    };
 
     // === VOLTAGE Section (maps to pitch/modulation controls) ===
     setupSectionLabel(voltageSectionLabel, "VOLTAGE");
@@ -176,19 +192,23 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
     mixAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         audioProcessor.getAPVTS(), "mix", mixKnob.getSlider());
 
-    addAndMakeVisible(driveKnob);  // Also using saturation visual (different control)
-    // driveKnob doesn't have its own parameter - we'll use it visually
+    addAndMakeVisible(driveKnob);
+    driveAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        audioProcessor.getAPVTS(), "drive", driveKnob.getSlider());
 
     addAndMakeVisible(outputLevelKnob);
     outputGainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         audioProcessor.getAPVTS(), "outputGain", outputLevelKnob.getSlider());
 
     // === BYPASS Footswitch ===
+    // Logic: isOn=true means effect is ACTIVE (bypass OFF), isOn=false means BYPASSED
     addAndMakeVisible(bypassFootswitch);
     bypassFootswitch.onClick = [this](bool isOn) {
         auto* param = audioProcessor.getAPVTS().getParameter("globalBypass");
         if (param) {
-            param->setValueNotifyingHost(isOn ? 1.0f : 0.0f);
+            // When footswitch is ON (LED lit), bypass should be OFF (0.0)
+            // When footswitch is OFF (LED dim), bypass should be ON (1.0)
+            param->setValueNotifyingHost(isOn ? 0.0f : 1.0f);
         }
     };
 
@@ -274,7 +294,7 @@ void SwarmnesssAudioProcessorEditor::paint(juce::Graphics& g) {
     // Version number
     g.setColour(MetalLookAndFeel::getTextDim());
     g.setFont(juce::Font(11.0f));
-    g.drawText("v2.2.1", getWidth() - 70, 20, 60, 20, juce::Justification::centredRight);
+    g.drawText("v2.2.2", getWidth() - 70, 20, 60, 20, juce::Justification::centredRight);
 
     // Draw section frames
     // Top row
@@ -299,6 +319,9 @@ void SwarmnesssAudioProcessorEditor::resized() {
     const int comboWidth = 100;
     const int comboHeight = 24;
     const int toggleSize = 28;
+    
+    // === Preset Selector (top-left corner) ===
+    presetSelector.setBounds(20, 20, 150, 28);
     
     // Section bounds
     const int topRowY = 80;

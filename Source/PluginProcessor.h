@@ -90,6 +90,7 @@ private:
     std::atomic<float>* pChorusMix = nullptr;
     std::atomic<float>* pSaturation = nullptr;
     std::atomic<float>* pMix = nullptr;
+    std::atomic<float>* pDrive = nullptr;
     std::atomic<float>* pOutputGain = nullptr;
     std::atomic<float>* pFlowMode = nullptr;
     std::atomic<float>* pPulseRate = nullptr;

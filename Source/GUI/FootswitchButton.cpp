@@ -99,12 +99,12 @@ void FootswitchButton::paint(juce::Graphics& g) {
                       capRadius * 2.0f, capRadius * 2.0f, 1.5f);
     }
 
-    // === LED INDICATOR (top, above button) ===
-    const float ledSize = 10.0f;
+    // === LED INDICATOR (inside button, at top) ===
+    const float ledSize = 12.0f;
     const float ledX = centreX - ledSize * 0.5f;
-    const float ledY = centreY - hexRadius - ledSize - 8.0f;
+    const float ledY = 6.0f;  // Fixed position at top of button
     
-    if (ledY > 0) {
+    {
         // Determine LED color
         juce::Colour ledColour;
         bool isLit = true;

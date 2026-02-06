@@ -27,6 +27,9 @@ private:
 
     // Preset Panel
     std::unique_ptr<PresetPanel> presetPanel;
+    
+    // Preset Dropdown (simplified UI)
+    juce::ComboBox presetSelector;
 
     // === VOLTAGE Section (Top Left) ===
     // Maps to PITCH controls - renamed per prototype
@@ -117,6 +120,7 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> chorusDepthAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> chorusMixAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> saturationAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> driveAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> mixAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> outputGainAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> flowModeAttachment;
