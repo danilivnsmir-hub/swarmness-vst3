@@ -2,7 +2,7 @@
 
 void FlowEngine::prepare(const juce::dsp::ProcessSpec& spec) {
     mSampleRate = spec.sampleRate;
-    mSmoothGain.reset(spec.sampleRate, 0.005); // 5ms for click-free transitions
+    mSmoothGain.reset(spec.sampleRate, 0.001); // 1ms smoothing to avoid clicks
     reset();
 }
 

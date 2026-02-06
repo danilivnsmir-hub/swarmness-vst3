@@ -29,17 +29,28 @@ public:
 
     void drawLabel(juce::Graphics& g, juce::Label& label) override;
 
-    // Colors
-    static juce::Colour getBackgroundDark()    { return juce::Colour(0xff1a1a1a); }
-    static juce::Colour getAccentOrange()      { return juce::Colour(0xffcc6633); }
-    static juce::Colour getAccentRed()         { return juce::Colour(0xffcc3333); }
-    static juce::Colour getMetalGrey()         { return juce::Colour(0xff4a4a4a); }
-    static juce::Colour getMetalLight()        { return juce::Colour(0xff666666); }
-    static juce::Colour getTextLight()         { return juce::Colour(0xffe0e0e0); }
-    static juce::Colour getTextDim()           { return juce::Colour(0xff888888); }
-    static juce::Colour getLEDGreen()          { return juce::Colour(0xff33cc33); }
-    static juce::Colour getLEDRed()            { return juce::Colour(0xffcc3333); }
-    static juce::Colour getLEDOrange()         { return juce::Colour(0xffff9933); }
+    void drawToggleButton(juce::Graphics& g, juce::ToggleButton& button,
+                          bool shouldDrawButtonAsHighlighted,
+                          bool shouldDrawButtonAsDown) override;
+
+    // New Swarmness color scheme - dark with red accents
+    static juce::Colour getBackgroundDark()    { return juce::Colour(0xff0a0a0a); }  // Almost black
+    static juce::Colour getPanelBackground()   { return juce::Colour(0xff151515); }  // Slightly lighter
+    static juce::Colour getAccentRed()         { return juce::Colour(0xffb82020); }  // Deep red for sections
+    static juce::Colour getAccentRedBright()   { return juce::Colour(0xffdd3030); }  // Brighter red for arcs/LEDs
+    static juce::Colour getAccentRedDim()      { return juce::Colour(0xff661111); }  // Dim red for inactive
+    static juce::Colour getMetalLight()        { return juce::Colour(0xffc0c0c0); }  // Silver highlight
+    static juce::Colour getMetalMid()          { return juce::Colour(0xff909090); }  // Mid silver
+    static juce::Colour getMetalGrey()         { return juce::Colour(0xff606060); }  // Dark metal
+    static juce::Colour getMetalDark()         { return juce::Colour(0xff404040); }  // Very dark metal
+    static juce::Colour getTextLight()         { return juce::Colour(0xffe8e8e8); }  // White text
+    static juce::Colour getTextDim()           { return juce::Colour(0xff888888); }  // Dimmed text
+    static juce::Colour getLEDGreen()          { return juce::Colour(0xff33cc55); }  // Green LED
+    static juce::Colour getLEDRed()            { return juce::Colour(0xffdd2020); }  // Red LED
+    static juce::Colour getLEDOrange()         { return juce::Colour(0xffff6600); }  // Orange LED
+    
+    // Legacy aliases for compatibility
+    static juce::Colour getAccentOrange()      { return getAccentRed(); }
 
 private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MetalLookAndFeel)

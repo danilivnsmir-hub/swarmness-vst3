@@ -35,6 +35,7 @@ SwarmnesssAudioProcessor::SwarmnesssAudioProcessor()
     pSpeed = mAPVTS.getRawParameterValue("speed");
     pLowCut = mAPVTS.getRawParameterValue("lowCut");
     pHighCut = mAPVTS.getRawParameterValue("highCut");
+    pChorusMode = mAPVTS.getRawParameterValue("chorusMode");
     pChorusRate = mAPVTS.getRawParameterValue("chorusRate");
     pChorusDepth = mAPVTS.getRawParameterValue("chorusDepth");
     pChorusMix = mAPVTS.getRawParameterValue("chorusMix");
@@ -165,6 +166,7 @@ void SwarmnesssAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
     mFilterEngine.setHighCut(1000.0f + *pHighCut * 19000.0f);  // 1k-20k Hz
 
     // Chorus
+    mChorusEngine.setMode(static_cast<ChorusEngine::Mode>(static_cast<int>(*pChorusMode)));
     mChorusEngine.setRate(0.1f + *pChorusRate * 4.9f);  // 0.1-5 Hz
     mChorusEngine.setDepth(*pChorusDepth);
     mChorusEngine.setMix(*pChorusMix);
@@ -305,6 +307,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout SwarmnesssAudioProcessor::cr
         "lowCut", "Low Cut", 0.0f, 1.0f, 0.0f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         "highCut", "High Cut", 0.0f, 1.0f, 1.0f));
+    params.push_back(std::make_unique<juce::AudioParameterChoice>(
+        "chorusMode", "Chorus Mode", juce::StringArray{"Classic", "Deep"}, 0));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         "chorusRate", "Chorus Rate", 0.0f, 1.0f, 0.2f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(

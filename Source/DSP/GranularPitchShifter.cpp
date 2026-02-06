@@ -9,7 +9,7 @@ void GranularPitchShifter::prepare(double sampleRate, int blockSize) {
     }
 
     mPitchRatio.reset(sampleRate, mRiseTime / 1000.0);
-    mWetGain.reset(sampleRate, 0.02);
+    mWetGain.reset(sampleRate, 0.001); // 1ms smoothing to avoid clicks
     
     // Initialize grains with staggered phases
     for (int i = 0; i < kNumGrains; ++i) {

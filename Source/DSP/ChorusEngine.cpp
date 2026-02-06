@@ -20,6 +20,10 @@ void ChorusEngine::reset() {
     mLFOPhases = {0.0f, 0.33f, 0.66f};
 }
 
+void ChorusEngine::setMode(Mode mode) {
+    mMode = mode;
+}
+
 void ChorusEngine::setRate(float hz) {
     mRate = juce::jlimit(0.1f, 5.0f, hz);
 }
@@ -64,8 +68,18 @@ void ChorusEngine::process(juce::AudioBuffer<float>& buffer) {
     const int numChannels = buffer.getNumChannels();
     const int numSamples = buffer.getNumSamples();
 
-    const float baseDelay = 7.0f;  // ms
-    const float modDepth = 3.0f;   // ms
+    // Mode-dependent parameters
+    float baseDelay, modDepth, stereoSpread;
+    if (mMode == Deep) {
+        baseDelay = 12.0f;   // Wider base delay for lush sound
+        modDepth = 6.0f;     // More modulation depth
+        stereoSpread = 0.3f; // Stereo phase offset between channels
+    } else {
+        baseDelay = 7.0f;    // Classic chorus settings
+        modDepth = 3.0f;
+        stereoSpread = 0.0f;
+    }
+
     const float baseDelaySamples = baseDelay * 0.001f * static_cast<float>(mSampleRate);
     const float modDepthSamples = modDepth * 0.001f * static_cast<float>(mSampleRate) * mDepth;
 
@@ -87,8 +101,12 @@ void ChorusEngine::process(juce::AudioBuffer<float>& buffer) {
             // Process 3 voices
             float chorusOut = 0.0f;
             for (int v = 0; v < kNumVoices; ++v) {
-                // LFO modulation for each voice
-                float lfoValue = std::sin(mLFOPhases[v] * juce::MathConstants<float>::twoPi);
+                // LFO modulation for each voice with stereo offset in Deep mode
+                float phaseOffset = (ch == 1 && mMode == Deep) ? stereoSpread : 0.0f;
+                float lfoPhase = mLFOPhases[v] + phaseOffset;
+                if (lfoPhase >= 1.0f) lfoPhase -= 1.0f;
+                
+                float lfoValue = std::sin(lfoPhase * juce::MathConstants<float>::twoPi);
                 float delaySamples = baseDelaySamples + lfoValue * modDepthSamples;
 
                 float readPos = static_cast<float>(mWritePos) - delaySamples;
@@ -106,8 +124,10 @@ void ChorusEngine::process(juce::AudioBuffer<float>& buffer) {
 
             chorusOut /= kNumVoices;
 
-            // Apply feedback
-            mDelayBuffer[ch][mWritePos] += chorusOut * mFeedback;
+            // Apply feedback (increased in Deep mode)
+            float fbAmount = mMode == Deep ? mFeedback * 1.3f : mFeedback;
+            fbAmount = juce::jlimit(0.0f, 0.9f, fbAmount);
+            mDelayBuffer[ch][mWritePos] += chorusOut * fbAmount;
 
             // Mix wet/dry
             data[sample] = inputSample * (1.0f - mix) + chorusOut * mix;

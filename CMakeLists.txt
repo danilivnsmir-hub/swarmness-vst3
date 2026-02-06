@@ -74,6 +74,16 @@ juce_add_plugin(Swarmness
 juce_generate_juce_header(Swarmness)
 
 # ============================================================================
+# Binary Data (Assets)
+# ============================================================================
+juce_add_binary_data(SwarmnessBinaryData
+    SOURCES
+        Source/Assets/footswitch.png
+        Source/Assets/logo.png
+        Source/Assets/background.png
+)
+
+# ============================================================================
 # Source Files
 # ============================================================================
 target_sources(Swarmness
@@ -111,6 +121,7 @@ target_compile_definitions(Swarmness
 # ============================================================================
 target_link_libraries(Swarmness
     PRIVATE
+        SwarmnessBinaryData
         juce::juce_audio_basics
         juce::juce_audio_devices
         juce::juce_audio_formats
