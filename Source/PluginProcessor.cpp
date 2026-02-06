@@ -189,9 +189,9 @@ void SwarmnesssAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
     for (int sample = 0; sample < numSamples; ++sample) {
         float slideOffset = mPitchSlide.process();
         float randomOffset = mPitchRandomizer.process();
-        // Get modulation value and scale it to semitones (±3 semitones max - musical glitch, not screech)
+        // Get modulation value and scale it to semitones (±12 semitones max)
         float modValue = mModulation.getNextModulationValue();
-        modulationOffset = modValue * 3.0f;  // ±3 semitones - smoother chaotic pitch modulation
+        modulationOffset = modValue * 12.0f;  // ±12 semitones based on modulation
         totalPitchOffset = slideOffset + randomOffset + modulationOffset;
     }
     mPitchShifter.setDynamicPitchOffset(totalPitchOffset);
@@ -282,7 +282,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout SwarmnesssAudioProcessor::cr
 
     // === VOLTAGE Section (Pitch controls) ===
     params.push_back(std::make_unique<juce::AudioParameterChoice>(
-        "octaveMode", "Octave Mode", juce::StringArray{"-2 OCT", "-1 OCT", "0", "+1 OCT", "+2 OCT"}, 3));
+        "octaveMode", "Octave Mode", juce::StringArray{"-2 OCT", "-1 OCT", "+1 OCT", "+2 OCT"}, 2));
     params.push_back(std::make_unique<juce::AudioParameterBool>(
         "engage", "Engage", true));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
