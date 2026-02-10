@@ -168,21 +168,26 @@ void SwarmnesssAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
     mPitchShifter.setEngage(octaveActive);
     mPitchShifter.setRiseTime(riseMs);
     
-    // Update PitchRandomizer (RANGE and SPEED knobs)
-    float randomRange = *pRandomRange;  // Now directly 0-24 semitones (int parameter)
+    // Update PitchRandomizer (RANGE and SPEED knobs) - only when VOLTAGE section is active
+    float randomRange = octaveActive ? *pRandomRange : 0.0f;  // Now directly 0-24 semitones (int parameter)
     float randomRate = 0.1f + *pRandomRate * 9.9f;  // 0.1-10 Hz
     mPitchRandomizer.setRandomRange(randomRange);
     mPitchRandomizer.setRandomRate(randomRate);
     
     // Update modulation generator (original Noise Glitch algorithm)
-    mModGen.setParams(panic, chaos, speed);
+    // Modulation is only active when VOLTAGE section (Pitch) is engaged
+    if (octaveActive) {
+        mModGen.setParams(panic, chaos, speed);
+    } else {
+        mModGen.setParams(0.0f, 0.0f, 0.0f);  // Disable modulation when Pitch is off
+    }
     
-    // Update ring modulators for Speed effect
-    float ringFreq = 20.0f + speed * 300.0f;  // 20-320 Hz
+    // Update ring modulators for Speed effect (only when Pitch is active)
+    float ringFreq = octaveActive ? 20.0f + speed * 300.0f : 20.0f;  // 20-320 Hz
     mRingModL.setFrequency(ringFreq);
     mRingModR.setFrequency(ringFreq);
-    mRingModL.setAmount(speed);
-    mRingModR.setAmount(speed);
+    mRingModL.setAmount(octaveActive ? speed : 0.0f);
+    mRingModR.setAmount(octaveActive ? speed : 0.0f);
     
     // Store dry signal
     mDryBuffer.makeCopyOf(buffer, true);
@@ -192,17 +197,21 @@ void SwarmnesssAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
     float* channelR = numChannels > 1 ? buffer.getWritePointer(1) : channelL;
     
     // === ORIGINAL NOISE GLITCH PROCESSING FLOW ===
-    // Per-sample processing for modulation
+    // Per-sample processing for modulation (only if VOLTAGE section is active)
     for (int sample = 0; sample < numSamples; ++sample)
     {
-        // Get modulation values (Panic + Chaos combined pitch modulation)
-        float pitchMod = mModGen.getPitchModulation();
+        float totalPitchMod = 0.0f;
         
-        // Get random pitch offset from PitchRandomizer (RANGE/SPEED knobs)
-        float randomPitchOffset = mPitchRandomizer.process();
-        
-        // Combine modulations: original Noise Glitch + random pitch
-        float totalPitchMod = pitchMod + randomPitchOffset;
+        if (octaveActive) {
+            // Get modulation values (Panic + Chaos combined pitch modulation)
+            float pitchMod = mModGen.getPitchModulation();
+            
+            // Get random pitch offset from PitchRandomizer (RANGE/SPEED knobs)
+            float randomPitchOffset = mPitchRandomizer.process();
+            
+            // Combine modulations: original Noise Glitch + random pitch
+            totalPitchMod = pitchMod + randomPitchOffset;
+        }
         
         // Apply pitch modulation to shifter
         mPitchShifter.setModulation(totalPitchMod);
@@ -214,7 +223,7 @@ void SwarmnesssAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
     // Per-sample post-processing
     for (int sample = 0; sample < numSamples; ++sample)
     {
-        // Apply ring modulation (Speed effect)
+        // Apply ring modulation (Speed effect) - only active when Pitch is engaged
         channelL[sample] = mRingModL.processSample(channelL[sample]);
         if (numChannels > 1)
             channelR[sample] = mRingModR.processSample(channelR[sample]);
