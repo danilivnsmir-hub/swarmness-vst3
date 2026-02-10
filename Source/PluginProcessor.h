@@ -2,7 +2,6 @@
 #include <JuceHeader.h>
 #include "DSP/GranularPitchShifter.h"
 #include "DSP/ModulationGenerator.h"
-#include "DSP/PitchSlideEngine.h"
 #include "DSP/PitchRandomizer.h"
 #include "DSP/Modulation.h"
 #include "DSP/AnalogFilterEngine.h"
@@ -62,7 +61,6 @@ private:
     RingModulator mRingModR;
     
     // Additional Swarmness modules
-    PitchSlideEngine mPitchSlide;
     PitchRandomizer mPitchRandomizer;
     Modulation mModulation;
     AnalogFilterEngine mFilterEngine;
@@ -83,16 +81,8 @@ private:
     std::atomic<float>* pOctaveMode = nullptr;
     std::atomic<float>* pEngage = nullptr;
     std::atomic<float>* pRise = nullptr;
-    std::atomic<float>* pSlideRange = nullptr;
-    std::atomic<float>* pSlideTime = nullptr;
-    std::atomic<float>* pSlideDirection = nullptr;
-    std::atomic<float>* pAutoSlide = nullptr;
-    std::atomic<float>* pSlidePosition = nullptr;
-    std::atomic<float>* pSlideReturn = nullptr;
     std::atomic<float>* pRandomRange = nullptr;
     std::atomic<float>* pRandomRate = nullptr;
-    std::atomic<float>* pRandomSmooth = nullptr;
-    std::atomic<float>* pRandomMode = nullptr;
     std::atomic<float>* pPanic = nullptr;
     std::atomic<float>* pChaos = nullptr;
     std::atomic<float>* pSpeed = nullptr;

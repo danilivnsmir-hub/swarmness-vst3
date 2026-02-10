@@ -45,6 +45,9 @@ private:
     juce::ComboBox octaveModeBox;
     RotaryKnob pitchRangeKnob{"RANGE"};
     RotaryKnob pitchSpeedKnob{"SPEED"};
+    juce::Slider riseFader;  // Vertical fader for RISE
+    juce::Label riseFaderLabel;
+    juce::Label riseFaderValueLabel;
     juce::ToggleButton pitchOnButton{"ON/OFF"};
 
     // === MODULATION Section ===
@@ -61,60 +64,41 @@ private:
     RotaryKnob swarmDepthKnob{"DEPTH"};
     RotaryKnob swarmRateKnob{"RATE"};
     RotaryKnob swarmMixKnob{"MIX"};
+    juce::ToggleButton chorusModeButton{"DEEP"};
+
+    // === FLOW Section ===
+    RotaryKnob flowAmountKnob{"AMOUNT"};
+    RotaryKnob flowSpeedKnob{"SPEED"};
+    juce::ToggleButton flowModeButton{"HARD"};
 
     // === OUTPUT Section ===
     RotaryKnob mixKnob{"MIX"};
     RotaryKnob volumeKnob{"VOLUME"};
+    RotaryKnob driveKnob{"DRIVE"};
 
     // === Footswitch (Bottom Center) ===
     FootswitchButton bypassFootswitch;
-
-    // Hidden controls (still connected to processor for compatibility)
-    juce::ToggleButton engageButton{"ENG"};
-    RotaryKnob slidePositionKnob{"POS"};
-    juce::ComboBox slideDirectionBox;
-    juce::ToggleButton autoSlideButton{"AUTO"};
-    juce::ToggleButton slideReturnButton{"RTN"};
-    RotaryKnob randomSmoothKnob{"SMOOTH"};
-    juce::ComboBox randomModeBox;
-    juce::ComboBox chorusModeBox;
-    juce::ComboBox flowModeBox;
-    FootswitchButton pulseFootswitch;
-    RotaryKnob slideTimeKnob{"SLIDE TIME"};
-    RotaryKnob slideRangeKnob{"SLIDE RANGE"};
-    juce::ToggleButton slideOnButton{"SLIDE"};
-    RotaryKnob flowAmountKnob{"FLOW"};
-    RotaryKnob flowSpeedKnob{"FLOW SPD"};
-    juce::ToggleButton flowModeButton{"FLOW M"};
-    RotaryKnob driveKnob{"DRIVE"};
 
     // Section Labels
     juce::Label pitchSectionLabel;
     juce::Label modulationSectionLabel;
     juce::Label toneSectionLabel;
     juce::Label swarmSectionLabel;
+    juce::Label flowSectionLabel;
     juce::Label outputSectionLabel;
 
     // Parameter Attachments
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> octaveModeAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> engageAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> riseAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> slideRangeAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> slideTimeAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> slidePositionAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> slideDirectionAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> autoSlideAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> slideReturnAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> randomRangeAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> randomRateAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> randomSmoothAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> randomModeAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> panicAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> chaosAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> speedAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> lowCutAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> highCutAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> chorusModeAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> chorusModeAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> chorusRateAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> chorusDepthAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> chorusMixAttachment;
@@ -122,7 +106,7 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> driveAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> mixAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> outputGainAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> flowModeAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> flowModeAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> flowAmountAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> flowSpeedAttachment;
 

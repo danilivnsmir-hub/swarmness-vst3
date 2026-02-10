@@ -237,33 +237,121 @@ void MetalLookAndFeel::drawToggleButton(juce::Graphics& g, juce::ToggleButton& b
                                          bool shouldDrawButtonAsHighlighted,
                                          bool shouldDrawButtonAsDown) {
     auto bounds = button.getLocalBounds().toFloat();
-    const float cornerSize = 3.0f;
+    const float cornerSize = 12.0f;  // More rounded for pill shape
+    const float padding = 2.0f;
     
-    // Background
-    juce::Colour bgColour = button.getToggleState() ? getAccentOrange() : getMetalDark();
+    // Outer pill shape - dark background
+    juce::Colour bgColour = juce::Colour(0xff1a1a1a);
     if (shouldDrawButtonAsHighlighted)
-        bgColour = bgColour.brighter(0.1f);
-    if (shouldDrawButtonAsDown)
-        bgColour = bgColour.darker(0.1f);
+        bgColour = bgColour.brighter(0.05f);
     
     g.setColour(bgColour);
     g.fillRoundedRectangle(bounds.reduced(1), cornerSize);
     
-    // Border
-    g.setColour(button.getToggleState() ? getAccentOrangeBright() : getMetalGrey());
-    g.drawRoundedRectangle(bounds.reduced(1), cornerSize, 1.0f);
+    // Border with orange glow when ON
+    if (button.getToggleState()) {
+        g.setColour(getAccentOrange().withAlpha(0.6f));
+        g.drawRoundedRectangle(bounds.reduced(1), cornerSize, 2.0f);
+    } else {
+        g.setColour(getMetalDark());
+        g.drawRoundedRectangle(bounds.reduced(1), cornerSize, 1.0f);
+    }
     
-    // Small LED indicator on left
-    const float ledSize = 6.0f;
-    const float ledX = bounds.getX() + 6.0f;
-    const float ledY = bounds.getCentreY() - ledSize * 0.5f;
+    // Thumb circle position
+    float thumbDiameter = bounds.getHeight() - padding * 4;
+    float thumbX = button.getToggleState() 
+        ? bounds.getRight() - thumbDiameter - padding * 3
+        : bounds.getX() + padding * 3;
+    float thumbY = bounds.getCentreY() - thumbDiameter * 0.5f;
     
-    g.setColour(button.getToggleState() ? getAccentOrangeBright() : getAccentOrangeDim());
-    g.fillEllipse(ledX, ledY, ledSize, ledSize);
+    // Orange glow bar when ON
+    if (button.getToggleState()) {
+        auto glowBounds = bounds.reduced(padding * 2);
+        g.setColour(getAccentOrange());
+        g.fillRoundedRectangle(glowBounds.getX() + thumbDiameter, 
+                               glowBounds.getCentreY() - 2,
+                               glowBounds.getWidth() - thumbDiameter * 2, 
+                               4.0f, 2.0f);
+    }
     
-    // Text
-    g.setColour(button.getToggleState() ? juce::Colours::black : getTextLight());
-    g.setFont(juce::Font(10.0f));
-    auto textBounds = bounds.reduced(2).withTrimmedLeft(ledSize + 6);
-    g.drawText(button.getButtonText(), textBounds, juce::Justification::centred, false);
+    // Thumb circle
+    g.setColour(getMetalGrey());
+    g.fillEllipse(thumbX, thumbY, thumbDiameter, thumbDiameter);
+    
+    // Thumb highlight
+    g.setColour(getMetalLight().withAlpha(0.3f));
+    g.drawEllipse(thumbX + 1, thumbY + 1, thumbDiameter - 2, thumbDiameter - 2, 1.0f);
+}
+
+void MetalLookAndFeel::drawLinearSlider(juce::Graphics& g, int x, int y, int width, int height,
+                                         float sliderPos, float minSliderPos, float maxSliderPos,
+                                         juce::Slider::SliderStyle style, juce::Slider& slider) {
+    // Only handle vertical sliders with custom styling
+    if (style != juce::Slider::LinearVertical && style != juce::Slider::LinearBarVertical) {
+        LookAndFeel_V4::drawLinearSlider(g, x, y, width, height, sliderPos, minSliderPos, maxSliderPos, style, slider);
+        return;
+    }
+    
+    const float trackWidth = 20.0f;
+    const float trackX = x + (width - trackWidth) * 0.5f;
+    const float trackHeight = static_cast<float>(height) - 20.0f;
+    const float trackY = static_cast<float>(y) + 10.0f;
+    const float cornerRadius = 10.0f;
+    
+    // Track background (dark)
+    juce::Rectangle<float> trackBounds(trackX, trackY, trackWidth, trackHeight);
+    g.setColour(juce::Colour(0xff1a1a1a));
+    g.fillRoundedRectangle(trackBounds, cornerRadius);
+    
+    // Track border
+    g.setColour(getMetalDark());
+    g.drawRoundedRectangle(trackBounds, cornerRadius, 1.5f);
+    
+    // Calculate fill based on slider position (inverted for vertical)
+    float normalizedPos = 1.0f - (sliderPos - y) / static_cast<float>(height);
+    normalizedPos = juce::jlimit(0.0f, 1.0f, normalizedPos);
+    float fillHeight = trackHeight * normalizedPos;
+    
+    // Orange fill from bottom
+    if (fillHeight > 0) {
+        juce::Rectangle<float> fillBounds(trackX + 2, trackY + trackHeight - fillHeight, 
+                                           trackWidth - 4, fillHeight);
+        
+        // Gradient fill for glow effect
+        juce::ColourGradient fillGrad(getAccentOrangeBright(), trackX, fillBounds.getY(),
+                                       getAccentOrange().darker(0.3f), trackX + trackWidth, fillBounds.getY(), false);
+        g.setGradientFill(fillGrad);
+        g.fillRoundedRectangle(fillBounds, cornerRadius - 2);
+        
+        // Glow effect
+        g.setColour(getAccentOrange().withAlpha(0.3f));
+        g.drawRoundedRectangle(fillBounds.expanded(1), cornerRadius - 1, 2.0f);
+    }
+    
+    // Thumb/handle
+    const float thumbHeight = 20.0f;
+    const float thumbWidth = trackWidth + 8.0f;
+    const float thumbX = trackX - 4.0f;
+    const float thumbY = sliderPos - thumbHeight * 0.5f;
+    
+    // Thumb shadow
+    g.setColour(juce::Colours::black.withAlpha(0.4f));
+    g.fillRoundedRectangle(thumbX + 1, thumbY + 1, thumbWidth, thumbHeight, 4.0f);
+    
+    // Thumb body - metal gradient
+    juce::ColourGradient thumbGrad(getMetalLight(), thumbX, thumbY,
+                                    getMetalGrey(), thumbX, thumbY + thumbHeight, false);
+    g.setGradientFill(thumbGrad);
+    g.fillRoundedRectangle(thumbX, thumbY, thumbWidth, thumbHeight, 4.0f);
+    
+    // Thumb border
+    g.setColour(getMetalDark());
+    g.drawRoundedRectangle(thumbX, thumbY, thumbWidth, thumbHeight, 4.0f, 1.0f);
+    
+    // Thumb grip lines
+    g.setColour(getMetalDark().withAlpha(0.5f));
+    for (int i = -1; i <= 1; ++i) {
+        float lineY = thumbY + thumbHeight * 0.5f + i * 4.0f;
+        g.drawLine(thumbX + 4, lineY, thumbX + thumbWidth - 4, lineY, 1.0f);
+    }
 }

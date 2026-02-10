@@ -22,9 +22,9 @@ public:
         g.drawRoundedRectangle(panelBounds.toFloat(), 8.0f, 2.0f);
         
         // Title
-        g.setColour(MetalLookAndFeel::getAccentRed());
+        g.setColour(MetalLookAndFeel::getAccentOrange());
         g.setFont(juce::Font(20.0f, juce::Font::bold));
-        g.drawText("SWARMNESS v3.1.3 - Parameter Guide", panelBounds.getX() + 20, panelBounds.getY() + 15, 
+        g.drawText("SWARMNESS v3.2.0 - Parameter Guide", panelBounds.getX() + 20, panelBounds.getY() + 15, 
                    panelBounds.getWidth() - 40, 30, juce::Justification::centred);
         
         // Parameter descriptions
@@ -42,12 +42,14 @@ public:
         y += lineHeight;
         drawParamInfo(g, col1X, y, colWidth, "OCTAVE - Pitch shift (-2, -1, 0, +1, +2 octaves)");
         y += lineHeight;
-        drawParamInfo(g, col1X, y, colWidth, "RANGE - Random pitch variation range");
+        drawParamInfo(g, col1X, y, colWidth, "RANGE - Random pitch variation (0-24 semitones)");
         y += lineHeight;
-        drawParamInfo(g, col1X, y, colWidth, "SPEED - Speed of random pitch changes");
+        drawParamInfo(g, col1X, y, colWidth, "SPEED - Random pitch change rate (0.1-10 Hz)");
+        y += lineHeight;
+        drawParamInfo(g, col1X, y, colWidth, "RISE - Pitch glide time (0-2000 ms)");
         y += lineHeight;
         drawParamInfo(g, col1X, y, colWidth, "ON/OFF - Enable/disable pitch shifter");
-        y += lineHeight * 1.5f;
+        y += lineHeight * 1.3f;
         
         drawParamInfo(g, col1X, y, colWidth, "MODULATION Section:", true);
         y += lineHeight;
@@ -56,15 +58,15 @@ public:
         drawParamInfo(g, col1X, y, colWidth, "RUSH - Glitch intensity, stuttering artifacts");
         y += lineHeight;
         drawParamInfo(g, col1X, y, colWidth, "RATE - Modulation speed");
-        y += lineHeight * 1.5f;
+        y += lineHeight * 1.3f;
         
         drawParamInfo(g, col1X, y, colWidth, "TONE Section:", true);
         y += lineHeight;
-        drawParamInfo(g, col1X, y, colWidth, "LOW CUT - High-pass filter frequency");
+        drawParamInfo(g, col1X, y, colWidth, "LOW CUT - High-pass filter (20-2000 Hz)");
         y += lineHeight;
-        drawParamInfo(g, col1X, y, colWidth, "HIGH CUT - Low-pass filter frequency");
+        drawParamInfo(g, col1X, y, colWidth, "HIGH CUT - Low-pass filter (1k-20k Hz)");
         y += lineHeight;
-        drawParamInfo(g, col1X, y, colWidth, "MID BOOST - Mid frequency boost amount");
+        drawParamInfo(g, col1X, y, colWidth, "MID BOOST - Mid frequency saturation");
         
         // Right column
         y = panelBounds.getY() + 55;
@@ -72,16 +74,29 @@ public:
         y += lineHeight;
         drawParamInfo(g, col2X, y, colWidth, "DEPTH - Chorus depth/intensity");
         y += lineHeight;
-        drawParamInfo(g, col2X, y, colWidth, "RATE - Chorus modulation rate");
+        drawParamInfo(g, col2X, y, colWidth, "RATE - Chorus modulation rate (0.1-10 Hz)");
         y += lineHeight;
         drawParamInfo(g, col2X, y, colWidth, "MIX - Chorus wet/dry mix");
-        y += lineHeight * 1.5f;
+        y += lineHeight;
+        drawParamInfo(g, col2X, y, colWidth, "DEEP - Classic/Deep chorus mode");
+        y += lineHeight * 1.3f;
+        
+        drawParamInfo(g, col2X, y, colWidth, "FLOW Section (Stutter/Gate):", true);
+        y += lineHeight;
+        drawParamInfo(g, col2X, y, colWidth, "AMOUNT - Stutter/gate intensity");
+        y += lineHeight;
+        drawParamInfo(g, col2X, y, colWidth, "SPEED - Stutter rate (1-32 Hz)");
+        y += lineHeight;
+        drawParamInfo(g, col2X, y, colWidth, "HARD - Smooth/Hard gate mode");
+        y += lineHeight * 1.3f;
         
         drawParamInfo(g, col2X, y, colWidth, "OUTPUT Section:", true);
         y += lineHeight;
         drawParamInfo(g, col2X, y, colWidth, "MIX - Overall wet/dry balance");
         y += lineHeight;
-        drawParamInfo(g, col2X, y, colWidth, "VOLUME - Output level");
+        drawParamInfo(g, col2X, y, colWidth, "VOLUME - Output level (-24 to +12 dB)");
+        y += lineHeight;
+        drawParamInfo(g, col2X, y, colWidth, "DRIVE - Soft clipping/saturation");
         
         // Close hint
         g.setColour(MetalLookAndFeel::getTextDim());

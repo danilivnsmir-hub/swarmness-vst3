@@ -20,16 +20,8 @@ SwarmnesssAudioProcessor::SwarmnesssAudioProcessor()
     pOctaveMode = mAPVTS.getRawParameterValue("octaveMode");
     pEngage = mAPVTS.getRawParameterValue("engage");
     pRise = mAPVTS.getRawParameterValue("rise");
-    pSlideRange = mAPVTS.getRawParameterValue("slideRange");
-    pSlideTime = mAPVTS.getRawParameterValue("slideTime");
-    pSlideDirection = mAPVTS.getRawParameterValue("slideDirection");
-    pAutoSlide = mAPVTS.getRawParameterValue("autoSlide");
-    pSlidePosition = mAPVTS.getRawParameterValue("slidePosition");
-    pSlideReturn = mAPVTS.getRawParameterValue("slideReturn");
     pRandomRange = mAPVTS.getRawParameterValue("randomRange");
     pRandomRate = mAPVTS.getRawParameterValue("randomRate");
-    pRandomSmooth = mAPVTS.getRawParameterValue("randomSmooth");
-    pRandomMode = mAPVTS.getRawParameterValue("randomMode");
     pPanic = mAPVTS.getRawParameterValue("panic");
     pChaos = mAPVTS.getRawParameterValue("chaos");
     pSpeed = mAPVTS.getRawParameterValue("speed");
@@ -92,7 +84,6 @@ void SwarmnesssAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBl
     mGainSmoothed.reset(sampleRate, 0.02);
 
     // Prepare additional Swarmness modules
-    mPitchSlide.prepare(sampleRate);
     mPitchRandomizer.prepare(sampleRate);
     mModulation.prepare(sampleRate);
     mFilterEngine.prepare(spec);
@@ -109,7 +100,6 @@ void SwarmnesssAudioProcessor::releaseResources() {
     mModGen.reset();
     mRingModL.reset();
     mRingModR.reset();
-    mPitchSlide.reset();
     mPitchRandomizer.reset();
     mModulation.reset();
     mFilterEngine.reset();
@@ -173,6 +163,12 @@ void SwarmnesssAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
     mPitchShifter.setEngage(octaveActive);
     mPitchShifter.setRiseTime(riseMs);
     
+    // Update PitchRandomizer (RANGE and SPEED knobs)
+    float randomRange = *pRandomRange * 24.0f;  // 0-24 semitones
+    float randomRate = 0.1f + *pRandomRate * 9.9f;  // 0.1-10 Hz
+    mPitchRandomizer.setRandomRange(randomRange);
+    mPitchRandomizer.setRandomRate(randomRate);
+    
     // Update modulation generator (original Noise Glitch algorithm)
     mModGen.setParams(panic, chaos, speed);
     
@@ -197,8 +193,14 @@ void SwarmnesssAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
         // Get modulation values (Panic + Chaos combined pitch modulation)
         float pitchMod = mModGen.getPitchModulation();
         
+        // Get random pitch offset from PitchRandomizer (RANGE/SPEED knobs)
+        float randomPitchOffset = mPitchRandomizer.process();
+        
+        // Combine modulations: original Noise Glitch + random pitch
+        float totalPitchMod = pitchMod + randomPitchOffset;
+        
         // Apply pitch modulation to shifter
-        mPitchShifter.setModulation(pitchMod);
+        mPitchShifter.setModulation(totalPitchMod);
     }
     
     // Process pitch shifting (stereo)
@@ -246,7 +248,8 @@ void SwarmnesssAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
     
     // Chorus/SWARM modulation
     if (*pChorusMix > 0.01f) {
-        mChorusEngine.setMode(static_cast<ChorusEngine::Mode>(static_cast<int>(*pChorusMode)));
+        // chorusMode: false=Classic (0), true=Deep (1)
+        mChorusEngine.setMode(*pChorusMode > 0.5f ? ChorusEngine::Mode::Deep : ChorusEngine::Mode::Classic);
         mChorusEngine.setRate(0.1f + *pChorusRate * 4.9f);  // 0.1-5 Hz
         mChorusEngine.setDepth(*pChorusDepth);
         mChorusEngine.setMix(*pChorusMix);
@@ -255,7 +258,8 @@ void SwarmnesssAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
     
     // Flow Engine (stutter/gate)
     if (*pFlowAmount > 0.01f) {
-        mFlowEngine.setMode(static_cast<FlowEngine::Mode>(static_cast<int>(*pFlowMode)));
+        // flowMode: false=Static (Smooth), true=Pulse (Hard)
+        mFlowEngine.setMode(*pFlowMode > 0.5f ? FlowEngine::Mode::Pulse : FlowEngine::Mode::Static);
         mFlowEngine.setFlowAmount(*pFlowAmount);
         mFlowEngine.setPulseRate(0.5f + *pFlowSpeed * 19.5f);
         for (int sample = 0; sample < numSamples; ++sample) {
@@ -321,29 +325,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout SwarmnesssAudioProcessor::cr
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         "rise", "Rise", 0.0f, 1.0f, 0.05f));
 
-    // Slide Sub-section (PULSE)
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "slideRange", "Slide Range", 0.0f, 1.0f, 0.5f));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "slideTime", "Slide Time", 0.0f, 1.0f, 0.1f));
-    params.push_back(std::make_unique<juce::AudioParameterChoice>(
-        "slideDirection", "Slide Direction", juce::StringArray{"Up", "Down", "Both"}, 0));
-    params.push_back(std::make_unique<juce::AudioParameterBool>(
-        "autoSlide", "Auto Slide", false));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "slidePosition", "Slide Position", 0.0f, 1.0f, 0.0f));
-    params.push_back(std::make_unique<juce::AudioParameterBool>(
-        "slideReturn", "Slide Return", true));
-
-    // Random Sub-section
+    // Pitch Randomizer (RANGE and SPEED knobs)
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         "randomRange", "Random Range", 0.0f, 1.0f, 0.0f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         "randomRate", "Random Rate", 0.0f, 1.0f, 0.1f));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "randomSmooth", "Random Smooth", 0.0f, 1.0f, 0.5f));
-    params.push_back(std::make_unique<juce::AudioParameterChoice>(
-        "randomMode", "Random Mode", juce::StringArray{"Jump", "Glide"}, 0));
 
     // === MODULATION Section ===
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
@@ -353,21 +339,23 @@ juce::AudioProcessorValueTreeState::ParameterLayout SwarmnesssAudioProcessor::cr
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         "speed", "Speed", 0.0f, 1.0f, 0.0f));
 
-    // === HIVE FILTER Section ===
+    // === TONE Section ===
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         "lowCut", "Low Cut", 0.0f, 1.0f, 0.0f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         "highCut", "High Cut", 0.0f, 1.0f, 1.0f));
-    params.push_back(std::make_unique<juce::AudioParameterChoice>(
-        "chorusMode", "Chorus Mode", juce::StringArray{"Classic", "Deep"}, 0));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        "saturation", "Saturation", 0.0f, 1.0f, 0.0f));
+
+    // === SWARM Section (Chorus) ===
+    params.push_back(std::make_unique<juce::AudioParameterBool>(
+        "chorusMode", "Chorus Mode", false));  // false=Classic, true=Deep
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         "chorusRate", "Chorus Rate", 0.0f, 1.0f, 0.2f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         "chorusDepth", "Chorus Depth", 0.0f, 1.0f, 0.5f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         "chorusMix", "Chorus Mix", 0.0f, 1.0f, 0.0f));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "saturation", "Saturation", 0.0f, 1.0f, 0.0f));
 
     // === OUTPUT Section ===
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
@@ -378,8 +366,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout SwarmnesssAudioProcessor::cr
         "outputGain", "Output Gain", 0.0f, 1.0f, 0.8f));
 
     // === FLOW Section (stutter/gate) ===
-    params.push_back(std::make_unique<juce::AudioParameterChoice>(
-        "flowMode", "Flow Mode", juce::StringArray{"Static", "Pulse"}, 1));  // Default Pulse
+    params.push_back(std::make_unique<juce::AudioParameterBool>(
+        "flowMode", "Flow Mode", true));  // false=Smooth, true=Hard
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         "flowAmount", "Flow Amount", 0.0f, 1.0f, 0.0f));  // Depth of gate effect
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
