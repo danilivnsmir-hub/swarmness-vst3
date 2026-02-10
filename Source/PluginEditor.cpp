@@ -29,7 +29,6 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
     savePresetButton.setColour(juce::TextButton::textColourOffId, MetalLookAndFeel::getAccentOrange());
     savePresetButton.onClick = [this]() {
         auto presetName = presetSelector.getText();
-        // v1.2.2: Strip existing dirty indicator before suggesting name
         if (presetName.endsWith(" *"))
             presetName = presetName.dropLastCharacters(2);
         if (presetName.isEmpty()) presetName = "New Preset";
@@ -175,28 +174,28 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
     randomRateAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         audioProcessor.getAPVTS(), "randomRate", pitchSpeedKnob.getSlider());
 
-    // RISE Vertical Fader
-    riseFader.setSliderStyle(juce::Slider::LinearVertical);
-    riseFader.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-    riseFader.setPopupDisplayEnabled(false, false, this);
-    riseFader.onValueChange = [this]() {
-        float value = static_cast<float>(riseFader.getValue()) * 2000.0f;
-        riseFaderValueLabel.setText(juce::String(static_cast<int>(value)) + "ms", juce::dontSendNotification);
+    // v1.2.4: RISE Horizontal Slider
+    riseSlider.setSliderStyle(juce::Slider::LinearHorizontal);
+    riseSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+    riseSlider.setPopupDisplayEnabled(false, false, this);
+    riseSlider.onValueChange = [this]() {
+        float value = static_cast<float>(riseSlider.getValue()) * 2000.0f;
+        riseValueLabel.setText(juce::String(static_cast<int>(value)) + "ms", juce::dontSendNotification);
     };
-    addAndMakeVisible(riseFader);
+    addAndMakeVisible(riseSlider);
     riseAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        audioProcessor.getAPVTS(), "rise", riseFader);
+        audioProcessor.getAPVTS(), "rise", riseSlider);
     
-    riseFaderLabel.setText("RISE", juce::dontSendNotification);
-    riseFaderLabel.setJustificationType(juce::Justification::centred);
-    riseFaderLabel.setFont(juce::Font(10.0f));
-    riseFaderLabel.setColour(juce::Label::textColourId, MetalLookAndFeel::getTextDim());
-    addAndMakeVisible(riseFaderLabel);
+    riseLabel.setText("RISE", juce::dontSendNotification);
+    riseLabel.setJustificationType(juce::Justification::centredRight);
+    riseLabel.setFont(juce::Font(9.0f));
+    riseLabel.setColour(juce::Label::textColourId, MetalLookAndFeel::getTextDim());
+    addAndMakeVisible(riseLabel);
     
-    riseFaderValueLabel.setJustificationType(juce::Justification::centred);
-    riseFaderValueLabel.setFont(juce::Font(9.0f, juce::Font::bold));
-    riseFaderValueLabel.setColour(juce::Label::textColourId, MetalLookAndFeel::getAccentOrangeBright());
-    addAndMakeVisible(riseFaderValueLabel);
+    riseValueLabel.setJustificationType(juce::Justification::centredLeft);
+    riseValueLabel.setFont(juce::Font(9.0f, juce::Font::bold));
+    riseValueLabel.setColour(juce::Label::textColourId, MetalLookAndFeel::getAccentOrangeBright());
+    addAndMakeVisible(riseValueLabel);
 
     // MODULATION knobs
     addAndMakeVisible(angerKnob);
@@ -285,8 +284,8 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
     // Start timer for LED updates and section enable states
     startTimerHz(30);
 
-    // v1.2.1: Set plugin window size (compact layout)
-    setSize(780, 520);
+    // v1.2.4: Set plugin window size (optimized for 8px grid)
+    setSize(800, 560);
     
     // Initial update of section enable states
     updateSectionEnableStates();
@@ -346,8 +345,8 @@ void SwarmnesssAudioProcessorEditor::updateSectionEnableStates() {
     // VOLTAGE section
     bool voltageEnabled = pitchBypassButton.getToggleState();
     setSectionEnabled({
-        &octaveModeBox, &pitchRangeKnob, &pitchSpeedKnob, &riseFader,
-        &riseFaderLabel, &riseFaderValueLabel, &pitchSubLabel,
+        &octaveModeBox, &pitchRangeKnob, &pitchSpeedKnob, &riseSlider,
+        &riseLabel, &riseValueLabel, &pitchSubLabel,
         &angerKnob, &rushKnob, &modRateKnob, &modulationSubLabel
     }, voltageEnabled);
     
@@ -365,38 +364,40 @@ void SwarmnesssAudioProcessorEditor::updateSectionEnableStates() {
 }
 
 void SwarmnesssAudioProcessorEditor::paint(juce::Graphics& g) {
-    const int headerHeight = 60;
-    const int leftPanelWidth = 70;
-    const int rightPanelWidth = 70;
+    // v1.2.4: Use grid constants
+    const int contentY = HEADER_HEIGHT + PADDING;
+    const int contentHeight = getHeight() - HEADER_HEIGHT - PADDING * 2;
+    const int centerX = SIDE_PANEL_WIDTH + PADDING;
+    const int centerWidth = getWidth() - SIDE_PANEL_WIDTH * 2 - PADDING * 2;
     
-    // v1.2.3: Dark background
+    // v1.2.4: Dark background
     g.fillAll(juce::Colour(0xff1A1A1A));
     
     // Draw background image in content area (if valid)
     if (backgroundImage.isValid()) {
-        auto contentArea = juce::Rectangle<float>((float)leftPanelWidth, (float)headerHeight, 
-                                                   (float)(getWidth() - leftPanelWidth - rightPanelWidth), 
-                                                   (float)(getHeight() - headerHeight));
-        g.setOpacity(0.3f);
+        auto contentArea = juce::Rectangle<float>((float)SIDE_PANEL_WIDTH, (float)HEADER_HEIGHT, 
+                                                   (float)(getWidth() - SIDE_PANEL_WIDTH * 2), 
+                                                   (float)(getHeight() - HEADER_HEIGHT));
+        g.setOpacity(0.25f);
         g.drawImage(backgroundImage, contentArea, juce::RectanglePlacement::stretchToFit);
         g.setOpacity(1.0f);
     }
     
-    // === UNIFIED HEADER PANEL v1.2.3 ===
+    // === HEADER PANEL v1.2.4 ===
     g.setColour(juce::Colour(0xff1A1A1A));
-    g.fillRect(0, 0, getWidth(), headerHeight);
+    g.fillRect(0, 0, getWidth(), HEADER_HEIGHT);
     
     // Orange bottom line
     g.setColour(MetalLookAndFeel::getAccentOrange());
-    g.fillRect(0, headerHeight - 1, getWidth(), 1);
+    g.fillRect(0, HEADER_HEIGHT - 1, getWidth(), 1);
     
-    // Draw header logo (centered)
+    // Draw header logo (centered in entire width)
     if (headerLogoImage.isValid()) {
-        float logoH = 40.0f;
+        float logoH = 36.0f;
         float logoScale = logoH / (float)headerLogoImage.getHeight();
         float logoW = headerLogoImage.getWidth() * logoScale;
         float logoX = (getWidth() - logoW) * 0.5f;
-        float logoY = (headerHeight - logoH) * 0.5f;
+        float logoY = (HEADER_HEIGHT - logoH) * 0.5f;
         
         g.setImageResamplingQuality(juce::Graphics::highResamplingQuality);
         g.drawImage(headerLogoImage, 
@@ -404,211 +405,225 @@ void SwarmnesssAudioProcessorEditor::paint(juce::Graphics& g) {
                     juce::RectanglePlacement::centred);
     }
 
-    // === LEFT PANEL (TONE) ===
+    // === SIDE PANELS ===
     g.setColour(juce::Colour(0xff1A1A1A));
-    g.fillRect(0, headerHeight, leftPanelWidth, getHeight() - headerHeight);
+    g.fillRect(0, HEADER_HEIGHT, SIDE_PANEL_WIDTH, getHeight() - HEADER_HEIGHT);
+    g.fillRect(getWidth() - SIDE_PANEL_WIDTH, HEADER_HEIGHT, SIDE_PANEL_WIDTH, getHeight() - HEADER_HEIGHT);
     
-    // === RIGHT PANEL (OUTPUT) ===
-    g.fillRect(getWidth() - rightPanelWidth, headerHeight, rightPanelWidth, getHeight() - headerHeight);
-    
-    // === DIVIDER LINES v1.2.3 ===
+    // === DIVIDER LINES v1.2.4 ===
     g.setColour(juce::Colour(0xff333333));
     
-    // Vertical dividers
-    g.drawLine((float)leftPanelWidth, (float)headerHeight, (float)leftPanelWidth, (float)getHeight(), 1.0f);
-    g.drawLine((float)(getWidth() - rightPanelWidth), (float)headerHeight, 
-               (float)(getWidth() - rightPanelWidth), (float)getHeight(), 1.0f);
+    // Vertical dividers at side panels
+    g.drawLine((float)SIDE_PANEL_WIDTH, (float)HEADER_HEIGHT, (float)SIDE_PANEL_WIDTH, (float)getHeight(), 1.0f);
+    g.drawLine((float)(getWidth() - SIDE_PANEL_WIDTH), (float)HEADER_HEIGHT, 
+               (float)(getWidth() - SIDE_PANEL_WIDTH), (float)getHeight(), 1.0f);
     
     // Horizontal divider between VOLTAGE and SWARM/FLOW
-    int dividerY = 240;
-    g.drawLine((float)leftPanelWidth, (float)dividerY, (float)(getWidth() - rightPanelWidth), (float)dividerY, 1.0f);
+    int dividerY = HEADER_HEIGHT + 200;
+    g.drawLine((float)SIDE_PANEL_WIDTH, (float)dividerY, (float)(getWidth() - SIDE_PANEL_WIDTH), (float)dividerY, 1.0f);
     
-    // Vertical divider between SWARM and FLOW
-    int centerX = getWidth() / 2;
-    g.drawLine((float)centerX, (float)dividerY, (float)centerX, (float)(getHeight() - 85), 1.0f);
+    // Vertical divider between left and right columns
+    int centerDividerX = getWidth() / 2;
+    g.drawLine((float)centerDividerX, (float)HEADER_HEIGHT, (float)centerDividerX, (float)(getHeight() - 80), 1.0f);
     
-    // === VOLTAGE SECTION FRAME v1.2.3 ===
-    int voltageLeft = leftPanelWidth + 10;
-    int voltageTop = headerHeight + 6;
-    int voltageWidth = getWidth() - leftPanelWidth - rightPanelWidth - 20;
-    int voltageHeight = dividerY - voltageTop - 6;
+    // === VOLTAGE SECTION FRAME v1.2.4 ===
+    int voltageLeft = SIDE_PANEL_WIDTH + PADDING;
+    int voltageTop = HEADER_HEIGHT + PADDING;
+    int voltageWidth = getWidth() - SIDE_PANEL_WIDTH * 2 - PADDING * 2;
+    int voltageHeight = dividerY - voltageTop - PADDING;
     
     // Section frame
-    g.setColour(juce::Colour(0xff2A2A2A));
+    g.setColour(juce::Colour(0xff222222));
     g.fillRoundedRectangle((float)voltageLeft, (float)voltageTop, (float)voltageWidth, (float)voltageHeight, 8.0f);
     g.setColour(juce::Colour(0xff404040));
     g.drawRoundedRectangle((float)voltageLeft, (float)voltageTop, (float)voltageWidth, (float)voltageHeight, 8.0f, 1.0f);
     
-    // Vertical divider between PITCH and MODULATION (in middle of VOLTAGE)
-    int pitchModDividerX = voltageLeft + voltageWidth / 2;
-    g.setColour(juce::Colour(0xff404040));
-    g.drawLine((float)pitchModDividerX, (float)(voltageTop + 25), (float)pitchModDividerX, (float)(voltageTop + voltageHeight - 10), 1.0f);
-    
-    // === SECTION TITLES v1.2.3 ===
+    // === SECTION TITLES v1.2.4 ===
     g.setColour(MetalLookAndFeel::getAccentOrange());
     g.setFont(juce::Font(13.0f, juce::Font::bold));
     
-    // VOLTAGE title (top center of frame)
+    // VOLTAGE title (centered above both columns)
     g.drawText("VOLTAGE", voltageLeft, voltageTop + 6, voltageWidth - 40, 18, juce::Justification::centred);
     
-    // SWARM title (center bottom left)
-    int swarmWidth = (getWidth() - leftPanelWidth - rightPanelWidth) / 2;
-    g.drawText("SWARM", leftPanelWidth, dividerY + 8, swarmWidth - 40, 18, juce::Justification::centred);
+    // SWARM title (left column)
+    int columnWidth = (centerWidth - GAP) / 2;
+    g.drawText("SWARM", SIDE_PANEL_WIDTH + PADDING, dividerY + 8, columnWidth - 30, 18, juce::Justification::centred);
     
-    // FLOW title (center bottom right)
-    g.drawText("FLOW", centerX, dividerY + 8, swarmWidth - 40, 18, juce::Justification::centred);
+    // FLOW title (right column)
+    g.drawText("FLOW", centerDividerX + PADDING, dividerY + 8, columnWidth - 30, 18, juce::Justification::centred);
     
-    // Version number (bottom right corner)
-    g.setColour(MetalLookAndFeel::getTextDim());
+    // v1.2.4: Version number (bottom right corner, 8px padding, 40% opacity)
+    g.setColour(juce::Colours::white.withAlpha(0.4f));
     g.setFont(juce::Font(10.0f));
-    g.drawText("v1.2.3", getWidth() - 60, getHeight() - 18, 50, 14, juce::Justification::centredRight);
+    g.drawText("v1.2.4", getWidth() - 50 - GRID, getHeight() - 16 - GRID, 50, 16, juce::Justification::right);
 }
 
 void SwarmnesssAudioProcessorEditor::resized() {
-    const int knobSize = 55;
-    const int smallKnobSize = 50;
-    const int comboHeight = 22;
-    const int headerHeight = 60;
-    const int leftPanelWidth = 70;
-    const int rightPanelWidth = 70;
-    const int faderWidth = 30;
-    const int faderHeight = 100;
+    // v1.2.4: Use grid constants
+    const int contentY = HEADER_HEIGHT + PADDING;
+    const int contentHeight = getHeight() - HEADER_HEIGHT - PADDING * 2;
+    const int sidePanelWidth = SIDE_PANEL_WIDTH;
+    const int centerX = sidePanelWidth + PADDING;
+    const int centerWidth = getWidth() - sidePanelWidth * 2 - PADDING * 2;
+    const int columnWidth = (centerWidth - GAP) / 2;
+    const int leftColumnX = centerX;
+    const int rightColumnX = centerX + columnWidth + GAP;
+    const int dividerY = HEADER_HEIGHT + 200;
     const int powerButtonSize = 24;
+    const int faderWidth = 32;
+    const int faderHeight = 80;
     
-    // === Preset Selector and Buttons (top-left in header) ===
-    presetSelector.setBounds(10, 17, 100, 26);
-    savePresetButton.setBounds(115, 17, 45, 26);
-    exportPresetButton.setBounds(165, 17, 55, 26);
-    importPresetButton.setBounds(225, 17, 55, 26);
+    // === HEADER: Preset Selector and Buttons (left) ===
+    presetSelector.setBounds(PADDING, PADDING, 100, 32);
+    savePresetButton.setBounds(presetSelector.getRight() + GRID, PADDING, 48, 32);
+    exportPresetButton.setBounds(savePresetButton.getRight() + GRID, PADDING, 56, 32);
+    importPresetButton.setBounds(exportPresetButton.getRight() + GRID, PADDING, 56, 32);
     
     // === Info Button (top-right in header) ===
-    infoButton.setBounds(getWidth() - 35, 17, 26, 26);
+    infoButton.setBounds(getWidth() - PADDING - 32, PADDING, 32, 32);
     
     // Info Panel (full screen overlay)
     infoPanel.setBounds(getLocalBounds());
     
-    // === LEFT PANEL: TONE (3 vertical faders) ===
+    // === LEFT PANEL: TONE (3 vertical faders, symmetrical) ===
     {
-        int baseX = 10;
-        int startY = headerHeight + 25;
-        int spacing = 120;
+        int sideY = contentY + 40;
+        int sideSpacing = (contentHeight - 40 - faderHeight * 3) / 2;
+        int sliderX = PADDING + (sidePanelWidth - faderWidth) / 2;
         
         // LOW CUT fader
-        lowCutFader.setBounds(baseX + 5, startY, faderWidth, faderHeight);
-        lowCutLabel.setBounds(baseX - 5, startY + faderHeight + 2, 50, 11);
-        lowCutValueLabel.setBounds(baseX - 5, startY + faderHeight + 13, 50, 11);
+        lowCutFader.setBounds(sliderX, sideY, faderWidth, faderHeight);
+        lowCutLabel.setBounds(PADDING, sideY + faderHeight + 2, sidePanelWidth, 12);
+        lowCutValueLabel.setBounds(PADDING, sideY + faderHeight + 14, sidePanelWidth, 12);
         
         // HIGH CUT fader
-        highCutFader.setBounds(baseX + 5, startY + spacing, faderWidth, faderHeight);
-        highCutLabel.setBounds(baseX - 5, startY + spacing + faderHeight + 2, 50, 11);
-        highCutValueLabel.setBounds(baseX - 5, startY + spacing + faderHeight + 13, 50, 11);
+        int highCutY = sideY + faderHeight + sideSpacing;
+        highCutFader.setBounds(sliderX, highCutY, faderWidth, faderHeight);
+        highCutLabel.setBounds(PADDING, highCutY + faderHeight + 2, sidePanelWidth, 12);
+        highCutValueLabel.setBounds(PADDING, highCutY + faderHeight + 14, sidePanelWidth, 12);
         
         // MID BOOST fader
-        midBoostFader.setBounds(baseX + 5, startY + spacing * 2, faderWidth, faderHeight);
-        midBoostLabel.setBounds(baseX - 8, startY + spacing * 2 + faderHeight + 2, 56, 11);
-        midBoostValueLabel.setBounds(baseX - 5, startY + spacing * 2 + faderHeight + 13, 50, 11);
+        int midBoostY = highCutY + faderHeight + sideSpacing;
+        midBoostFader.setBounds(sliderX, midBoostY, faderWidth, faderHeight);
+        midBoostLabel.setBounds(PADDING - 4, midBoostY + faderHeight + 2, sidePanelWidth + 8, 12);
+        midBoostValueLabel.setBounds(PADDING, midBoostY + faderHeight + 14, sidePanelWidth, 12);
     }
     
-    // === RIGHT PANEL: OUTPUT (3 vertical faders) ===
+    // === RIGHT PANEL: OUTPUT (3 vertical faders, symmetrical) ===
     {
-        int baseX = getWidth() - rightPanelWidth + 10;
-        int startY = headerHeight + 25;
-        int spacing = 120;
+        int rightSideX = getWidth() - PADDING - sidePanelWidth;
+        int sideY = contentY + 40;
+        int sideSpacing = (contentHeight - 40 - faderHeight * 3) / 2;
+        int sliderX = rightSideX + (sidePanelWidth - faderWidth) / 2;
         
         // MIX fader
-        mixFader.setBounds(baseX + 5, startY, faderWidth, faderHeight);
-        mixLabel.setBounds(baseX - 5, startY + faderHeight + 2, 50, 11);
-        mixValueLabel.setBounds(baseX - 5, startY + faderHeight + 13, 50, 11);
+        mixFader.setBounds(sliderX, sideY, faderWidth, faderHeight);
+        mixLabel.setBounds(rightSideX, sideY + faderHeight + 2, sidePanelWidth, 12);
+        mixValueLabel.setBounds(rightSideX, sideY + faderHeight + 14, sidePanelWidth, 12);
         
         // DRIVE fader
-        driveFader.setBounds(baseX + 5, startY + spacing, faderWidth, faderHeight);
-        driveLabel.setBounds(baseX - 5, startY + spacing + faderHeight + 2, 50, 11);
-        driveValueLabel.setBounds(baseX - 5, startY + spacing + faderHeight + 13, 50, 11);
+        int driveY = sideY + faderHeight + sideSpacing;
+        driveFader.setBounds(sliderX, driveY, faderWidth, faderHeight);
+        driveLabel.setBounds(rightSideX, driveY + faderHeight + 2, sidePanelWidth, 12);
+        driveValueLabel.setBounds(rightSideX, driveY + faderHeight + 14, sidePanelWidth, 12);
         
         // VOLUME fader
-        volumeFader.setBounds(baseX + 5, startY + spacing * 2, faderWidth, faderHeight);
-        volumeLabel.setBounds(baseX - 5, startY + spacing * 2 + faderHeight + 2, 50, 11);
-        volumeValueLabel.setBounds(baseX - 5, startY + spacing * 2 + faderHeight + 13, 50, 11);
+        int volumeY = driveY + faderHeight + sideSpacing;
+        volumeFader.setBounds(sliderX, volumeY, faderWidth, faderHeight);
+        volumeLabel.setBounds(rightSideX, volumeY + faderHeight + 2, sidePanelWidth, 12);
+        volumeValueLabel.setBounds(rightSideX, volumeY + faderHeight + 14, sidePanelWidth, 12);
     }
     
-    // === CENTER TOP: VOLTAGE Section (v1.2.3 unified layout) ===
+    // === CENTER TOP: VOLTAGE Section v1.2.4 ===
     {
-        int sectionX = leftPanelWidth + 10;
-        int sectionWidth = getWidth() - leftPanelWidth - rightPanelWidth - 20;
-        int baseY = headerHeight + 30;
-        int halfWidth = sectionWidth / 2;
+        int voltageTop = HEADER_HEIGHT + PADDING;
+        int voltageWidth = centerWidth;
+        int halfWidth = voltageWidth / 2;
         
         // Power button (top-right of VOLTAGE frame)
-        pitchBypassButton.setBounds(sectionX + sectionWidth - 30, headerHeight + 10, powerButtonSize, powerButtonSize);
+        pitchBypassButton.setBounds(centerX + voltageWidth - 32, voltageTop + 8, powerButtonSize, powerButtonSize);
         
         // === LEFT HALF: PITCH ===
-        int pitchX = sectionX + 15;
-        pitchSubLabel.setBounds(pitchX, baseY, halfWidth - 30, 14);
+        int pitchX = leftColumnX + 8;
+        int pitchY = voltageTop + 28;
         
-        // Octave dropdown
-        octaveModeBox.setBounds(pitchX, baseY + 18, 85, comboHeight);
+        // PITCH subheader
+        pitchSubLabel.setBounds(pitchX, pitchY, halfWidth - 30, 14);
         
-        // RANGE, SPEED knobs aligned horizontally
-        int knobY = baseY + 48;
-        int knobSpacing = 60;
-        pitchRangeKnob.setBounds(pitchX, knobY, knobSize, knobSize + 22);
-        pitchSpeedKnob.setBounds(pitchX + knobSpacing, knobY, knobSize, knobSize + 22);
+        // Row 1: Octave dropdown
+        octaveModeBox.setBounds(pitchX, pitchY + 16, 88, 28);
         
-        // RISE Vertical Fader (between PITCH and MODULATION)
-        int riseX = sectionX + halfWidth - 35;
-        riseFader.setBounds(riseX, knobY + 2, 28, 68);
-        riseFaderLabel.setBounds(riseX - 5, knobY + 70, 40, 12);
-        riseFaderValueLabel.setBounds(riseX - 10, knobY + 81, 50, 12);
+        // Row 2: RANGE + SPEED knobs + RISE horizontal slider
+        int knobY = pitchY + 50;
+        int knobFullHeight = KNOB_SIZE + 22;
+        
+        pitchRangeKnob.setBounds(pitchX, knobY, KNOB_SIZE, knobFullHeight);
+        pitchSpeedKnob.setBounds(pitchX + KNOB_SIZE + 8, knobY, KNOB_SIZE, knobFullHeight);
+        
+        // RISE horizontal slider - takes remaining width
+        int riseX = pitchX + (KNOB_SIZE + 8) * 2;
+        int riseWidth = halfWidth - (KNOB_SIZE + 8) * 2 - GAP;
+        int riseY = knobY + (KNOB_SIZE - SLIDER_HEIGHT) / 2;  // Centered with knobs
+        
+        riseSlider.setBounds(riseX, riseY, riseWidth - 45, SLIDER_HEIGHT);
+        riseLabel.setBounds(riseX - 2, riseY - 12, 40, 12);
+        riseValueLabel.setBounds(riseSlider.getRight() + 4, riseY + 4, 45, 14);
         
         // === RIGHT HALF: MODULATION ===
-        int modX = sectionX + halfWidth + 20;
-        modulationSubLabel.setBounds(modX, baseY, halfWidth - 40, 14);
+        int modX = rightColumnX - GAP / 2;
+        int modY = voltageTop + 28;
         
-        // ANGER, RUSH, RATE knobs aligned horizontally
-        angerKnob.setBounds(modX, knobY, knobSize, knobSize + 22);
-        rushKnob.setBounds(modX + knobSpacing, knobY, knobSize, knobSize + 22);
-        modRateKnob.setBounds(modX + knobSpacing * 2, knobY, knobSize, knobSize + 22);
+        // MODULATION subheader
+        modulationSubLabel.setBounds(modX, modY, halfWidth - 20, 14);
+        
+        // ANGER, RUSH, RATE knobs (vertical arrangement to match PITCH height)
+        int modKnobY = modY + 20;
+        int modKnobSpacing = (knobY + knobFullHeight - modKnobY) / 3;
+        
+        // Centered horizontally in the right column
+        int modKnobX = modX + (halfWidth - KNOB_SIZE) / 2 - 10;
+        
+        angerKnob.setBounds(modKnobX - 60, modKnobY, KNOB_SIZE, knobFullHeight);
+        rushKnob.setBounds(modKnobX, modKnobY, KNOB_SIZE, knobFullHeight);
+        modRateKnob.setBounds(modKnobX + 60, modKnobY, KNOB_SIZE, knobFullHeight);
     }
     
     // === CENTER BOTTOM: SWARM + FLOW ===
-    int dividerY = 240;
-    int swarmFlowWidth = (getWidth() - leftPanelWidth - rightPanelWidth) / 2;
+    int swarmFlowY = dividerY + GAP;
+    int swarmFlowHeight = getHeight() - dividerY - 100;
     
-    // SWARM Section (left)
+    // SWARM Section (left column)
     {
-        int baseX = leftPanelWidth + 10;
-        int baseY = dividerY + 26;
+        int baseX = leftColumnX;
+        int knobY = swarmFlowY + 16;
+        int knobFullHeight = KNOB_SIZE + 22;
         
-        // Power button
-        swarmBypassButton.setBounds(baseX + swarmFlowWidth - 42, dividerY + 6, powerButtonSize, powerButtonSize);
+        // Power button (top-right)
+        swarmBypassButton.setBounds(baseX + columnWidth - 38, dividerY + 6, powerButtonSize, powerButtonSize);
         
-        // 3 knobs + DEEP toggle (uniform size)
-        int knobY = baseY + 12;
-        int spacing = 52;
-        swarmDepthKnob.setBounds(baseX + 5, knobY, knobSize, knobSize + 22);
-        swarmRateKnob.setBounds(baseX + 5 + spacing, knobY, knobSize, knobSize + 22);
-        swarmMixKnob.setBounds(baseX + 5 + spacing * 2, knobY, knobSize, knobSize + 22);
+        // 3 knobs horizontally
+        swarmDepthKnob.setBounds(baseX + 8, knobY, KNOB_SIZE, knobFullHeight);
+        swarmRateKnob.setBounds(baseX + 8 + KNOB_SIZE + 8, knobY, KNOB_SIZE, knobFullHeight);
+        swarmMixKnob.setBounds(baseX + 8 + (KNOB_SIZE + 8) * 2, knobY, KNOB_SIZE, knobFullHeight);
         
         // DEEP toggle (inline)
-        int toggleX = baseX + 5 + spacing * 3 + 8;
-        deepModeButton.setBounds(toggleX, knobY + 12, 38, 22);
-        deepModeLabel.setBounds(toggleX - 2, knobY + 36, 45, 14);
+        int toggleX = baseX + 8 + (KNOB_SIZE + 8) * 3;
+        deepModeButton.setBounds(toggleX, knobY + 14, 40, 24);
+        deepModeLabel.setBounds(toggleX - 2, knobY + 40, 45, 14);
     }
     
-    // FLOW Section (right)
+    // FLOW Section (right column)
     {
-        int centerX = getWidth() / 2;
-        int baseX = centerX + 10;
-        int baseY = dividerY + 26;
+        int baseX = rightColumnX - GAP / 2 + 10;
+        int knobY = swarmFlowY + 16;
+        int knobFullHeight = KNOB_SIZE + 22;
         
-        // Power button
-        flowBypassButton.setBounds(baseX + swarmFlowWidth - 42, dividerY + 6, powerButtonSize, powerButtonSize);
+        // Power button (top-right)
+        flowBypassButton.setBounds(getWidth() - SIDE_PANEL_WIDTH - PADDING - 38, dividerY + 6, powerButtonSize, powerButtonSize);
         
-        // 2 knobs (uniform size)
-        int knobY = baseY + 12;
-        int spacing = 60;
-        flowAmountKnob.setBounds(baseX + 20, knobY, knobSize, knobSize + 22);
-        flowSpeedKnob.setBounds(baseX + 20 + spacing, knobY, knobSize, knobSize + 22);
+        // 2 knobs
+        flowAmountKnob.setBounds(baseX + 20, knobY, KNOB_SIZE, knobFullHeight);
+        flowSpeedKnob.setBounds(baseX + 20 + KNOB_SIZE + GAP, knobY, KNOB_SIZE, knobFullHeight);
     }
     
     // === BYPASS Footswitch (bottom center) ===

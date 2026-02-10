@@ -241,7 +241,58 @@ void MetalLookAndFeel::drawToggleButton(juce::Graphics& g, juce::ToggleButton& b
 void MetalLookAndFeel::drawLinearSlider(juce::Graphics& g, int x, int y, int width, int height,
                                          float sliderPos, float minSliderPos, float maxSliderPos,
                                          juce::Slider::SliderStyle style, juce::Slider& slider) {
-    // Only handle vertical sliders with custom styling
+    // v1.2.4: Handle horizontal sliders
+    if (style == juce::Slider::LinearHorizontal || style == juce::Slider::LinearBar) {
+        const float trackHeight = 8.0f;
+        const float trackX = static_cast<float>(x) + 4.0f;
+        const float trackY = static_cast<float>(y) + (static_cast<float>(height) - trackHeight) * 0.5f;
+        const float trackWidth = static_cast<float>(width) - 8.0f;
+        
+        // Dark track background (#1A1A1A)
+        g.setColour(juce::Colour(0xff1A1A1A));
+        g.fillRoundedRectangle(trackX, trackY, trackWidth, trackHeight, 4.0f);
+        
+        // Track border (#333333)
+        g.setColour(juce::Colour(0xff333333));
+        g.drawRoundedRectangle(trackX, trackY, trackWidth, trackHeight, 4.0f, 1.0f);
+        
+        // Calculate normalized position (0 at left, 1 at right)
+        float normalizedPos = (sliderPos - static_cast<float>(x)) / static_cast<float>(width);
+        normalizedPos = juce::jlimit(0.0f, 1.0f, normalizedPos);
+        
+        // v1.2.4: Orange fill from left (#FF9500)
+        float fillWidth = (trackWidth - 4.0f) * normalizedPos;
+        if (fillWidth > 2.0f) {
+            // Gradient fill for depth
+            juce::ColourGradient fillGrad(getAccentOrangeBright(), trackX + 2.0f, trackY,
+                                           getAccentOrange().darker(0.2f), trackX + 2.0f + fillWidth, trackY, false);
+            g.setGradientFill(fillGrad);
+            g.fillRoundedRectangle(trackX + 2.0f, trackY + 2.0f, fillWidth, trackHeight - 4.0f, 2.0f);
+        }
+        
+        // v1.2.4: Minimal thumb (small circle)
+        const float thumbDiameter = 14.0f;
+        const float thumbX = juce::jlimit(static_cast<float>(x) + 2.0f, 
+                                          static_cast<float>(x + width) - thumbDiameter - 2.0f, 
+                                          sliderPos - thumbDiameter * 0.5f);
+        const float thumbY = static_cast<float>(y) + (static_cast<float>(height) - thumbDiameter) * 0.5f;
+        
+        // Thumb background
+        g.setColour(juce::Colour(0xff3A3A3A));
+        g.fillEllipse(thumbX, thumbY, thumbDiameter, thumbDiameter);
+        
+        // Thumb highlight
+        g.setColour(juce::Colour(0xff4A4A4A));
+        g.fillEllipse(thumbX + 2, thumbY + 2, thumbDiameter - 4, (thumbDiameter - 4) * 0.6f);
+        
+        // Orange accent on thumb
+        g.setColour(getAccentOrange());
+        g.fillEllipse(thumbX + 4, thumbY + 4, thumbDiameter - 8, thumbDiameter - 8);
+        
+        return;
+    }
+    
+    // Handle other slider types (non-vertical, non-horizontal) with default
     if (style != juce::Slider::LinearVertical && style != juce::Slider::LinearBarVertical) {
         LookAndFeel_V4::drawLinearSlider(g, x, y, width, height, sliderPos, minSliderPos, maxSliderPos, style, slider);
         return;

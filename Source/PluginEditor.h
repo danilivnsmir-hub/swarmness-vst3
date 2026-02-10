@@ -19,6 +19,15 @@ public:
     void resized() override;
     void timerCallback() override;
 
+    // v1.2.4: Grid constants
+    static constexpr int GRID = 8;
+    static constexpr int PADDING = 12;
+    static constexpr int GAP = 24;
+    static constexpr int HEADER_HEIGHT = 56;  // 7 * GRID
+    static constexpr int SIDE_PANEL_WIDTH = 64;  // 8 * GRID
+    static constexpr int KNOB_SIZE = 56;  // 7 * GRID
+    static constexpr int SLIDER_HEIGHT = 24;  // 3 * GRID
+
 private:
     SwarmnesssAudioProcessor& audioProcessor;
     MetalLookAndFeel metalLookAndFeel;
@@ -58,12 +67,16 @@ private:
 
     // === CENTER TOP: VOLTAGE Section ===
     PowerButton pitchBypassButton;  // Power toggle for VOLTAGE
+    juce::Label voltageLabel;  // Main VOLTAGE header
     juce::ComboBox octaveModeBox;
     RotaryKnob pitchRangeKnob{"RANGE"};
     RotaryKnob pitchSpeedKnob{"SPEED"};
-    juce::Slider riseFader;
-    juce::Label riseFaderLabel;
-    juce::Label riseFaderValueLabel;
+    
+    // v1.2.4: RISE as horizontal slider
+    juce::Slider riseSlider;
+    juce::Label riseLabel;
+    juce::Label riseValueLabel;
+    
     RotaryKnob angerKnob{"ANGER"};
     RotaryKnob rushKnob{"RUSH"};
     RotaryKnob modRateKnob{"RATE"};
@@ -74,6 +87,7 @@ private:
 
     // === CENTER BOTTOM LEFT: SWARM Section ===
     PowerButton swarmBypassButton;
+    juce::Label swarmLabel;
     RotaryKnob swarmDepthKnob{"DEPTH"};
     RotaryKnob swarmRateKnob{"RATE"};
     RotaryKnob swarmMixKnob{"MIX"};
@@ -82,6 +96,7 @@ private:
 
     // === CENTER BOTTOM RIGHT: FLOW Section ===
     PowerButton flowBypassButton;
+    juce::Label flowLabel;
     RotaryKnob flowAmountKnob{"AMOUNT"};
     RotaryKnob flowSpeedKnob{"SPEED"};
 
