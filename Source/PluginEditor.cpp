@@ -20,7 +20,10 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
     refreshPresetList();
     presetSelector.onChange = [this]() {
         auto selectedName = presetSelector.getText();
+        if (selectedName.endsWith(" *"))
+            selectedName = selectedName.dropLastCharacters(2);
         audioProcessor.getPresetManager().loadPreset(selectedName);
+        updateDeleteButtonVisibility();
     };
     
     // === Preset Buttons ===
@@ -86,9 +89,34 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
                 if (file.existsAsFile()) {
                     audioProcessor.getPresetManager().importPreset(file);
                     refreshPresetList();
+                    updateDeleteButtonVisibility();
                 }
             });
     };
+    
+    // v1.2.6: Delete button for user presets
+    addAndMakeVisible(deletePresetButton);
+    deletePresetButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff2a2a2a));
+    deletePresetButton.setColour(juce::TextButton::textColourOffId, juce::Colour(0xffff5555)); // Red color
+    deletePresetButton.onClick = [this]() {
+        auto presetName = presetSelector.getText();
+        if (presetName.endsWith(" *"))
+            presetName = presetName.dropLastCharacters(2);
+        
+        if (!audioProcessor.getPresetManager().isFactoryPreset(presetName) && presetName.isNotEmpty()) {
+            auto ret = juce::AlertWindow::showOkCancelBox(
+                juce::MessageBoxIconType::QuestionIcon,
+                "Delete Preset?",
+                "Are you sure you want to delete \"" + presetName + "\"?",
+                "Delete", "Cancel");
+            if (ret) {
+                audioProcessor.getPresetManager().deletePreset(presetName);
+                refreshPresetList();
+                updateDeleteButtonVisibility();
+            }
+        }
+    };
+    updateDeleteButtonVisibility();
     
     // === Info Button (top-right) ===
     addAndMakeVisible(infoButton);
@@ -103,12 +131,12 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
     addChildComponent(infoPanel);
 
     // === LEFT PANEL: TONE (vertical faders) ===
-    // Low Cut & High Cut: Keep as % (filter frequency parameters)
-    setupVerticalFader(lowCutFader, lowCutLabel, lowCutValueLabel, "LOW CUT", FaderScaleMode::Percent);
+    // v1.2.6: Low Cut & High Cut now display in Hz
+    setupVerticalFader(lowCutFader, lowCutLabel, lowCutValueLabel, "LOW CUT", FaderScaleMode::LowCutHz);
     lowCutAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         audioProcessor.getAPVTS(), "lowCut", lowCutFader);
     
-    setupVerticalFader(highCutFader, highCutLabel, highCutValueLabel, "HIGH CUT", FaderScaleMode::Percent);
+    setupVerticalFader(highCutFader, highCutLabel, highCutValueLabel, "HIGH CUT", FaderScaleMode::HighCutHz);
     highCutAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         audioProcessor.getAPVTS(), "highCut", highCutFader);
     
@@ -315,6 +343,26 @@ void SwarmnesssAudioProcessorEditor::setupVerticalFader(juce::Slider& fader, juc
                 valueText = juce::String(rounded, 1);
                 break;
             }
+            case FaderScaleMode::LowCutHz: {
+                // Low Cut: 20-2000 Hz (logarithmic scale)
+                float hz = 20.0f * std::pow(100.0f, normalizedValue);
+                if (hz >= 1000.0f) {
+                    valueText = juce::String(hz / 1000.0f, 1) + "k";
+                } else {
+                    valueText = juce::String(static_cast<int>(hz)) + " Hz";
+                }
+                break;
+            }
+            case FaderScaleMode::HighCutHz: {
+                // High Cut: 1000-20000 Hz (logarithmic scale)
+                float hz = 1000.0f * std::pow(20.0f, normalizedValue);
+                if (hz >= 1000.0f) {
+                    valueText = juce::String(hz / 1000.0f, 1) + "k";
+                } else {
+                    valueText = juce::String(static_cast<int>(hz)) + " Hz";
+                }
+                break;
+            }
             case FaderScaleMode::Custom:
             case FaderScaleMode::Percent:
             default: {
@@ -474,7 +522,7 @@ void SwarmnesssAudioProcessorEditor::paint(juce::Graphics& g) {
     // v1.2.4: Version number (bottom right corner, 8px padding, 40% opacity)
     g.setColour(juce::Colours::white.withAlpha(0.4f));
     g.setFont(juce::Font(10.0f));
-    g.drawText("v1.2.5", getWidth() - 50 - GRID, getHeight() - 16 - GRID, 50, 16, juce::Justification::right);
+    g.drawText("v1.2.6", getWidth() - 50 - GRID, getHeight() - 16 - GRID, 50, 16, juce::Justification::right);
 }
 
 void SwarmnesssAudioProcessorEditor::resized() {
@@ -497,6 +545,7 @@ void SwarmnesssAudioProcessorEditor::resized() {
     savePresetButton.setBounds(presetSelector.getRight() + GRID, PADDING, 48, 32);
     exportPresetButton.setBounds(savePresetButton.getRight() + GRID, PADDING, 56, 32);
     importPresetButton.setBounds(exportPresetButton.getRight() + GRID, PADDING, 56, 32);
+    deletePresetButton.setBounds(importPresetButton.getRight() + GRID, PADDING, 24, 32);  // v1.2.6: Delete button
     
     // === Info Button (top-right in header) ===
     infoButton.setBounds(getWidth() - PADDING - 32, PADDING, 32, 32);
@@ -504,11 +553,11 @@ void SwarmnesssAudioProcessorEditor::resized() {
     // Info Panel (full screen overlay)
     infoPanel.setBounds(getLocalBounds());
     
-    // === LEFT PANEL: TONE (3 vertical faders, centered with 8px gaps) ===
+    // === LEFT PANEL: TONE (3 vertical faders, centered with 16px gaps) ===
     {
         int sideSliderHeight = 80;
         int sideSliderWidth = 32;
-        int sideGap = 8;
+        int sideGap = 16;  // v1.2.6: increased from 8px to 16px
         int totalSlidersHeight = sideSliderHeight * 3 + sideGap * 2; // 3 faders + 2 gaps
         int sideStartY = HEADER_HEIGHT + (getHeight() - HEADER_HEIGHT - totalSlidersHeight) / 2;
         int sliderX = PADDING + (sidePanelWidth - sideSliderWidth) / 2;
@@ -531,12 +580,12 @@ void SwarmnesssAudioProcessorEditor::resized() {
         midBoostValueLabel.setBounds(PADDING, midBoostY + sideSliderHeight + 14, sidePanelWidth, 12);
     }
     
-    // === RIGHT PANEL: OUTPUT (3 vertical faders, centered with 8px gaps) ===
+    // === RIGHT PANEL: OUTPUT (3 vertical faders, centered with 16px gaps) ===
     {
         int rightSideX = getWidth() - PADDING - sidePanelWidth;
         int sideSliderHeight = 80;
         int sideSliderWidth = 32;
-        int sideGap = 8;
+        int sideGap = 16;  // v1.2.6: increased from 8px to 16px
         int totalSlidersHeight = sideSliderHeight * 3 + sideGap * 2; // 3 faders + 2 gaps
         int sideStartY = HEADER_HEIGHT + (getHeight() - HEADER_HEIGHT - totalSlidersHeight) / 2;
         int sliderX = rightSideX + (sidePanelWidth - sideSliderWidth) / 2;
@@ -681,4 +730,11 @@ void SwarmnesssAudioProcessorEditor::updatePresetName() {
         }
         presetSelector.setText(current, juce::dontSendNotification);
     }
+}
+
+void SwarmnesssAudioProcessorEditor::updateDeleteButtonVisibility() {
+    auto presetName = audioProcessor.getPresetManager().getCurrentPresetName();
+    bool isUserPreset = !audioProcessor.getPresetManager().isFactoryPreset(presetName) && presetName.isNotEmpty();
+    deletePresetButton.setVisible(isUserPreset);
+    deletePresetButton.setEnabled(isUserPreset);
 }

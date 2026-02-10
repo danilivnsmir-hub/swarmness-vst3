@@ -1,7 +1,7 @@
 #include "PresetManager.h"
 
 const juce::String PresetManager::kPresetExtension = ".swpreset";
-const juce::String PresetManager::kPresetVersion = "1.2.5";
+const juce::String PresetManager::kPresetVersion = "1.2.6";
 
 PresetManager::PresetManager(juce::AudioProcessorValueTreeState& apvts)
     : mAPVTS(apvts)
@@ -233,6 +233,10 @@ void PresetManager::loadFactoryPreset(const juce::String& name) {
     }
 }
 
+bool PresetManager::isFactoryPreset(const juce::String& name) const {
+    return mFactoryPresets.count(name) > 0;
+}
+
 void PresetManager::initializeFactoryPresets() {
     // Helper lambda to create a preset
     // v3.0.0: octaveMode now has 5 options: -2, -1, 0, +1, +2
@@ -288,80 +292,7 @@ void PresetManager::initializeFactoryPresets() {
         return juce::var(preset.release());
     };
     
-    // ========== v3.0.0 PRESETS ==========
-    
-    // Init - neutral settings, no effects
-    mFactoryPresets["Init"] = createPreset(
-        "Init", "Neutral settings - 100% wet, no effects active",
-        {{"octaveMode", 2.0f / 4.0f}, // 0 (no shift)
-         {"mix", 1.0f}, 
-         {"chaos", 0.0f}, {"panic", 0.0f},
-         {"chorusDepth", 0.0f}, {"chorusRate", 0.0f}, {"chorusMix", 0.0f}});
-    
-    // Octave Up - +1 octave, clean pitch shift
-    mFactoryPresets["Octave Up"] = createPreset(
-        "Octave Up", "Clean +1 octave pitch shift",
-        {{"octaveMode", 3.0f / 4.0f}, // +1 OCT
-         {"chaos", 0.0f}, {"panic", 0.0f}});
-    
-    // Octave Down - -1 octave, clean
-    mFactoryPresets["Octave Down"] = createPreset(
-        "Octave Down", "Clean -1 octave pitch shift",
-        {{"octaveMode", 1.0f / 4.0f}, // -1 OCT
-         {"chaos", 0.0f}, {"panic", 0.0f}});
-    
-    // Glitch - high chaos and panic
-    mFactoryPresets["Glitch"] = createPreset(
-        "Glitch", "Glitchy octave shift with chaos",
-        {{"octaveMode", 3.0f / 4.0f}, // +1 OCT
-         {"chaos", 0.7f}, {"panic", 0.6f}, {"speed", 0.5f},
-         {"randomRange", 0.3f}, {"randomRate", 0.4f}});
-    
-    // Chorus Heavy - full chorus wet
-    mFactoryPresets["Chorus Heavy"] = createPreset(
-        "Chorus Heavy", "Lush heavy chorus effect",
-        {{"octaveMode", 2.0f / 4.0f}, // 0 (no shift)
-         {"chorusDepth", 0.8f}, {"chorusRate", 0.3f}, {"chorusMix", 0.9f}});
-    
-    // The Noise Classic - aggressive glitchy octave
-    mFactoryPresets["The Noise Classic"] = createPreset(
-        "The Noise Classic", "Classic Noise pedal tone - aggressive glitchy octave",
-        {{"octaveMode", 3.0f / 4.0f}, // +1 OCT
-         {"chaos", 0.65f}, {"panic", 0.5f},
-         {"speed", 0.4f},
-         {"mix", 1.0f},
-         {"saturation", 0.25f}});
-    
-    // Ambient Shimmer - ethereal modulation
-    mFactoryPresets["Ambient Shimmer"] = createPreset(
-        "Ambient Shimmer", "Ethereal shimmer with lush modulation",
-        {{"octaveMode", 3.0f / 4.0f}, // +1 OCT
-         {"chorusMix", 0.7f}, {"chorusDepth", 0.6f}, {"chorusRate", 0.08f},
-         {"chaos", 0.1f}, {"panic", 0.1f}});
-    
-    // Lo-Fi - degraded sound
-    mFactoryPresets["Lo-Fi"] = createPreset(
-        "Lo-Fi", "Degraded lo-fi with pitch artifacts",
-        {{"octaveMode", 2.0f / 4.0f}, // 0
-         {"chaos", 0.5f}, {"panic", 0.4f},
-         {"saturation", 0.6f},
-         {"chorusMix", 0.3f}, {"chorusDepth", 0.3f}, {"chorusRate", 0.2f},
-         {"lowCut", 0.1f}, {"highCut", 0.7f}});
-    
-    // Double Octave - +2 octaves
-    mFactoryPresets["Double Octave"] = createPreset(
-        "Double Octave", "+2 octaves for super high pitch",
-        {{"octaveMode", 1.0f}, // +2 OCT
-         {"chaos", 0.0f}, {"panic", 0.0f}});
-    
-    // Sub Bass - -2 octaves
-    mFactoryPresets["Sub Bass"] = createPreset(
-        "Sub Bass", "-2 octaves for deep sub bass",
-        {{"octaveMode", 0.0f}, // -2 OCT
-         {"chaos", 0.0f}, {"panic", 0.0f},
-         {"lowCut", 0.0f}, {"highCut", 0.5f}});
-    
-    // ========== v1.2.5 HEAVY MUSIC PRESETS (Momentary Use) ==========
+    // ========== v1.2.6 FACTORY PRESETS (8 Heavy Music Presets) ==========
     // Designed for momentary engagement - short rise times for instant response
     
     // 1. Breakdown Chaos - for breakdowns, momentary

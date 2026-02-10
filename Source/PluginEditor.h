@@ -46,6 +46,7 @@ private:
     juce::TextButton savePresetButton{"SAVE"};
     juce::TextButton exportPresetButton{"EXPORT"};
     juce::TextButton importPresetButton{"IMPORT"};
+    juce::TextButton deletePresetButton{"×"};  // v1.2.6: Delete button for user presets
     
     // Info Panel
     InfoPanel infoPanel;
@@ -130,8 +131,9 @@ private:
     void refreshPresetList();
     void updatePresetName();
     void updateSectionEnableStates();
+    void updateDeleteButtonVisibility();  // v1.2.6: Show/hide delete button based on preset type
     void setSectionEnabled(std::vector<juce::Component*> components, bool enabled);
-    enum class FaderScaleMode { Percent, Scale1to10_Step01, Scale1to10_Step05, Custom };
+    enum class FaderScaleMode { Percent, Scale1to10_Step01, Scale1to10_Step05, LowCutHz, HighCutHz, Custom };
     void setupVerticalFader(juce::Slider& fader, juce::Label& label, juce::Label& valueLabel, 
                             const juce::String& labelText, FaderScaleMode scaleMode = FaderScaleMode::Percent);
 

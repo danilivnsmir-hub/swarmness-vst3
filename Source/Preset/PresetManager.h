@@ -20,6 +20,7 @@ public:
     juce::File getPresetsDirectory() const;
     juce::StringArray getFactoryPresetNames() const;
     void loadFactoryPreset(const juce::String& name);
+    bool isFactoryPreset(const juce::String& name) const;
     
     // Dirty state management
     bool isDirty() const { return mIsDirty; }
