@@ -63,11 +63,21 @@ void MetalLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int wid
         g.strokePath(bgArc, juce::PathStrokeType(arcThickness, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
     }
     
-    // Value arc (bright orange)
+    // Value arc (bright orange with GLOW effect)
     {
         juce::Path valueArc;
         valueArc.addCentredArc(centreX, centreY, arcRadius, arcRadius,
                                0.0f, rotaryStartAngle, angle, true);
+        
+        // Phase 2 UI: Outer glow layer (larger, more diffuse)
+        g.setColour(getAccentOrange().withAlpha(0.25f));
+        g.strokePath(valueArc, juce::PathStrokeType(arcThickness + 6.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        
+        // Phase 2 UI: Middle glow layer
+        g.setColour(getAccentOrange().withAlpha(0.4f));
+        g.strokePath(valueArc, juce::PathStrokeType(arcThickness + 3.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        
+        // Main bright arc
         g.setColour(getAccentOrangeBright());
         g.strokePath(valueArc, juce::PathStrokeType(arcThickness, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
     }
@@ -237,50 +247,81 @@ void MetalLookAndFeel::drawToggleButton(juce::Graphics& g, juce::ToggleButton& b
                                          bool shouldDrawButtonAsHighlighted,
                                          bool shouldDrawButtonAsDown) {
     auto bounds = button.getLocalBounds().toFloat();
-    const float cornerSize = 12.0f;  // More rounded for pill shape
+    const float cornerSize = 4.0f;  // Phase 2 UI: More angular/industrial look
     const float padding = 2.0f;
     
-    // Outer pill shape - dark background
-    juce::Colour bgColour = juce::Colour(0xff1a1a1a);
-    if (shouldDrawButtonAsHighlighted)
-        bgColour = bgColour.brighter(0.05f);
+    // Phase 2 UI: Track background with metal gradient
+    juce::Rectangle<float> trackBounds = bounds.reduced(1);
     
-    g.setColour(bgColour);
-    g.fillRoundedRectangle(bounds.reduced(1), cornerSize);
+    // Inner shadow for depth
+    g.setColour(juce::Colour(0xff0a0a0a));
+    g.fillRoundedRectangle(trackBounds.expanded(1), cornerSize + 1);
+    
+    // Metal gradient background
+    juce::ColourGradient trackGrad(juce::Colour(0xff252525), trackBounds.getX(), trackBounds.getY(),
+                                    juce::Colour(0xff151515), trackBounds.getX(), trackBounds.getBottom(), false);
+    g.setGradientFill(trackGrad);
+    g.fillRoundedRectangle(trackBounds, cornerSize);
     
     // Border with orange glow when ON
     if (button.getToggleState()) {
-        g.setColour(getAccentOrange().withAlpha(0.6f));
-        g.drawRoundedRectangle(bounds.reduced(1), cornerSize, 2.0f);
+        // Phase 2 UI: Orange glow effect
+        g.setColour(getAccentOrange().withAlpha(0.3f));
+        g.drawRoundedRectangle(trackBounds.expanded(2), cornerSize + 2, 3.0f);
+        g.setColour(getAccentOrange().withAlpha(0.7f));
+        g.drawRoundedRectangle(trackBounds, cornerSize, 1.5f);
     } else {
         g.setColour(getMetalDark());
-        g.drawRoundedRectangle(bounds.reduced(1), cornerSize, 1.0f);
+        g.drawRoundedRectangle(trackBounds, cornerSize, 1.0f);
     }
     
-    // Thumb circle position
-    float thumbDiameter = bounds.getHeight() - padding * 4;
+    // Thumb position - rectangular with rounded corners
+    float thumbWidth = bounds.getWidth() * 0.45f;
+    float thumbHeight = bounds.getHeight() - padding * 4;
     float thumbX = button.getToggleState() 
-        ? bounds.getRight() - thumbDiameter - padding * 3
-        : bounds.getX() + padding * 3;
-    float thumbY = bounds.getCentreY() - thumbDiameter * 0.5f;
+        ? bounds.getRight() - thumbWidth - padding * 2
+        : bounds.getX() + padding * 2;
+    float thumbY = bounds.getCentreY() - thumbHeight * 0.5f;
     
-    // Orange glow bar when ON
+    // Phase 2 UI: Orange fill bar when ON (behind thumb)
     if (button.getToggleState()) {
-        auto glowBounds = bounds.reduced(padding * 2);
-        g.setColour(getAccentOrange());
-        g.fillRoundedRectangle(glowBounds.getX() + thumbDiameter, 
-                               glowBounds.getCentreY() - 2,
-                               glowBounds.getWidth() - thumbDiameter * 2, 
-                               4.0f, 2.0f);
+        juce::Rectangle<float> fillBounds(bounds.getX() + padding * 3, 
+                                           bounds.getCentreY() - 3,
+                                           thumbX - bounds.getX() - padding * 3, 
+                                           6.0f);
+        // Glow
+        g.setColour(getAccentOrange().withAlpha(0.4f));
+        g.fillRoundedRectangle(fillBounds.expanded(2), 2.0f);
+        // Fill
+        g.setColour(getAccentOrangeBright());
+        g.fillRoundedRectangle(fillBounds, 2.0f);
     }
     
-    // Thumb circle
-    g.setColour(getMetalGrey());
-    g.fillEllipse(thumbX, thumbY, thumbDiameter, thumbDiameter);
+    // Thumb shadow
+    g.setColour(juce::Colours::black.withAlpha(0.5f));
+    g.fillRoundedRectangle(thumbX + 1, thumbY + 1, thumbWidth, thumbHeight, cornerSize);
     
-    // Thumb highlight
-    g.setColour(getMetalLight().withAlpha(0.3f));
-    g.drawEllipse(thumbX + 1, thumbY + 1, thumbDiameter - 2, thumbDiameter - 2, 1.0f);
+    // Thumb body - brushed metal gradient
+    juce::ColourGradient thumbGrad(getMetalLight().brighter(0.1f), thumbX, thumbY,
+                                    getMetalGrey().darker(0.1f), thumbX, thumbY + thumbHeight, false);
+    g.setGradientFill(thumbGrad);
+    g.fillRoundedRectangle(thumbX, thumbY, thumbWidth, thumbHeight, cornerSize);
+    
+    // Thumb highlight (top edge)
+    g.setColour(juce::Colours::white.withAlpha(0.2f));
+    g.drawLine(thumbX + 3, thumbY + 1.5f, thumbX + thumbWidth - 3, thumbY + 1.5f, 1.0f);
+    
+    // Thumb border
+    g.setColour(getMetalDark());
+    g.drawRoundedRectangle(thumbX, thumbY, thumbWidth, thumbHeight, cornerSize, 1.0f);
+    
+    // Phase 2 UI: Grip lines on thumb
+    g.setColour(getAccentOrange().withAlpha(button.getToggleState() ? 0.7f : 0.3f));
+    float lineX = thumbX + thumbWidth * 0.5f;
+    for (int i = -1; i <= 1; ++i) {
+        float lineY = thumbY + thumbHeight * 0.5f + i * 3.0f;
+        g.drawLine(lineX - 4, lineY, lineX + 4, lineY, 1.0f);
+    }
 }
 
 void MetalLookAndFeel::drawLinearSlider(juce::Graphics& g, int x, int y, int width, int height,
@@ -292,78 +333,96 @@ void MetalLookAndFeel::drawLinearSlider(juce::Graphics& g, int x, int y, int wid
         return;
     }
     
-    const float trackWidth = 24.0f;  // Slightly wider track for better visibility
+    const float trackWidth = 22.0f;  // Phase 2 UI: Slightly narrower for cleaner look
     const float trackX = static_cast<float>(x) + (static_cast<float>(width) - trackWidth) * 0.5f;
-    const float thumbMargin = 12.0f;  // Space at top and bottom for thumb
+    const float thumbMargin = 14.0f;  // Space at top and bottom for thumb
     const float trackHeight = static_cast<float>(height) - thumbMargin * 2.0f;
     const float trackY = static_cast<float>(y) + thumbMargin;
-    const float cornerRadius = 8.0f;
+    const float cornerRadius = 6.0f;  // Phase 2 UI: Slightly less rounded
     
-    // Track background (dark with subtle depth)
+    // Track background (dark with gradient depth)
     juce::Rectangle<float> trackBounds(trackX, trackY, trackWidth, trackHeight);
     
-    // Inner shadow effect
-    g.setColour(juce::Colour(0xff0d0d0d));
-    g.fillRoundedRectangle(trackBounds.expanded(1), cornerRadius + 1);
+    // Phase 2 UI: Outer shadow for depth
+    g.setColour(juce::Colour(0xff080808));
+    g.fillRoundedRectangle(trackBounds.expanded(2), cornerRadius + 2);
     
-    g.setColour(juce::Colour(0xff1a1a1a));
+    // Phase 2 UI: Track gradient from dark to slightly lighter (depth effect)
+    juce::ColourGradient trackGrad(juce::Colour(0xff1c1c1c), trackBounds.getCentreX(), trackBounds.getY(),
+                                    juce::Colour(0xff0f0f0f), trackBounds.getCentreX(), trackBounds.getBottom(), false);
+    g.setGradientFill(trackGrad);
     g.fillRoundedRectangle(trackBounds, cornerRadius);
     
-    // Track border with subtle glow
-    g.setColour(getMetalDark());
-    g.drawRoundedRectangle(trackBounds, cornerRadius, 1.5f);
+    // Track border
+    g.setColour(getMetalDark().brighter(0.1f));
+    g.drawRoundedRectangle(trackBounds, cornerRadius, 1.0f);
     
     // Calculate fill based on slider position (inverted for vertical)
     float normalizedPos = 1.0f - (sliderPos - static_cast<float>(y)) / static_cast<float>(height);
     normalizedPos = juce::jlimit(0.0f, 1.0f, normalizedPos);
     float fillHeight = trackHeight * normalizedPos;
     
-    // Orange fill from bottom
+    // Phase 2 UI: Orange fill from bottom with enhanced glow
     if (fillHeight > 2.0f) {
         juce::Rectangle<float> fillBounds(trackX + 3, trackY + trackHeight - fillHeight + 2, 
                                            trackWidth - 6, fillHeight - 4);
         
-        // Gradient fill for glow effect (vertical gradient for better appearance)
-        juce::ColourGradient fillGrad(getAccentOrangeBright(), fillBounds.getCentreX(), fillBounds.getY(),
-                                       getAccentOrange().darker(0.2f), fillBounds.getCentreX(), fillBounds.getBottom(), false);
-        g.setGradientFill(fillGrad);
-        g.fillRoundedRectangle(fillBounds, cornerRadius - 3);
+        // Phase 2 UI: Outer glow layer
+        g.setColour(getAccentOrange().withAlpha(0.2f));
+        g.fillRoundedRectangle(fillBounds.expanded(4), cornerRadius);
         
-        // Glow effect around fill
-        g.setColour(getAccentOrange().withAlpha(0.4f));
-        g.drawRoundedRectangle(fillBounds.expanded(1), cornerRadius - 2, 2.0f);
+        // Phase 2 UI: Middle glow layer
+        g.setColour(getAccentOrange().withAlpha(0.35f));
+        g.fillRoundedRectangle(fillBounds.expanded(2), cornerRadius - 1);
+        
+        // Gradient fill (brighter at center for tube-like effect)
+        juce::ColourGradient fillGrad(getAccentOrangeBright().brighter(0.2f), fillBounds.getCentreX(), fillBounds.getY(),
+                                       getAccentOrange().darker(0.1f), fillBounds.getCentreX(), fillBounds.getBottom(), false);
+        g.setGradientFill(fillGrad);
+        g.fillRoundedRectangle(fillBounds, cornerRadius - 2);
+        
+        // Phase 2 UI: Inner highlight for glossy effect
+        g.setColour(juce::Colours::white.withAlpha(0.15f));
+        g.fillRoundedRectangle(fillBounds.getX() + 2, fillBounds.getY() + 1, 
+                               fillBounds.getWidth() * 0.3f, fillBounds.getHeight() - 2, cornerRadius - 3);
     }
     
-    // Thumb/handle - wider for easier grabbing
-    const float thumbHeight = 18.0f;
-    const float thumbWidth = trackWidth + 10.0f;
-    const float thumbX = trackX - 5.0f;
+    // Phase 2 UI: Thumb/handle - wider with better metal texture
+    const float thumbHeight = 20.0f;
+    const float thumbWidth = trackWidth + 14.0f;
+    const float thumbX = trackX - 7.0f;
     const float thumbY = juce::jlimit(static_cast<float>(y), 
                                        static_cast<float>(y + height) - thumbHeight, 
                                        sliderPos - thumbHeight * 0.5f);
     
-    // Thumb shadow
-    g.setColour(juce::Colours::black.withAlpha(0.5f));
-    g.fillRoundedRectangle(thumbX + 2, thumbY + 2, thumbWidth, thumbHeight, 4.0f);
+    // Thumb shadow (larger, softer)
+    g.setColour(juce::Colours::black.withAlpha(0.6f));
+    g.fillRoundedRectangle(thumbX + 2, thumbY + 3, thumbWidth, thumbHeight, 5.0f);
     
-    // Thumb body - brushed metal gradient
-    juce::ColourGradient thumbGrad(getMetalLight().brighter(0.1f), thumbX, thumbY,
-                                    getMetalGrey().darker(0.1f), thumbX, thumbY + thumbHeight, false);
+    // Thumb body - brushed metal gradient with beveled edges
+    juce::ColourGradient thumbGrad(getMetalLight().brighter(0.15f), thumbX, thumbY,
+                                    getMetalGrey(), thumbX, thumbY + thumbHeight * 0.5f, false);
+    thumbGrad.addColour(0.5, getMetalGrey());
+    thumbGrad.addColour(1.0, getMetalGrey().darker(0.2f));
     g.setGradientFill(thumbGrad);
-    g.fillRoundedRectangle(thumbX, thumbY, thumbWidth, thumbHeight, 4.0f);
+    g.fillRoundedRectangle(thumbX, thumbY, thumbWidth, thumbHeight, 5.0f);
     
-    // Thumb highlight (top edge)
-    g.setColour(juce::Colours::white.withAlpha(0.15f));
-    g.drawLine(thumbX + 4, thumbY + 2, thumbX + thumbWidth - 4, thumbY + 2, 1.0f);
+    // Phase 2 UI: Top bevel highlight
+    g.setColour(juce::Colours::white.withAlpha(0.25f));
+    g.drawLine(thumbX + 5, thumbY + 2, thumbX + thumbWidth - 5, thumbY + 2, 1.5f);
+    
+    // Phase 2 UI: Left edge highlight for 3D effect
+    g.setColour(juce::Colours::white.withAlpha(0.1f));
+    g.drawLine(thumbX + 2, thumbY + 4, thumbX + 2, thumbY + thumbHeight - 4, 1.0f);
     
     // Thumb border
     g.setColour(getMetalDark());
-    g.drawRoundedRectangle(thumbX, thumbY, thumbWidth, thumbHeight, 4.0f, 1.0f);
+    g.drawRoundedRectangle(thumbX, thumbY, thumbWidth, thumbHeight, 5.0f, 1.0f);
     
-    // Thumb grip lines (orange accent)
-    g.setColour(getAccentOrange().withAlpha(0.6f));
+    // Phase 2 UI: Grip lines (orange accent, thicker)
+    g.setColour(getAccentOrange().withAlpha(0.7f));
     for (int i = -1; i <= 1; ++i) {
-        float lineY = thumbY + thumbHeight * 0.5f + i * 3.5f;
-        g.drawLine(thumbX + 6, lineY, thumbX + thumbWidth - 6, lineY, 1.5f);
+        float lineY = thumbY + thumbHeight * 0.5f + i * 4.0f;
+        g.drawLine(thumbX + 8, lineY, thumbX + thumbWidth - 8, lineY, 1.5f);
     }
 }

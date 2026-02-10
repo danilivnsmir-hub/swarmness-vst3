@@ -351,8 +351,10 @@ void SwarmnesssAudioProcessorEditor::drawSectionFrame(juce::Graphics& g, juce::R
     shadowPath.addRoundedRectangle(bounds.toFloat(), cornerSize);
     shadow.drawForPath(g, shadowPath);
     
-    // Semi-transparent dark background
-    g.setColour(juce::Colour(0xe00f0f0f));
+    // Phase 2 UI: Gradient background (from #141414 top to #0F0F0F bottom)
+    juce::ColourGradient bgGrad(juce::Colour(0xe0141414), bounds.toFloat().getCentreX(), bounds.toFloat().getY(),
+                                 juce::Colour(0xe00a0a0a), bounds.toFloat().getCentreX(), bounds.toFloat().getBottom(), false);
+    g.setGradientFill(bgGrad);
     g.fillRoundedRectangle(bounds.toFloat(), cornerSize);
     
     // Orange glow effect
@@ -362,6 +364,22 @@ void SwarmnesssAudioProcessorEditor::drawSectionFrame(juce::Graphics& g, juce::R
     // Orange border
     g.setColour(juce::Colour(0xffFF8C00));
     g.drawRoundedRectangle(bounds.toFloat().reduced(borderWidth * 0.5f), cornerSize, borderWidth);
+    
+    // Phase 2 UI: Inner highlight (1px light line at top edge)
+    {
+        juce::Path highlightPath;
+        auto innerBounds = bounds.toFloat().reduced(3.0f);
+        highlightPath.addArc(innerBounds.getX() + cornerSize, innerBounds.getY(), 
+                            (innerBounds.getWidth() - cornerSize * 2), cornerSize * 2,
+                            -juce::MathConstants<float>::pi, 0.0f, true);
+        g.setColour(juce::Colour(0x302A2A2A));
+        g.strokePath(highlightPath, juce::PathStrokeType(1.0f));
+        
+        // Simple horizontal line highlight
+        g.setColour(juce::Colour(0x282A2A2A));
+        g.drawLine(bounds.toFloat().getX() + cornerSize + 2, bounds.toFloat().getY() + 2.5f,
+                   bounds.toFloat().getRight() - cornerSize - 2, bounds.toFloat().getY() + 2.5f, 1.0f);
+    }
     
     // Section title
     g.setColour(juce::Colours::white);
@@ -380,8 +398,10 @@ void SwarmnesssAudioProcessorEditor::drawCombinedSectionFrame(juce::Graphics& g,
     shadowPath.addRoundedRectangle(bounds.toFloat(), cornerSize);
     shadow.drawForPath(g, shadowPath);
     
-    // Semi-transparent dark background
-    g.setColour(juce::Colour(0xe00f0f0f));
+    // Phase 2 UI: Gradient background (from #141414 top to #0F0F0F bottom)
+    juce::ColourGradient bgGrad(juce::Colour(0xe0141414), bounds.toFloat().getCentreX(), bounds.toFloat().getY(),
+                                 juce::Colour(0xe00a0a0a), bounds.toFloat().getCentreX(), bounds.toFloat().getBottom(), false);
+    g.setGradientFill(bgGrad);
     g.fillRoundedRectangle(bounds.toFloat(), cornerSize);
     
     // Orange glow effect
@@ -391,6 +411,22 @@ void SwarmnesssAudioProcessorEditor::drawCombinedSectionFrame(juce::Graphics& g,
     // Orange border
     g.setColour(juce::Colour(0xffFF8C00));
     g.drawRoundedRectangle(bounds.toFloat().reduced(borderWidth * 0.5f), cornerSize, borderWidth);
+    
+    // Phase 2 UI: Inner highlight (1px light line at top edge)
+    {
+        juce::Path highlightPath;
+        auto innerBounds = bounds.toFloat().reduced(3.0f);
+        highlightPath.addArc(innerBounds.getX() + cornerSize, innerBounds.getY(), 
+                            (innerBounds.getWidth() - cornerSize * 2), cornerSize * 2,
+                            -juce::MathConstants<float>::pi, 0.0f, true);
+        g.setColour(juce::Colour(0x302A2A2A));
+        g.strokePath(highlightPath, juce::PathStrokeType(1.0f));
+        
+        // Simple horizontal line highlight
+        g.setColour(juce::Colour(0x282A2A2A));
+        g.drawLine(bounds.toFloat().getX() + cornerSize + 2, bounds.toFloat().getY() + 2.5f,
+                   bounds.toFloat().getRight() - cornerSize - 2, bounds.toFloat().getY() + 2.5f, 1.0f);
+    }
     
     // Combined title: "VOLTAGE"
     g.setColour(juce::Colours::white);
@@ -415,7 +451,7 @@ void SwarmnesssAudioProcessorEditor::paint(juce::Graphics& g) {
     // Version number (top right, below info button area)
     g.setColour(MetalLookAndFeel::getTextDim());
     g.setFont(juce::Font(11.0f));
-    g.drawText("v3.2.4", getWidth() - 70, 20, 60, 20, juce::Justification::centredRight);
+    g.drawText("v3.2.5", getWidth() - 70, 20, 60, 20, juce::Justification::centredRight);
 
     // Draw section frames
     // Top row: PITCH+MODULATION (combined large), TONE
