@@ -169,7 +169,7 @@ void SwarmnesssAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
     mPitchShifter.setRiseTime(riseMs);
     
     // Update PitchRandomizer (RANGE and SPEED knobs) - only when VOLTAGE section is active
-    float randomRange = octaveActive ? *pRandomRange : 0.0f;  // Now directly 0-24 semitones (int parameter)
+    float randomRange = octaveActive ? pRandomRange->load() : 0.0f;  // Now directly 0-24 semitones (int parameter)
     float randomRate = 0.1f + *pRandomRate * 9.9f;  // 0.1-10 Hz
     mPitchRandomizer.setRandomRange(randomRange);
     mPitchRandomizer.setRandomRate(randomRate);
