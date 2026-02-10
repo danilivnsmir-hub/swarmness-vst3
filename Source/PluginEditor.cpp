@@ -365,11 +365,11 @@ void SwarmnesssAudioProcessorEditor::updateSectionEnableStates() {
 }
 
 void SwarmnesssAudioProcessorEditor::paint(juce::Graphics& g) {
-    const int headerHeight = 50;
+    const int headerHeight = 60;
     const int leftPanelWidth = 70;
     const int rightPanelWidth = 70;
     
-    // v1.2.0: Dark background
+    // v1.2.3: Dark background
     g.fillAll(juce::Colour(0xff1A1A1A));
     
     // Draw background image in content area (if valid)
@@ -377,20 +377,24 @@ void SwarmnesssAudioProcessorEditor::paint(juce::Graphics& g) {
         auto contentArea = juce::Rectangle<float>((float)leftPanelWidth, (float)headerHeight, 
                                                    (float)(getWidth() - leftPanelWidth - rightPanelWidth), 
                                                    (float)(getHeight() - headerHeight));
-        g.setOpacity(0.3f);  // Subtle background
+        g.setOpacity(0.3f);
         g.drawImage(backgroundImage, contentArea, juce::RectanglePlacement::stretchToFit);
         g.setOpacity(1.0f);
     }
     
-    // === HEADER SECTION v1.2.0 ===
-    g.setColour(juce::Colour(0xff1F1F1F));
+    // === UNIFIED HEADER PANEL v1.2.3 ===
+    g.setColour(juce::Colour(0xff1A1A1A));
     g.fillRect(0, 0, getWidth(), headerHeight);
     
-    // Draw header logo
+    // Orange bottom line
+    g.setColour(MetalLookAndFeel::getAccentOrange());
+    g.fillRect(0, headerHeight - 1, getWidth(), 1);
+    
+    // Draw header logo (centered)
     if (headerLogoImage.isValid()) {
-        float logoScale = (float)(headerHeight - 16) / (float)headerLogoImage.getHeight();
+        float logoH = 40.0f;
+        float logoScale = logoH / (float)headerLogoImage.getHeight();
         float logoW = headerLogoImage.getWidth() * logoScale;
-        float logoH = headerLogoImage.getHeight() * logoScale;
         float logoX = (getWidth() - logoW) * 0.5f;
         float logoY = (headerHeight - logoH) * 0.5f;
         
@@ -407,7 +411,7 @@ void SwarmnesssAudioProcessorEditor::paint(juce::Graphics& g) {
     // === RIGHT PANEL (OUTPUT) ===
     g.fillRect(getWidth() - rightPanelWidth, headerHeight, rightPanelWidth, getHeight() - headerHeight);
     
-    // === DIVIDER LINES v1.2.0 ===
+    // === DIVIDER LINES v1.2.3 ===
     g.setColour(juce::Colour(0xff333333));
     
     // Vertical dividers
@@ -415,22 +419,37 @@ void SwarmnesssAudioProcessorEditor::paint(juce::Graphics& g) {
     g.drawLine((float)(getWidth() - rightPanelWidth), (float)headerHeight, 
                (float)(getWidth() - rightPanelWidth), (float)getHeight(), 1.0f);
     
-    // v1.2.1: Horizontal divider between VOLTAGE and SWARM/FLOW
-    int dividerY = 230;
+    // Horizontal divider between VOLTAGE and SWARM/FLOW
+    int dividerY = 240;
     g.drawLine((float)leftPanelWidth, (float)dividerY, (float)(getWidth() - rightPanelWidth), (float)dividerY, 1.0f);
     
     // Vertical divider between SWARM and FLOW
     int centerX = getWidth() / 2;
     g.drawLine((float)centerX, (float)dividerY, (float)centerX, (float)(getHeight() - 85), 1.0f);
     
-    // === SECTION TITLES v1.2.0 ===
+    // === VOLTAGE SECTION FRAME v1.2.3 ===
+    int voltageLeft = leftPanelWidth + 10;
+    int voltageTop = headerHeight + 6;
+    int voltageWidth = getWidth() - leftPanelWidth - rightPanelWidth - 20;
+    int voltageHeight = dividerY - voltageTop - 6;
+    
+    // Section frame
+    g.setColour(juce::Colour(0xff2A2A2A));
+    g.fillRoundedRectangle((float)voltageLeft, (float)voltageTop, (float)voltageWidth, (float)voltageHeight, 8.0f);
+    g.setColour(juce::Colour(0xff404040));
+    g.drawRoundedRectangle((float)voltageLeft, (float)voltageTop, (float)voltageWidth, (float)voltageHeight, 8.0f, 1.0f);
+    
+    // Vertical divider between PITCH and MODULATION (in middle of VOLTAGE)
+    int pitchModDividerX = voltageLeft + voltageWidth / 2;
+    g.setColour(juce::Colour(0xff404040));
+    g.drawLine((float)pitchModDividerX, (float)(voltageTop + 25), (float)pitchModDividerX, (float)(voltageTop + voltageHeight - 10), 1.0f);
+    
+    // === SECTION TITLES v1.2.3 ===
     g.setColour(MetalLookAndFeel::getAccentOrange());
     g.setFont(juce::Font(13.0f, juce::Font::bold));
     
-    // VOLTAGE title (center top)
-    int voltageX = leftPanelWidth + 10;
-    int voltageWidth = getWidth() - leftPanelWidth - rightPanelWidth - 20;
-    g.drawText("VOLTAGE", voltageX, headerHeight + 8, voltageWidth - 40, 18, juce::Justification::centred);
+    // VOLTAGE title (top center of frame)
+    g.drawText("VOLTAGE", voltageLeft, voltageTop + 6, voltageWidth - 40, 18, juce::Justification::centred);
     
     // SWARM title (center bottom left)
     int swarmWidth = (getWidth() - leftPanelWidth - rightPanelWidth) / 2;
@@ -442,14 +461,14 @@ void SwarmnesssAudioProcessorEditor::paint(juce::Graphics& g) {
     // Version number (bottom right corner)
     g.setColour(MetalLookAndFeel::getTextDim());
     g.setFont(juce::Font(10.0f));
-    g.drawText("v1.2.2", getWidth() - 60, getHeight() - 18, 50, 14, juce::Justification::centredRight);
+    g.drawText("v1.2.3", getWidth() - 60, getHeight() - 18, 50, 14, juce::Justification::centredRight);
 }
 
 void SwarmnesssAudioProcessorEditor::resized() {
     const int knobSize = 55;
     const int smallKnobSize = 50;
     const int comboHeight = 22;
-    const int headerHeight = 50;
+    const int headerHeight = 60;
     const int leftPanelWidth = 70;
     const int rightPanelWidth = 70;
     const int faderWidth = 30;
@@ -457,13 +476,13 @@ void SwarmnesssAudioProcessorEditor::resized() {
     const int powerButtonSize = 24;
     
     // === Preset Selector and Buttons (top-left in header) ===
-    presetSelector.setBounds(10, 12, 100, 26);
-    savePresetButton.setBounds(115, 12, 45, 26);
-    exportPresetButton.setBounds(165, 12, 55, 26);
-    importPresetButton.setBounds(225, 12, 55, 26);
+    presetSelector.setBounds(10, 17, 100, 26);
+    savePresetButton.setBounds(115, 17, 45, 26);
+    exportPresetButton.setBounds(165, 17, 55, 26);
+    importPresetButton.setBounds(225, 17, 55, 26);
     
     // === Info Button (top-right in header) ===
-    infoButton.setBounds(getWidth() - 35, 12, 26, 26);
+    infoButton.setBounds(getWidth() - 35, 17, 26, 26);
     
     // Info Panel (full screen overlay)
     infoPanel.setBounds(getLocalBounds());
@@ -512,46 +531,47 @@ void SwarmnesssAudioProcessorEditor::resized() {
         volumeValueLabel.setBounds(baseX - 5, startY + spacing * 2 + faderHeight + 13, 50, 11);
     }
     
-    // === CENTER TOP: VOLTAGE Section ===
+    // === CENTER TOP: VOLTAGE Section (v1.2.3 unified layout) ===
     {
         int sectionX = leftPanelWidth + 10;
         int sectionWidth = getWidth() - leftPanelWidth - rightPanelWidth - 20;
-        int baseY = headerHeight + 26;
+        int baseY = headerHeight + 30;
+        int halfWidth = sectionWidth / 2;
         
-        // Power button (top-right of section title)
-        pitchBypassButton.setBounds(sectionX + sectionWidth - 30, headerHeight + 6, powerButtonSize, powerButtonSize);
+        // Power button (top-right of VOLTAGE frame)
+        pitchBypassButton.setBounds(sectionX + sectionWidth - 30, headerHeight + 10, powerButtonSize, powerButtonSize);
         
-        // Left side: PITCH
-        int pitchX = sectionX + 5;
-        pitchSubLabel.setBounds(pitchX, baseY, 180, 14);
+        // === LEFT HALF: PITCH ===
+        int pitchX = sectionX + 15;
+        pitchSubLabel.setBounds(pitchX, baseY, halfWidth - 30, 14);
         
-        // Octave dropdown (v1.2.2: wider to show full text)
+        // Octave dropdown
         octaveModeBox.setBounds(pitchX, baseY + 18, 85, comboHeight);
         
-        // v1.2.1: RANGE, SPEED, RISE in a row
-        int knobY = baseY + 46;
-        int knobSpacing = 58;
+        // RANGE, SPEED knobs aligned horizontally
+        int knobY = baseY + 48;
+        int knobSpacing = 60;
         pitchRangeKnob.setBounds(pitchX, knobY, knobSize, knobSize + 22);
         pitchSpeedKnob.setBounds(pitchX + knobSpacing, knobY, knobSize, knobSize + 22);
         
-        // RISE Vertical Fader (next to SPEED)
-        int riseX = pitchX + knobSpacing * 2 + 10;
-        riseFader.setBounds(riseX, knobY + 5, 28, 70);
-        riseFaderLabel.setBounds(riseX - 3, knobY + 75, 35, 12);
-        riseFaderValueLabel.setBounds(riseX - 8, knobY + 86, 45, 12);
+        // RISE Vertical Fader (between PITCH and MODULATION)
+        int riseX = sectionX + halfWidth - 35;
+        riseFader.setBounds(riseX, knobY + 2, 28, 68);
+        riseFaderLabel.setBounds(riseX - 5, knobY + 70, 40, 12);
+        riseFaderValueLabel.setBounds(riseX - 10, knobY + 81, 50, 12);
         
-        // Right side: MODULATION (v1.2.2: closer to PITCH for compact layout)
-        int modX = sectionX + 260;  // Fixed offset for compact layout
-        modulationSubLabel.setBounds(modX, baseY, 180, 14);
+        // === RIGHT HALF: MODULATION ===
+        int modX = sectionX + halfWidth + 20;
+        modulationSubLabel.setBounds(modX, baseY, halfWidth - 40, 14);
         
-        // ANGER, RUSH, RATE knobs (same size as PITCH knobs)
+        // ANGER, RUSH, RATE knobs aligned horizontally
         angerKnob.setBounds(modX, knobY, knobSize, knobSize + 22);
         rushKnob.setBounds(modX + knobSpacing, knobY, knobSize, knobSize + 22);
         modRateKnob.setBounds(modX + knobSpacing * 2, knobY, knobSize, knobSize + 22);
     }
     
     // === CENTER BOTTOM: SWARM + FLOW ===
-    int dividerY = 230;
+    int dividerY = 240;
     int swarmFlowWidth = (getWidth() - leftPanelWidth - rightPanelWidth) / 2;
     
     // SWARM Section (left)
