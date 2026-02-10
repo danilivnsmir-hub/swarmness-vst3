@@ -8,6 +8,9 @@
 class PowerButton : public juce::Button {
 public:
     PowerButton() : juce::Button("PowerButton") {
+        // Enable toggle behavior - base class handles state changes
+        setClickingTogglesState(true);
+        
         // Load the power button image
         powerImage = juce::ImageCache::getFromMemory(
             BinaryData::power_button_png, BinaryData::power_button_pngSize);
@@ -66,9 +69,9 @@ public:
         }
     }
     
-    void clicked() override {
-        setToggleState(!getToggleState(), juce::sendNotification);
-    }
+    // NOTE: Do NOT override clicked() - it causes infinite recursion when
+    // used with ButtonParameterAttachment. setClickingTogglesState(true) in
+    // constructor handles toggle behavior properly.
     
 private:
     juce::Image powerImage;
