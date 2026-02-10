@@ -7,6 +7,9 @@ RotaryKnob::RotaryKnob(const juce::String& labelText) {
     mSlider.setPopupDisplayEnabled(false, false, this);
     mSlider.addListener(this);
     addAndMakeVisible(mSlider);
+    
+    // Phase 3 UI: Start timer for smooth value transitions
+    startTimerHz(60);
 
     mLabel.setText(labelText, juce::dontSendNotification);
     mLabel.setJustificationType(juce::Justification::centred);
@@ -28,6 +31,7 @@ RotaryKnob::RotaryKnob(const juce::String& labelText) {
 }
 
 RotaryKnob::~RotaryKnob() {
+    stopTimer();  // Phase 3 UI: Stop animation timer
     mSlider.removeListener(this);
     mValueLabel.removeListener(this);
 }
@@ -35,6 +39,20 @@ RotaryKnob::~RotaryKnob() {
 void RotaryKnob::sliderValueChanged(juce::Slider* slider) {
     if (slider == &mSlider && !mIsEditingValue) {
         updateValueDisplay();
+        // Phase 3 UI: Set target for smooth animation
+        mTargetValue = static_cast<float>(mSlider.getValue());
+    }
+}
+
+// Phase 3 UI: Smooth value transitions
+void RotaryKnob::timerCallback() {
+    // Smoothly interpolate display value towards target
+    float diff = mTargetValue - mDisplayValue;
+    if (std::abs(diff) > 0.0001f) {
+        mDisplayValue += diff * kSmoothingCoeff;
+        // Store smoothed value for LookAndFeel to use
+        mSlider.getProperties().set("smoothedValue", mDisplayValue);
+        mSlider.repaint();
     }
 }
 
@@ -137,11 +155,30 @@ void RotaryKnob::resized() {
     
     // Initial value update
     updateValueDisplay();
+    
+    // Phase 3 UI: Initialize smoothed value
+    mTargetValue = static_cast<float>(mSlider.getValue());
+    mDisplayValue = mTargetValue;
 }
 
 void RotaryKnob::paint(juce::Graphics& g) {
     // Phase 1 UI improvement: Removed red LED indicators under knobs
     juce::ignoreUnused(g);
+}
+
+// Phase 3 UI: Hover effects
+void RotaryKnob::mouseEnter(const juce::MouseEvent& event) {
+    juce::ignoreUnused(event);
+    mIsHovered = true;
+    mSlider.getProperties().set("isHovered", true);
+    mSlider.repaint();
+}
+
+void RotaryKnob::mouseExit(const juce::MouseEvent& event) {
+    juce::ignoreUnused(event);
+    mIsHovered = false;
+    mSlider.getProperties().set("isHovered", false);
+    mSlider.repaint();
 }
 
 void RotaryKnob::setLabelText(const juce::String& text) {

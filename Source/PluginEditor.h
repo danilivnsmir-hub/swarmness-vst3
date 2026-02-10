@@ -68,7 +68,8 @@ private:
     RotaryKnob swarmDepthKnob{"DEPTH"};
     RotaryKnob swarmRateKnob{"RATE"};
     RotaryKnob swarmMixKnob{"MIX"};
-    juce::ToggleButton chorusModeButton{"DEEP"};
+    juce::ToggleButton chorusModeButton;  // Toggle without built-in text
+    juce::Label chorusModeLabel;  // "DEEP" label below toggle
 
     // === FLOW Section ===
     PowerButton flowPowerButton;

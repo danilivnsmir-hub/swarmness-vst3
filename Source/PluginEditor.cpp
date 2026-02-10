@@ -233,6 +233,13 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
     chorusModeButton.setColour(juce::ToggleButton::tickColourId, MetalLookAndFeel::getAccentOrange());
     chorusModeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
         audioProcessor.getAPVTS(), "chorusMode", chorusModeButton);
+    
+    // "DEEP" label under toggle (Phase 3 UI)
+    chorusModeLabel.setText("DEEP", juce::dontSendNotification);
+    chorusModeLabel.setJustificationType(juce::Justification::centred);
+    chorusModeLabel.setFont(juce::Font(11.0f));
+    chorusModeLabel.setColour(juce::Label::textColourId, MetalLookAndFeel::getAccentOrangeBright());
+    addAndMakeVisible(chorusModeLabel);
 
     // === FLOW Section (Stutter/Gate) ===
     addAndMakeVisible(flowPowerButton);
@@ -331,7 +338,7 @@ void SwarmnesssAudioProcessorEditor::updateSectionEnableStates() {
     // SWARM section
     bool swarmEnabled = swarmPowerButton.getToggleState();
     setSectionEnabled({
-        &swarmDepthKnob, &swarmRateKnob, &swarmMixKnob, &chorusModeButton
+        &swarmDepthKnob, &swarmRateKnob, &swarmMixKnob, &chorusModeButton, &chorusModeLabel
     }, swarmEnabled);
     
     // FLOW section
@@ -451,7 +458,7 @@ void SwarmnesssAudioProcessorEditor::paint(juce::Graphics& g) {
     // Version number (top right, below info button area)
     g.setColour(MetalLookAndFeel::getTextDim());
     g.setFont(juce::Font(11.0f));
-    g.drawText("v3.2.5", getWidth() - 70, 20, 60, 20, juce::Justification::centredRight);
+    g.drawText("v3.2.6", getWidth() - 70, 20, 60, 20, juce::Justification::centredRight);
 
     // Draw section frames
     // Top row: PITCH+MODULATION (combined large), TONE
@@ -557,8 +564,11 @@ void SwarmnesssAudioProcessorEditor::resized() {
         swarmRateKnob.setBounds(baseX + 15 + spacing, knobY, smallKnobSize, smallKnobSize + 30);
         swarmMixKnob.setBounds(baseX + 15 + spacing * 2, knobY, smallKnobSize, smallKnobSize + 30);
         
-        // MODE toggle
-        chorusModeButton.setBounds(baseX + 15 + spacing * 3, knobY + 20, toggleSize + 25, toggleSize);
+        // MODE toggle + DEEP label (Phase 3 UI)
+        int toggleX = baseX + 15 + spacing * 3;
+        int toggleY = knobY + 15;
+        chorusModeButton.setBounds(toggleX, toggleY, toggleSize + 25, toggleSize);
+        chorusModeLabel.setBounds(toggleX, toggleY + toggleSize + 2, toggleSize + 25, 14);
     }
 
     // === FLOW Section (340, 325, 310, 180) ===

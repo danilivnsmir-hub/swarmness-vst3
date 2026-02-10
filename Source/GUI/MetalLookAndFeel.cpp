@@ -24,7 +24,23 @@ void MetalLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int wid
     const float radius = juce::jmin(width / 2.0f, height / 2.0f) - 6.0f;
     const float centreX = x + width * 0.5f;
     const float centreY = y + height * 0.5f;
-    const float angle = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
+    
+    // Phase 3 UI: Use smoothed value for arc animation if available
+    float smoothedValue = slider.getProperties().getWithDefault("smoothedValue", -1.0f);
+    float normalizedPos = sliderPos;
+    if (smoothedValue >= 0.0f) {
+        // Convert smoothed value to normalized position
+        double range = slider.getMaximum() - slider.getMinimum();
+        if (range > 0.0) {
+            normalizedPos = static_cast<float>((smoothedValue - slider.getMinimum()) / range);
+            normalizedPos = juce::jlimit(0.0f, 1.0f, normalizedPos);
+        }
+    }
+    const float angle = rotaryStartAngle + normalizedPos * (rotaryEndAngle - rotaryStartAngle);
+    
+    // Phase 3 UI: Check hover state for brightness boost
+    bool isHovered = slider.getProperties().getWithDefault("isHovered", false);
+    float hoverBrightness = isHovered ? 0.08f : 0.0f;  // +8% brightness on hover
 
     // === OUTER HEXAGONAL BEZEL ===
     {
@@ -39,13 +55,17 @@ void MetalLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int wid
         }
         hexPath.closeSubPath();
         
-        // Hexagon gradient (brushed metal)
-        juce::ColourGradient hexGrad(getMetalMid(), centreX - hexRadius, centreY - hexRadius,
-                                      getMetalDark(), centreX + hexRadius, centreY + hexRadius, false);
+        // Hexagon gradient (brushed metal) - Phase 3 UI: brighter on hover
+        juce::ColourGradient hexGrad(getMetalMid().brighter(hoverBrightness), centreX - hexRadius, centreY - hexRadius,
+                                      getMetalDark().brighter(hoverBrightness), centreX + hexRadius, centreY + hexRadius, false);
         g.setGradientFill(hexGrad);
         g.fillPath(hexPath);
         
-        // Hex border
+        // Hex border - Phase 3 UI: add orange tint on hover
+        if (isHovered) {
+            g.setColour(getAccentOrange().withAlpha(0.3f));
+            g.strokePath(hexPath, juce::PathStrokeType(2.0f));
+        }
         g.setColour(juce::Colours::black.withAlpha(0.6f));
         g.strokePath(hexPath, juce::PathStrokeType(1.5f));
     }

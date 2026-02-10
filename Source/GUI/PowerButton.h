@@ -5,7 +5,8 @@
 // Power button that uses the 2x2 grid from power_button.png
 // Top-left: gray OFF, Top-right: orange ON
 // Bottom-left: gray OFF alt, Bottom-right: orange ON alt
-class PowerButton : public juce::Button {
+// Phase 3 UI: Includes glow pulse animation on enable
+class PowerButton : public juce::Button, public juce::Timer {
 public:
     PowerButton() : juce::Button("PowerButton") {
         // Enable toggle behavior - base class handles state changes
@@ -16,9 +17,26 @@ public:
             BinaryData::power_button_png, BinaryData::power_button_pngSize);
     }
     
+    ~PowerButton() override {
+        stopTimer();
+    }
+    
     void paintButton(juce::Graphics& g, bool shouldDrawButtonAsHighlighted, 
                      bool shouldDrawButtonAsDown) override {
         auto bounds = getLocalBounds().toFloat();
+        
+        // Phase 3 UI: Draw animated glow pulse when ON
+        if (getToggleState() && mGlowAlpha > 0.0f) {
+            float glowRadius = bounds.getWidth() * 0.6f;
+            juce::ColourGradient glowGrad(
+                juce::Colour(0xffFF8C00).withAlpha(mGlowAlpha * 0.6f),
+                bounds.getCentreX(), bounds.getCentreY(),
+                juce::Colour(0xffFF8C00).withAlpha(0.0f),
+                bounds.getCentreX() + glowRadius, bounds.getCentreY(), true);
+            g.setGradientFill(glowGrad);
+            g.fillEllipse(bounds.getCentreX() - glowRadius, bounds.getCentreY() - glowRadius,
+                         glowRadius * 2.0f, glowRadius * 2.0f);
+        }
         
         if (powerImage.isValid()) {
             // Image is 2x2 grid - use top row (simpler look)
@@ -69,12 +87,36 @@ public:
         }
     }
     
+    // Phase 3 UI: Trigger glow pulse when state changes to ON
+    void buttonStateChanged() override {
+        if (getToggleState() && !mWasOn) {
+            // Just turned ON - start glow pulse animation
+            mGlowAlpha = 1.0f;
+            startTimerHz(60);
+        }
+        mWasOn = getToggleState();
+    }
+    
+    // Phase 3 UI: Animate glow fade out
+    void timerCallback() override {
+        mGlowAlpha -= 0.05f;  // Fade out over ~300ms
+        if (mGlowAlpha <= 0.0f) {
+            mGlowAlpha = 0.0f;
+            stopTimer();
+        }
+        repaint();
+    }
+    
     // NOTE: Do NOT override clicked() - it causes infinite recursion when
     // used with ButtonParameterAttachment. setClickingTogglesState(true) in
     // constructor handles toggle behavior properly.
     
 private:
     juce::Image powerImage;
+    
+    // Phase 3 UI: Glow animation state
+    float mGlowAlpha = 0.0f;
+    bool mWasOn = false;
     
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PowerButton)
 };
