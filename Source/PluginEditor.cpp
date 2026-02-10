@@ -108,7 +108,8 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
                 juce::MessageBoxIconType::QuestionIcon,
                 "Delete Preset?",
                 "Are you sure you want to delete \"" + presetName + "\"?",
-                "Delete", "Cancel");
+                "Delete", "Cancel",
+                nullptr, nullptr);
             if (ret) {
                 audioProcessor.getPresetManager().deletePreset(presetName);
                 refreshPresetList();
