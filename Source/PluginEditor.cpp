@@ -473,21 +473,24 @@ void SwarmnesssAudioProcessorEditor::paint(juce::Graphics& g) {
     
     // Draw header logo centered
     if (headerLogoImage.isValid()) {
-        // Scale logo to fit header while maintaining aspect ratio
+        // v1.0.1: Scale logo to fit header while maintaining aspect ratio with high-quality interpolation
         float logoScale = (float)(headerHeight - 16) / (float)headerLogoImage.getHeight();
-        int logoW = (int)(headerLogoImage.getWidth() * logoScale);
-        int logoH = (int)(headerLogoImage.getHeight() * logoScale);
-        int logoX = (getWidth() - logoW) / 2;
-        int logoY = (headerHeight - logoH) / 2;
+        float logoW = headerLogoImage.getWidth() * logoScale;
+        float logoH = headerLogoImage.getHeight() * logoScale;
+        float logoX = (getWidth() - logoW) * 0.5f;
+        float logoY = (headerHeight - logoH) * 0.5f;
         
-        g.drawImage(headerLogoImage, logoX, logoY, logoW, logoH,
-                    0, 0, headerLogoImage.getWidth(), headerLogoImage.getHeight());
+        // v1.0.1: Use high-quality resampling for crisp logo
+        g.setImageResamplingQuality(juce::Graphics::highResamplingQuality);
+        g.drawImage(headerLogoImage, 
+                    juce::Rectangle<float>(logoX, logoY, logoW, logoH),
+                    juce::RectanglePlacement::centred);
     }
 
     // Version number (top right in header)
     g.setColour(MetalLookAndFeel::getTextDim());
     g.setFont(juce::Font(11.0f));
-    g.drawText("v1.0.0", getWidth() - 70, 25, 60, 20, juce::Justification::centredRight);
+    g.drawText("v1.0.1", getWidth() - 70, 25, 60, 20, juce::Justification::centredRight);
 
     // Draw section frames (shifted down by headerHeight)
     int topRowY = headerHeight + 10;  // 80
