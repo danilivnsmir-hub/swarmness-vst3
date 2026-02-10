@@ -74,7 +74,7 @@ private:
     PowerButton flowPowerButton;
     RotaryKnob flowAmountKnob{"AMOUNT"};
     RotaryKnob flowSpeedKnob{"SPEED"};
-    juce::ToggleButton flowModeButton{"HARD"};
+    // flowModeButton removed - flowMode is always true (Hard)
 
     // === OUTPUT Section (no power button) ===
     RotaryKnob mixKnob{"MIX"};
@@ -109,7 +109,7 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> mixAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> outputGainAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> flowEngageAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> flowModeAttachment;
+    // flowModeAttachment removed - flowMode is always true (Hard)
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> flowAmountAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> flowSpeedAttachment;
 

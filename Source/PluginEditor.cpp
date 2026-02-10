@@ -253,11 +253,7 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
     flowSpeedAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         audioProcessor.getAPVTS(), "flowSpeed", flowSpeedKnob.getSlider());
 
-    addAndMakeVisible(flowModeButton);
-    flowModeButton.setColour(juce::ToggleButton::textColourId, MetalLookAndFeel::getTextLight());
-    flowModeButton.setColour(juce::ToggleButton::tickColourId, MetalLookAndFeel::getAccentOrange());
-    flowModeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
-        audioProcessor.getAPVTS(), "flowMode", flowModeButton);
+    // flowModeButton removed - flowMode is always true (Hard mode)
 
     // === OUTPUT Section ===
     addAndMakeVisible(mixKnob);
@@ -341,7 +337,7 @@ void SwarmnesssAudioProcessorEditor::updateSectionEnableStates() {
     // FLOW section
     bool flowEnabled = flowPowerButton.getToggleState();
     setSectionEnabled({
-        &flowAmountKnob, &flowSpeedKnob, &flowModeButton
+        &flowAmountKnob, &flowSpeedKnob
     }, flowEnabled);
 }
 
@@ -384,10 +380,10 @@ void SwarmnesssAudioProcessorEditor::drawCombinedSectionFrame(juce::Graphics& g,
     g.setColour(juce::Colour(0xffFF8C00));
     g.drawRoundedRectangle(bounds.toFloat().reduced(borderWidth * 0.5f), cornerSize, borderWidth);
     
-    // Combined title: "PITCH + MODULATION"
+    // Combined title: "VOLTAGE"
     g.setColour(juce::Colours::white);
     g.setFont(juce::Font(14.0f, juce::Font::bold));
-    g.drawText("PITCH + MODULATION", bounds.getX(), bounds.getY() + 6, bounds.getWidth() - 45, 18, 
+    g.drawText("VOLTAGE", bounds.getX(), bounds.getY() + 6, bounds.getWidth() - 45, 18, 
                juce::Justification::centred, false);
 }
 
@@ -525,14 +521,11 @@ void SwarmnesssAudioProcessorEditor::resized() {
         // Power button in top-right corner
         flowPowerButton.setBounds(baseX + 310 - 40, baseY + 8, powerButtonSize, powerButtonSize);
         
-        // 2 knobs + toggle
+        // 2 knobs (flowModeButton removed - flowMode is always Hard)
         int knobY = baseY + 45;
         int spacing = 90;
         flowAmountKnob.setBounds(baseX + 25, knobY, smallKnobSize, smallKnobSize + 30);
         flowSpeedKnob.setBounds(baseX + 25 + spacing, knobY, smallKnobSize, smallKnobSize + 30);
-        
-        // MODE toggle
-        flowModeButton.setBounds(baseX + 25 + spacing * 2 + 10, knobY + 20, toggleSize + 25, toggleSize);
     }
 
     // === OUTPUT Section (665, 325, 320, 180) ===
