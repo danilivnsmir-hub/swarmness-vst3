@@ -29,6 +29,9 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
     savePresetButton.setColour(juce::TextButton::textColourOffId, MetalLookAndFeel::getAccentOrange());
     savePresetButton.onClick = [this]() {
         auto presetName = presetSelector.getText();
+        // v1.2.2: Strip existing dirty indicator before suggesting name
+        if (presetName.endsWith(" *"))
+            presetName = presetName.dropLastCharacters(2);
         if (presetName.isEmpty()) presetName = "New Preset";
         
         auto* window = new juce::AlertWindow("Save Preset", "Enter preset name:",
@@ -439,7 +442,7 @@ void SwarmnesssAudioProcessorEditor::paint(juce::Graphics& g) {
     // Version number (bottom right corner)
     g.setColour(MetalLookAndFeel::getTextDim());
     g.setFont(juce::Font(10.0f));
-    g.drawText("v1.2.1", getWidth() - 60, getHeight() - 18, 50, 14, juce::Justification::centredRight);
+    g.drawText("v1.2.2", getWidth() - 60, getHeight() - 18, 50, 14, juce::Justification::centredRight);
 }
 
 void SwarmnesssAudioProcessorEditor::resized() {
@@ -522,8 +525,8 @@ void SwarmnesssAudioProcessorEditor::resized() {
         int pitchX = sectionX + 5;
         pitchSubLabel.setBounds(pitchX, baseY, 180, 14);
         
-        // Octave dropdown
-        octaveModeBox.setBounds(pitchX, baseY + 18, 70, comboHeight);
+        // Octave dropdown (v1.2.2: wider to show full text)
+        octaveModeBox.setBounds(pitchX, baseY + 18, 85, comboHeight);
         
         // v1.2.1: RANGE, SPEED, RISE in a row
         int knobY = baseY + 46;
@@ -537,8 +540,8 @@ void SwarmnesssAudioProcessorEditor::resized() {
         riseFaderLabel.setBounds(riseX - 3, knobY + 75, 35, 12);
         riseFaderValueLabel.setBounds(riseX - 8, knobY + 86, 45, 12);
         
-        // Right side: MODULATION (starts after a divider)
-        int modX = sectionX + sectionWidth / 2 + 10;
+        // Right side: MODULATION (v1.2.2: closer to PITCH for compact layout)
+        int modX = sectionX + 260;  // Fixed offset for compact layout
         modulationSubLabel.setBounds(modX, baseY, 180, 14);
         
         // ANGER, RUSH, RATE knobs (same size as PITCH knobs)
