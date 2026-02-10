@@ -79,6 +79,21 @@ void MetalLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int wid
     g.setColour(juce::Colour(0x20FFFFFF));
     g.drawEllipse(centreX - radius + 1, centreY - radius + 1, (radius - 1) * 2.0f, (radius - 1) * 2.0f, 1.0f);
     
+    // v1.2.1: Arc fill showing parameter value
+    if (normalizedPos > 0.01f) {
+        const float arcRadius = radius + 4.0f;
+        const float arcThickness = 3.0f;
+        float fillAngle = startAngle + normalizedPos * (endAngle - startAngle);
+        
+        juce::Path arcPath;
+        arcPath.addArc(centreX - arcRadius, centreY - arcRadius, 
+                       arcRadius * 2.0f, arcRadius * 2.0f,
+                       startAngle, fillAngle, true);
+        
+        g.setColour(getAccentOrange());
+        g.strokePath(arcPath, juce::PathStrokeType(arcThickness, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    }
+    
     // v1.2.0: Orange indicator line from center
     g.setColour(getAccentOrange());
     const float indicatorLength = radius * 0.65f;

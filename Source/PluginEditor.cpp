@@ -282,8 +282,8 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
     // Start timer for LED updates and section enable states
     startTimerHz(30);
 
-    // v1.2.0: Set plugin window size (minimal layout)
-    setSize(850, 550);
+    // v1.2.1: Set plugin window size (compact layout)
+    setSize(780, 520);
     
     // Initial update of section enable states
     updateSectionEnableStates();
@@ -412,13 +412,13 @@ void SwarmnesssAudioProcessorEditor::paint(juce::Graphics& g) {
     g.drawLine((float)(getWidth() - rightPanelWidth), (float)headerHeight, 
                (float)(getWidth() - rightPanelWidth), (float)getHeight(), 1.0f);
     
-    // Horizontal divider between VOLTAGE and SWARM/FLOW (at y=280)
-    int dividerY = 260;
+    // v1.2.1: Horizontal divider between VOLTAGE and SWARM/FLOW
+    int dividerY = 230;
     g.drawLine((float)leftPanelWidth, (float)dividerY, (float)(getWidth() - rightPanelWidth), (float)dividerY, 1.0f);
     
     // Vertical divider between SWARM and FLOW
     int centerX = getWidth() / 2;
-    g.drawLine((float)centerX, (float)dividerY, (float)centerX, (float)(getHeight() - 100), 1.0f);
+    g.drawLine((float)centerX, (float)dividerY, (float)centerX, (float)(getHeight() - 85), 1.0f);
     
     // === SECTION TITLES v1.2.0 ===
     g.setColour(MetalLookAndFeel::getAccentOrange());
@@ -439,7 +439,7 @@ void SwarmnesssAudioProcessorEditor::paint(juce::Graphics& g) {
     // Version number (bottom right corner)
     g.setColour(MetalLookAndFeel::getTextDim());
     g.setFont(juce::Font(10.0f));
-    g.drawText("v1.2.0", getWidth() - 60, getHeight() - 20, 50, 14, juce::Justification::centredRight);
+    g.drawText("v1.2.1", getWidth() - 60, getHeight() - 18, 50, 14, juce::Justification::centredRight);
 }
 
 void SwarmnesssAudioProcessorEditor::resized() {
@@ -468,131 +468,132 @@ void SwarmnesssAudioProcessorEditor::resized() {
     // === LEFT PANEL: TONE (3 vertical faders) ===
     {
         int baseX = 10;
-        int startY = headerHeight + 30;
-        int spacing = 130;
+        int startY = headerHeight + 25;
+        int spacing = 120;
         
         // LOW CUT fader
         lowCutFader.setBounds(baseX + 5, startY, faderWidth, faderHeight);
-        lowCutLabel.setBounds(baseX - 5, startY + faderHeight + 2, 50, 12);
-        lowCutValueLabel.setBounds(baseX - 5, startY + faderHeight + 14, 50, 12);
+        lowCutLabel.setBounds(baseX - 5, startY + faderHeight + 2, 50, 11);
+        lowCutValueLabel.setBounds(baseX - 5, startY + faderHeight + 13, 50, 11);
         
         // HIGH CUT fader
         highCutFader.setBounds(baseX + 5, startY + spacing, faderWidth, faderHeight);
-        highCutLabel.setBounds(baseX - 5, startY + spacing + faderHeight + 2, 50, 12);
-        highCutValueLabel.setBounds(baseX - 5, startY + spacing + faderHeight + 14, 50, 12);
+        highCutLabel.setBounds(baseX - 5, startY + spacing + faderHeight + 2, 50, 11);
+        highCutValueLabel.setBounds(baseX - 5, startY + spacing + faderHeight + 13, 50, 11);
         
         // MID BOOST fader
         midBoostFader.setBounds(baseX + 5, startY + spacing * 2, faderWidth, faderHeight);
-        midBoostLabel.setBounds(baseX - 8, startY + spacing * 2 + faderHeight + 2, 56, 12);
-        midBoostValueLabel.setBounds(baseX - 5, startY + spacing * 2 + faderHeight + 14, 50, 12);
+        midBoostLabel.setBounds(baseX - 8, startY + spacing * 2 + faderHeight + 2, 56, 11);
+        midBoostValueLabel.setBounds(baseX - 5, startY + spacing * 2 + faderHeight + 13, 50, 11);
     }
     
     // === RIGHT PANEL: OUTPUT (3 vertical faders) ===
     {
         int baseX = getWidth() - rightPanelWidth + 10;
-        int startY = headerHeight + 30;
-        int spacing = 130;
+        int startY = headerHeight + 25;
+        int spacing = 120;
         
         // MIX fader
         mixFader.setBounds(baseX + 5, startY, faderWidth, faderHeight);
-        mixLabel.setBounds(baseX - 5, startY + faderHeight + 2, 50, 12);
-        mixValueLabel.setBounds(baseX - 5, startY + faderHeight + 14, 50, 12);
+        mixLabel.setBounds(baseX - 5, startY + faderHeight + 2, 50, 11);
+        mixValueLabel.setBounds(baseX - 5, startY + faderHeight + 13, 50, 11);
         
         // DRIVE fader
         driveFader.setBounds(baseX + 5, startY + spacing, faderWidth, faderHeight);
-        driveLabel.setBounds(baseX - 5, startY + spacing + faderHeight + 2, 50, 12);
-        driveValueLabel.setBounds(baseX - 5, startY + spacing + faderHeight + 14, 50, 12);
+        driveLabel.setBounds(baseX - 5, startY + spacing + faderHeight + 2, 50, 11);
+        driveValueLabel.setBounds(baseX - 5, startY + spacing + faderHeight + 13, 50, 11);
         
         // VOLUME fader
         volumeFader.setBounds(baseX + 5, startY + spacing * 2, faderWidth, faderHeight);
-        volumeLabel.setBounds(baseX - 5, startY + spacing * 2 + faderHeight + 2, 50, 12);
-        volumeValueLabel.setBounds(baseX - 5, startY + spacing * 2 + faderHeight + 14, 50, 12);
+        volumeLabel.setBounds(baseX - 5, startY + spacing * 2 + faderHeight + 2, 50, 11);
+        volumeValueLabel.setBounds(baseX - 5, startY + spacing * 2 + faderHeight + 13, 50, 11);
     }
     
     // === CENTER TOP: VOLTAGE Section ===
     {
         int sectionX = leftPanelWidth + 10;
         int sectionWidth = getWidth() - leftPanelWidth - rightPanelWidth - 20;
-        int baseY = headerHeight + 30;
+        int baseY = headerHeight + 26;
         
         // Power button (top-right of section title)
         pitchBypassButton.setBounds(sectionX + sectionWidth - 30, headerHeight + 6, powerButtonSize, powerButtonSize);
         
         // Left side: PITCH
-        int pitchX = sectionX + 10;
-        pitchSubLabel.setBounds(pitchX, baseY, 150, 14);
+        int pitchX = sectionX + 5;
+        pitchSubLabel.setBounds(pitchX, baseY, 180, 14);
         
         // Octave dropdown
-        octaveModeBox.setBounds(pitchX, baseY + 18, 75, comboHeight);
+        octaveModeBox.setBounds(pitchX, baseY + 18, 70, comboHeight);
         
-        // RANGE and SPEED knobs
-        int knobY = baseY + 50;
-        pitchRangeKnob.setBounds(pitchX, knobY, knobSize, knobSize + 25);
-        pitchSpeedKnob.setBounds(pitchX + 60, knobY, knobSize, knobSize + 25);
+        // v1.2.1: RANGE, SPEED, RISE in a row
+        int knobY = baseY + 46;
+        int knobSpacing = 58;
+        pitchRangeKnob.setBounds(pitchX, knobY, knobSize, knobSize + 22);
+        pitchSpeedKnob.setBounds(pitchX + knobSpacing, knobY, knobSize, knobSize + 22);
         
-        // RISE Vertical Fader (center)
-        int riseX = sectionX + sectionWidth / 2 - 20;
-        riseFader.setBounds(riseX, baseY + 20, 35, 90);
-        riseFaderLabel.setBounds(riseX - 5, baseY + 112, 45, 12);
-        riseFaderValueLabel.setBounds(riseX - 5, baseY + 124, 45, 12);
+        // RISE Vertical Fader (next to SPEED)
+        int riseX = pitchX + knobSpacing * 2 + 10;
+        riseFader.setBounds(riseX, knobY + 5, 28, 70);
+        riseFaderLabel.setBounds(riseX - 3, knobY + 75, 35, 12);
+        riseFaderValueLabel.setBounds(riseX - 8, knobY + 86, 45, 12);
         
-        // Right side: MODULATION
-        int modX = sectionX + sectionWidth / 2 + 40;
-        modulationSubLabel.setBounds(modX, baseY, 200, 14);
+        // Right side: MODULATION (starts after a divider)
+        int modX = sectionX + sectionWidth / 2 + 10;
+        modulationSubLabel.setBounds(modX, baseY, 180, 14);
         
-        // ANGER, RUSH, RATE knobs
-        angerKnob.setBounds(modX, knobY, knobSize, knobSize + 25);
-        rushKnob.setBounds(modX + 60, knobY, knobSize, knobSize + 25);
-        modRateKnob.setBounds(modX + 120, knobY, knobSize, knobSize + 25);
+        // ANGER, RUSH, RATE knobs (same size as PITCH knobs)
+        angerKnob.setBounds(modX, knobY, knobSize, knobSize + 22);
+        rushKnob.setBounds(modX + knobSpacing, knobY, knobSize, knobSize + 22);
+        modRateKnob.setBounds(modX + knobSpacing * 2, knobY, knobSize, knobSize + 22);
     }
     
     // === CENTER BOTTOM: SWARM + FLOW ===
-    int dividerY = 260;
+    int dividerY = 230;
     int swarmFlowWidth = (getWidth() - leftPanelWidth - rightPanelWidth) / 2;
     
     // SWARM Section (left)
     {
         int baseX = leftPanelWidth + 10;
-        int baseY = dividerY + 30;
+        int baseY = dividerY + 26;
         
         // Power button
-        swarmBypassButton.setBounds(baseX + swarmFlowWidth - 50, dividerY + 6, powerButtonSize, powerButtonSize);
+        swarmBypassButton.setBounds(baseX + swarmFlowWidth - 42, dividerY + 6, powerButtonSize, powerButtonSize);
         
-        // 3 knobs + DEEP toggle
-        int knobY = baseY + 15;
-        int spacing = 55;
-        swarmDepthKnob.setBounds(baseX + 10, knobY, smallKnobSize, smallKnobSize + 22);
-        swarmRateKnob.setBounds(baseX + 10 + spacing, knobY, smallKnobSize, smallKnobSize + 22);
-        swarmMixKnob.setBounds(baseX + 10 + spacing * 2, knobY, smallKnobSize, smallKnobSize + 22);
+        // 3 knobs + DEEP toggle (uniform size)
+        int knobY = baseY + 12;
+        int spacing = 52;
+        swarmDepthKnob.setBounds(baseX + 5, knobY, knobSize, knobSize + 22);
+        swarmRateKnob.setBounds(baseX + 5 + spacing, knobY, knobSize, knobSize + 22);
+        swarmMixKnob.setBounds(baseX + 5 + spacing * 2, knobY, knobSize, knobSize + 22);
         
-        // DEEP toggle
-        int toggleX = baseX + 10 + spacing * 3 + 10;
-        deepModeButton.setBounds(toggleX, knobY + 15, 40, 24);
-        deepModeLabel.setBounds(toggleX - 5, knobY + 42, 50, 14);
+        // DEEP toggle (inline)
+        int toggleX = baseX + 5 + spacing * 3 + 8;
+        deepModeButton.setBounds(toggleX, knobY + 12, 38, 22);
+        deepModeLabel.setBounds(toggleX - 2, knobY + 36, 45, 14);
     }
     
     // FLOW Section (right)
     {
         int centerX = getWidth() / 2;
         int baseX = centerX + 10;
-        int baseY = dividerY + 30;
+        int baseY = dividerY + 26;
         
         // Power button
-        flowBypassButton.setBounds(baseX + swarmFlowWidth - 50, dividerY + 6, powerButtonSize, powerButtonSize);
+        flowBypassButton.setBounds(baseX + swarmFlowWidth - 42, dividerY + 6, powerButtonSize, powerButtonSize);
         
-        // 2 knobs
-        int knobY = baseY + 15;
-        int spacing = 70;
-        flowAmountKnob.setBounds(baseX + 30, knobY, smallKnobSize, smallKnobSize + 22);
-        flowSpeedKnob.setBounds(baseX + 30 + spacing, knobY, smallKnobSize, smallKnobSize + 22);
+        // 2 knobs (uniform size)
+        int knobY = baseY + 12;
+        int spacing = 60;
+        flowAmountKnob.setBounds(baseX + 20, knobY, knobSize, knobSize + 22);
+        flowSpeedKnob.setBounds(baseX + 20 + spacing, knobY, knobSize, knobSize + 22);
     }
     
     // === BYPASS Footswitch (bottom center) ===
     {
-        int footWidth = 80;
-        int footHeight = 80;
+        int footWidth = 60;
+        int footHeight = 60;
         int footX = (getWidth() - footWidth) / 2;
-        int footY = getHeight() - footHeight - 20;
+        int footY = getHeight() - footHeight - 15;
         bypassFootswitch.setBounds(footX, footY, footWidth, footHeight);
     }
 }

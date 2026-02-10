@@ -15,64 +15,53 @@ void FootswitchButton::paint(juce::Graphics& g) {
     const float centreX = w * 0.5f;
     const float centreY = h * 0.5f;
     
-    // v1.0.0: Image-based footswitch rendering
-    if (footswitchImage.isValid()) {
-        // Draw the base footswitch image
-        float pressOffset = mIsPressed ? 2.0f : 0.0f;
+    // v1.2.1: Minimalist programmatic footswitch
+    const float radius = juce::jmin(w, h) * 0.35f;
+    const float pressOffset = mIsPressed ? 2.0f : 0.0f;
+    
+    // Outer ring (orange when ON, dark when OFF)
+    juce::Colour ringColour = mIsOn ? MetalLookAndFeel::getAccentOrange() : juce::Colour(0xff333333);
+    g.setColour(ringColour);
+    g.fillEllipse(centreX - radius - 4, centreY - radius - 4 + pressOffset, (radius + 4) * 2.0f, (radius + 4) * 2.0f);
+    
+    // Inner button body (dark)
+    g.setColour(juce::Colour(0xff1A1A1A));
+    g.fillEllipse(centreX - radius, centreY - radius + pressOffset, radius * 2.0f, radius * 2.0f);
+    
+    // Button highlight (subtle gradient)
+    juce::ColourGradient highlight(juce::Colour(0x25FFFFFF), centreX, centreY - radius + pressOffset,
+                                    juce::Colours::transparentBlack, centreX, centreY + pressOffset, false);
+    g.setGradientFill(highlight);
+    g.fillEllipse(centreX - radius + 4, centreY - radius + 4 + pressOffset, (radius - 4) * 2.0f, (radius - 4) * 2.0f);
+    
+    // LED indicator (top center)
+    const float ledSize = 10.0f;
+    const float ledY = centreY - radius + 14 + pressOffset;
+    
+    // Handle blinking
+    bool showLED = mIsOn;
+    if (mLEDState == OrangeBlinking && !mBlinkState) {
+        showLED = false;
+    }
+    
+    if (showLED) {
+        // LED glow
+        juce::ColourGradient glowGrad(MetalLookAndFeel::getAccentOrange().withAlpha(0.5f), centreX, ledY + ledSize * 0.5f,
+                                       juce::Colours::transparentBlack, centreX, ledY - ledSize, true);
+        g.setGradientFill(glowGrad);
+        g.fillEllipse(centreX - ledSize * 1.5f, ledY - ledSize * 0.5f, ledSize * 3.0f, ledSize * 2.0f);
         
-        // Apply slight darkening when pressed
-        if (mIsPressed) {
-            g.setColour(juce::Colours::black.withAlpha(0.1f));
-        }
+        // LED body
+        g.setColour(MetalLookAndFeel::getAccentOrange());
+        g.fillEllipse(centreX - ledSize * 0.5f, ledY, ledSize, ledSize);
         
-        g.drawImage(footswitchImage, 
-                    bounds.getX(), bounds.getY() + pressOffset, 
-                    bounds.getWidth(), bounds.getHeight() - pressOffset,
-                    0, 0, footswitchImage.getWidth(), footswitchImage.getHeight());
-        
-        // Draw LED glow on top when ON
-        if (mIsOn) {
-            const float ledSize = w * 0.15f;
-            const float ledX = centreX - ledSize * 0.5f;
-            const float ledY = h * 0.08f;  // Top of button
-            
-            // Orange LED glow
-            juce::Colour ledColour = MetalLookAndFeel::getLEDOrange();
-            
-            // Handle blinking state
-            if (mLEDState == OrangeBlinking && !mBlinkState) {
-                ledColour = ledColour.withAlpha(0.3f);
-            }
-            
-            // Outer glow
-            juce::ColourGradient glowGrad(ledColour.withAlpha(0.6f), centreX, ledY + ledSize * 0.5f,
-                                           ledColour.withAlpha(0.0f), centreX, ledY - ledSize * 2.0f, true);
-            g.setGradientFill(glowGrad);
-            g.fillEllipse(ledX - ledSize, ledY - ledSize, ledSize * 3.0f, ledSize * 3.0f);
-            
-            // LED center
-            g.setColour(ledColour);
-            g.fillEllipse(ledX, ledY, ledSize, ledSize);
-            
-            // LED highlight
-            g.setColour(juce::Colours::white.withAlpha(0.4f));
-            g.fillEllipse(ledX + 2.0f, ledY + 2.0f, ledSize * 0.3f, ledSize * 0.3f);
-        }
+        // LED highlight
+        g.setColour(juce::Colours::white.withAlpha(0.5f));
+        g.fillEllipse(centreX - ledSize * 0.25f, ledY + 2, ledSize * 0.4f, ledSize * 0.4f);
     } else {
-        // Fallback: simple circle if image not loaded
-        const float radius = juce::jmin(w, h) * 0.4f;
-        
-        g.setColour(mIsPressed ? MetalLookAndFeel::getMetalGrey() : MetalLookAndFeel::getMetalLight());
-        g.fillEllipse(centreX - radius, centreY - radius, radius * 2.0f, radius * 2.0f);
-        
-        g.setColour(MetalLookAndFeel::getMetalDark());
-        g.drawEllipse(centreX - radius, centreY - radius, radius * 2.0f, radius * 2.0f, 2.0f);
-        
-        // LED indicator
-        if (mIsOn) {
-            g.setColour(MetalLookAndFeel::getLEDOrange());
-            g.fillEllipse(centreX - 6, 8, 12, 12);
-        }
+        // Dim LED when OFF
+        g.setColour(juce::Colour(0xff333333));
+        g.fillEllipse(centreX - ledSize * 0.5f, ledY, ledSize, ledSize);
     }
 }
 
