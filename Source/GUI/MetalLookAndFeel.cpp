@@ -17,7 +17,7 @@ MetalLookAndFeel::MetalLookAndFeel() {
     setColour(juce::TextButton::textColourOffId, getTextLight());
     setColour(juce::TextButton::textColourOnId, juce::Colours::white);
     
-    // v1.0.0: Load image assets for controls
+    // v1.2.0: Load image assets for controls (optional fallback)
     knobImage = juce::ImageCache::getFromMemory(BinaryData::knob_png, BinaryData::knob_pngSize);
     toggleImage = juce::ImageCache::getFromMemory(BinaryData::toggle_png, BinaryData::toggle_pngSize);
     faderImage = juce::ImageCache::getFromMemory(BinaryData::fader_png, BinaryData::fader_pngSize);
@@ -28,10 +28,13 @@ void MetalLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int wid
                                          float rotaryEndAngle, juce::Slider& slider) {
     const float centreX = x + width * 0.5f;
     const float centreY = y + height * 0.5f;
-    // v1.0.1: Use full bounds for knob image (was 0.9f, causing small knobs)
-    const float size = static_cast<float>(juce::jmin(width, height));
+    const float radius = static_cast<float>(juce::jmin(width, height)) * 0.4f;
     
-    // v1.0.0: Use smoothed value for rotation if available
+    // v1.2.0: Calculate rotation angle
+    const float startAngle = -juce::MathConstants<float>::pi * 0.75f;  // -135°
+    const float endAngle = juce::MathConstants<float>::pi * 0.75f;     // +135°
+    
+    // Use smoothed value if available
     float smoothedValue = slider.getProperties().getWithDefault("smoothedValue", -1.0f);
     float normalizedPos = sliderPos;
     if (smoothedValue >= 0.0f) {
@@ -42,46 +45,53 @@ void MetalLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int wid
         }
     }
     
-    // v1.0.0: Calculate rotation angle (-135° to +135°, i.e. 270° range)
-    const float startAngle = -juce::MathConstants<float>::pi * 0.75f;  // -135°
-    const float endAngle = juce::MathConstants<float>::pi * 0.75f;     // +135°
     const float angle = startAngle + normalizedPos * (endAngle - startAngle);
     
-    // v1.0.0: Check hover state for brightness boost
-    bool isHovered = slider.getProperties().getWithDefault("isHovered", false);
-    
-    // v1.0.1: Image-based knob rendering with high-quality scaling
-    if (knobImage.isValid()) {
-        juce::Rectangle<float> destRect(centreX - size * 0.5f, centreY - size * 0.5f, size, size);
+    // v1.2.0: Draw tick marks around the knob
+    g.setColour(juce::Colour(0xff444444));
+    const float tickRadius = radius + 6.0f;
+    const int numTicks = 11;
+    for (int i = 0; i <= numTicks; i++) {
+        float tickAngle = startAngle + i * (endAngle - startAngle) / static_cast<float>(numTicks);
+        float tickLength = (i % 5 == 0) ? 6.0f : 4.0f;  // Major ticks longer
+        float innerR = tickRadius - tickLength;
+        float outerR = tickRadius;
         
-        g.saveState();
+        float x1 = centreX + innerR * std::sin(tickAngle);
+        float y1 = centreY - innerR * std::cos(tickAngle);
+        float x2 = centreX + outerR * std::sin(tickAngle);
+        float y2 = centreY - outerR * std::cos(tickAngle);
         
-        // v1.0.1: Apply rotation around the center of destination rect
-        juce::AffineTransform transform = juce::AffineTransform::rotation(angle, centreX, centreY);
-        g.addTransform(transform);
-        
-        // v1.0.1: Use high-quality interpolation for better scaling
-        g.setImageResamplingQuality(juce::Graphics::highResamplingQuality);
-        g.drawImage(knobImage, destRect, juce::RectanglePlacement::centred);
-        
-        // Hover brightness overlay
-        if (isHovered) {
-            g.setColour(juce::Colours::white.withAlpha(0.08f));
-            g.fillEllipse(destRect.reduced(size * 0.1f));
-        }
-        
-        g.restoreState();
-    } else {
-        // Fallback: simple circle if image not loaded
-        g.setColour(getMetalGrey());
-        g.fillEllipse(centreX - size * 0.4f, centreY - size * 0.4f, size * 0.8f, size * 0.8f);
-        
-        // Pointer line
-        juce::Path pointer;
-        pointer.addRectangle(-2.0f, -size * 0.35f, 4.0f, size * 0.2f);
-        g.setColour(getAccentOrange());
-        g.fillPath(pointer, juce::AffineTransform::rotation(angle).translated(centreX, centreY));
+        g.drawLine(x1, y1, x2, y2, 1.0f);
     }
+    
+    // v1.2.0: Dark gray knob body (#2A2A2A)
+    g.setColour(juce::Colour(0xff2A2A2A));
+    g.fillEllipse(centreX - radius, centreY - radius, radius * 2.0f, radius * 2.0f);
+    
+    // Inner shadow
+    juce::ColourGradient shadowGrad(juce::Colour(0x40000000), centreX, centreY - radius,
+                                     juce::Colours::transparentBlack, centreX, centreY, true);
+    g.setGradientFill(shadowGrad);
+    g.fillEllipse(centreX - radius + 2, centreY - radius + 2, (radius - 2) * 2.0f, (radius - 2) * 2.0f);
+    
+    // Subtle edge highlight
+    g.setColour(juce::Colour(0x20FFFFFF));
+    g.drawEllipse(centreX - radius + 1, centreY - radius + 1, (radius - 1) * 2.0f, (radius - 1) * 2.0f, 1.0f);
+    
+    // v1.2.0: Orange indicator line from center
+    g.setColour(getAccentOrange());
+    const float indicatorLength = radius * 0.65f;
+    const float indicatorWidth = 3.0f;
+    
+    juce::Path indicator;
+    indicator.addRoundedRectangle(-indicatorWidth * 0.5f, -radius + 4.0f, indicatorWidth, indicatorLength, 1.5f);
+    
+    g.fillPath(indicator, juce::AffineTransform::rotation(angle).translated(centreX, centreY));
+    
+    // Center cap
+    g.setColour(juce::Colour(0xff1A1A1A));
+    g.fillEllipse(centreX - 5.0f, centreY - 5.0f, 10.0f, 10.0f);
 }
 
 void MetalLookAndFeel::drawButtonBackground(juce::Graphics& g, juce::Button& button,
@@ -123,8 +133,8 @@ void MetalLookAndFeel::drawComboBox(juce::Graphics& g, int width, int height,
 
     // Arrow (orange)
     juce::Path arrow;
-    float arrowSize = 5.0f;
-    float arrowX = width - 12.0f;
+    float arrowSize = 4.0f;
+    float arrowX = width - 10.0f;
     float arrowY = height * 0.5f;
     arrow.addTriangle(arrowX - arrowSize, arrowY - arrowSize * 0.4f,
                       arrowX + arrowSize, arrowY - arrowSize * 0.4f,
@@ -162,7 +172,7 @@ void MetalLookAndFeel::drawPopupMenuItem(juce::Graphics& g, const juce::Rectangl
         g.setColour(isActive ? getTextLight() : getTextDim());
     }
 
-    auto font = juce::Font(13.0f);
+    auto font = juce::Font(12.0f);
     g.setFont(font);
 
     auto textArea = r.reduced(10, 0);
@@ -186,64 +196,30 @@ void MetalLookAndFeel::drawToggleButton(juce::Graphics& g, juce::ToggleButton& b
                                          bool shouldDrawButtonAsDown) {
     auto bounds = button.getLocalBounds().toFloat();
     
-    // v1.0.1: Image-based toggle rendering with aspect ratio preservation
-    // toggle.png is a strip: left half = OFF, right half = ON
-    if (toggleImage.isValid()) {
-        int imgWidth = toggleImage.getWidth();
-        int imgHeight = toggleImage.getHeight();
-        int halfWidth = imgWidth / 2;
-        
-        // v1.0.1: Calculate aspect ratio of one state (halfWidth x imgHeight)
-        float srcAspect = static_cast<float>(halfWidth) / static_cast<float>(imgHeight);
-        
-        // v1.0.1: Calculate destination size maintaining aspect ratio
-        float destW, destH;
-        float boundsAspect = bounds.getWidth() / bounds.getHeight();
-        
-        if (boundsAspect > srcAspect) {
-            // Bounds are wider - fit by height
-            destH = bounds.getHeight();
-            destW = destH * srcAspect;
-        } else {
-            // Bounds are taller - fit by width
-            destW = bounds.getWidth();
-            destH = destW / srcAspect;
-        }
-        
-        // v1.0.1: Center in bounds
-        float destX = bounds.getX() + (bounds.getWidth() - destW) * 0.5f;
-        float destY = bounds.getY() + (bounds.getHeight() - destH) * 0.5f;
-        
-        // Select which half to draw based on state
-        int srcX = button.getToggleState() ? halfWidth : 0;
-        
-        // v1.0.1: High-quality scaling
-        g.setImageResamplingQuality(juce::Graphics::highResamplingQuality);
-        g.drawImage(toggleImage, 
-                    destX, destY, destW, destH,
-                    srcX, 0, halfWidth, imgHeight);
-    } else {
-        // Fallback: simple toggle if image not loaded
-        const float cornerSize = bounds.getHeight() * 0.5f;  // Pill shape
-        juce::Rectangle<float> trackBounds = bounds.reduced(1);
-        
-        // Background track
-        g.setColour(button.getToggleState() ? getAccentOrange().darker(0.3f) : getMetalDark());
-        g.fillRoundedRectangle(trackBounds, cornerSize);
-        
-        // Border
-        g.setColour(button.getToggleState() ? getAccentOrange() : getMetalGrey());
-        g.drawRoundedRectangle(trackBounds, cornerSize, 1.0f);
-        
-        // Thumb (circular)
-        float thumbDiameter = bounds.getHeight() - 6.0f;
-        float thumbX = button.getToggleState() 
-            ? bounds.getRight() - thumbDiameter - 3.0f
-            : bounds.getX() + 3.0f;
-        float thumbY = bounds.getCentreY() - thumbDiameter * 0.5f;
-        
-        g.setColour(getMetalLight());
-        g.fillEllipse(thumbX, thumbY, thumbDiameter, thumbDiameter);
+    // v1.2.0: Minimal toggle button style
+    bool isOn = button.getToggleState();
+    
+    // Background pill shape
+    float cornerSize = bounds.getHeight() * 0.5f;
+    g.setColour(isOn ? getAccentOrange().darker(0.3f) : juce::Colour(0xff333333));
+    g.fillRoundedRectangle(bounds.reduced(2), cornerSize);
+    
+    // Border
+    g.setColour(isOn ? getAccentOrange() : juce::Colour(0xff444444));
+    g.drawRoundedRectangle(bounds.reduced(2), cornerSize, 1.5f);
+    
+    // Toggle indicator (circle that moves)
+    float thumbDiameter = bounds.getHeight() - 8.0f;
+    float thumbX = isOn ? bounds.getRight() - thumbDiameter - 5.0f : bounds.getX() + 5.0f;
+    float thumbY = bounds.getCentreY() - thumbDiameter * 0.5f;
+    
+    g.setColour(isOn ? getAccentOrange() : juce::Colour(0xff666666));
+    g.fillEllipse(thumbX, thumbY, thumbDiameter, thumbDiameter);
+    
+    // Subtle highlight on thumb
+    if (isOn) {
+        g.setColour(juce::Colours::white.withAlpha(0.2f));
+        g.fillEllipse(thumbX + 2, thumbY + 2, thumbDiameter - 4, (thumbDiameter - 4) * 0.5f);
     }
 }
 
@@ -256,115 +232,55 @@ void MetalLookAndFeel::drawLinearSlider(juce::Graphics& g, int x, int y, int wid
         return;
     }
     
-    // v1.0.1: Image-based fader rendering with proper aspect ratio
-    // fader.png is 1024x1536 - left half = empty track, right half = filled track
-    if (faderImage.isValid()) {
-        int imgWidth = faderImage.getWidth();
-        int imgHeight = faderImage.getHeight();
-        int halfWidth = imgWidth / 2;
+    // v1.2.0: Minimal vertical fader style
+    const float trackWidth = 16.0f;
+    const float trackX = static_cast<float>(x) + (static_cast<float>(width) - trackWidth) * 0.5f;
+    const float trackY = static_cast<float>(y) + 4.0f;
+    const float trackHeight = static_cast<float>(height) - 8.0f;
+    
+    // Dark track background (#1A1A1A)
+    g.setColour(juce::Colour(0xff1A1A1A));
+    g.fillRoundedRectangle(trackX, trackY, trackWidth, trackHeight, 4.0f);
+    
+    // Track border (#333333)
+    g.setColour(juce::Colour(0xff333333));
+    g.drawRoundedRectangle(trackX, trackY, trackWidth, trackHeight, 4.0f, 1.0f);
+    
+    // Calculate normalized position (inverted for vertical - 0 at bottom, 1 at top)
+    float normalizedPos = 1.0f - (sliderPos - static_cast<float>(y)) / static_cast<float>(height);
+    normalizedPos = juce::jlimit(0.0f, 1.0f, normalizedPos);
+    
+    // v1.2.0: Orange fill from bottom (#FF9500)
+    float fillHeight = (trackHeight - 4.0f) * normalizedPos;
+    if (fillHeight > 2.0f) {
+        float fillY = trackY + trackHeight - 2.0f - fillHeight;
         
-        // v1.0.1: Calculate aspect ratio of one half (halfWidth x imgHeight)
-        float srcAspect = static_cast<float>(halfWidth) / static_cast<float>(imgHeight);
-        float boundsAspect = static_cast<float>(width) / static_cast<float>(height);
-        
-        // v1.0.1: Calculate destination size maintaining aspect ratio
-        float destW, destH;
-        if (boundsAspect > srcAspect) {
-            // Bounds are wider - fit by height
-            destH = static_cast<float>(height);
-            destW = destH * srcAspect;
-        } else {
-            // Bounds are taller - fit by width
-            destW = static_cast<float>(width);
-            destH = destW / srcAspect;
-        }
-        
-        // v1.0.1: Center in bounds
-        float destX = static_cast<float>(x) + (static_cast<float>(width) - destW) * 0.5f;
-        float destY = static_cast<float>(y) + (static_cast<float>(height) - destH) * 0.5f;
-        
-        // Calculate normalized position (inverted for vertical - 0 at bottom, 1 at top)
-        // sliderPos is in pixel coordinates within the component
-        float normalizedPos = 1.0f - (sliderPos - static_cast<float>(y)) / static_cast<float>(height);
-        normalizedPos = juce::jlimit(0.0f, 1.0f, normalizedPos);
-        
-        // v1.0.1: High-quality scaling
-        g.setImageResamplingQuality(juce::Graphics::highResamplingQuality);
-        
-        // Draw the empty track (left half of image) - full track background
-        g.drawImage(faderImage, 
-                    destX, destY, destW, destH,
-                    0, 0, halfWidth, imgHeight);
-        
-        // Calculate fill amount from bottom (in destination coordinates)
-        float fillHeightDest = destH * normalizedPos;
-        
-        if (fillHeightDest > 1.0f) {
-            // Calculate corresponding source coordinates
-            int fillHeightSrc = static_cast<int>(static_cast<float>(imgHeight) * normalizedPos);
-            if (fillHeightSrc > 0) {
-                int srcY = imgHeight - fillHeightSrc;
-                float destFillY = destY + destH - fillHeightDest;
-                
-                // Draw filled portion from right half, starting from bottom
-                g.drawImage(faderImage,
-                            destX, destFillY, destW, fillHeightDest,
-                            halfWidth, srcY, halfWidth, fillHeightSrc);
-            }
-        }
-    } else {
-        // Fallback: simple vertical slider with thumb
-        const float trackWidth = 24.0f;
-        const float trackX = static_cast<float>(x) + (static_cast<float>(width) - trackWidth) * 0.5f;
-        const float trackHeight = static_cast<float>(height);
-        const float trackY = static_cast<float>(y);
-        
-        // Track background with gradient
-        juce::ColourGradient trackGrad(getMetalDark().brighter(0.1f), trackX, trackY,
-                                        getMetalDark().darker(0.2f), trackX + trackWidth, trackY + trackHeight, false);
-        g.setGradientFill(trackGrad);
-        g.fillRoundedRectangle(trackX, trackY, trackWidth, trackHeight, 6.0f);
-        
-        // Inner shadow
-        g.setColour(juce::Colours::black.withAlpha(0.3f));
-        g.drawRoundedRectangle(trackX + 1, trackY + 1, trackWidth - 2, trackHeight - 2, 5.0f, 1.0f);
-        
-        // Calculate fill
-        float normalizedPos = 1.0f - (sliderPos - static_cast<float>(y)) / static_cast<float>(height);
-        normalizedPos = juce::jlimit(0.0f, 1.0f, normalizedPos);
-        float fillHeight = (trackHeight - 8.0f) * normalizedPos;
-        
-        // Orange fill from bottom with gradient
-        if (fillHeight > 2.0f) {
-            float fillY = trackY + trackHeight - 4.0f - fillHeight;
-            juce::ColourGradient fillGrad(getAccentOrangeBright(), trackX + 4, fillY,
-                                           getAccentOrange().darker(0.2f), trackX + 4, fillY + fillHeight, false);
-            g.setGradientFill(fillGrad);
-            g.fillRoundedRectangle(trackX + 4.0f, fillY, trackWidth - 8.0f, fillHeight, 3.0f);
-        }
-        
-        // Thumb
-        const float thumbHeight = 22.0f;
-        const float thumbWidth = trackWidth + 12.0f;
-        const float thumbX = trackX - 6.0f;
-        const float thumbY = juce::jlimit(static_cast<float>(y), 
-                                          static_cast<float>(y + height) - thumbHeight, 
-                                          sliderPos - thumbHeight * 0.5f);
-        
-        // Thumb with gradient
-        juce::ColourGradient thumbGrad(getMetalLight(), thumbX, thumbY,
-                                        getMetalGrey(), thumbX, thumbY + thumbHeight, false);
-        g.setGradientFill(thumbGrad);
-        g.fillRoundedRectangle(thumbX, thumbY, thumbWidth, thumbHeight, 4.0f);
-        
-        g.setColour(getMetalDark());
-        g.drawRoundedRectangle(thumbX, thumbY, thumbWidth, thumbHeight, 4.0f, 1.0f);
-        
-        // Thumb grip lines
-        g.setColour(getMetalDark().withAlpha(0.5f));
-        float lineY = thumbY + thumbHeight * 0.5f;
-        g.drawLine(thumbX + 8.0f, lineY - 3.0f, thumbX + thumbWidth - 8.0f, lineY - 3.0f, 1.0f);
-        g.drawLine(thumbX + 8.0f, lineY, thumbX + thumbWidth - 8.0f, lineY, 1.0f);
-        g.drawLine(thumbX + 8.0f, lineY + 3.0f, thumbX + thumbWidth - 8.0f, lineY + 3.0f, 1.0f);
+        // Gradient fill for depth
+        juce::ColourGradient fillGrad(getAccentOrangeBright(), trackX + trackWidth * 0.5f, fillY,
+                                       getAccentOrange().darker(0.2f), trackX + trackWidth * 0.5f, fillY + fillHeight, false);
+        g.setGradientFill(fillGrad);
+        g.fillRoundedRectangle(trackX + 2.0f, fillY, trackWidth - 4.0f, fillHeight, 2.0f);
     }
+    
+    // v1.2.0: Minimal thumb (small rectangle)
+    const float thumbHeight = 14.0f;
+    const float thumbWidth = trackWidth + 8.0f;
+    const float thumbX = trackX - 4.0f;
+    const float thumbY = juce::jlimit(static_cast<float>(y) + 2.0f, 
+                                      static_cast<float>(y + height) - thumbHeight - 2.0f, 
+                                      sliderPos - thumbHeight * 0.5f);
+    
+    // Thumb background
+    g.setColour(juce::Colour(0xff3A3A3A));
+    g.fillRoundedRectangle(thumbX, thumbY, thumbWidth, thumbHeight, 3.0f);
+    
+    // Thumb highlight
+    g.setColour(juce::Colour(0xff4A4A4A));
+    g.fillRoundedRectangle(thumbX + 1, thumbY + 1, thumbWidth - 2, thumbHeight * 0.4f, 2.0f);
+    
+    // Thumb grip lines
+    g.setColour(juce::Colour(0xff2A2A2A));
+    float lineY = thumbY + thumbHeight * 0.5f;
+    g.drawLine(thumbX + 4.0f, lineY - 2.0f, thumbX + thumbWidth - 4.0f, lineY - 2.0f, 1.0f);
+    g.drawLine(thumbX + 4.0f, lineY + 2.0f, thumbX + thumbWidth - 4.0f, lineY + 2.0f, 1.0f);
 }

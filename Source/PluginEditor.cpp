@@ -7,7 +7,7 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
     setLookAndFeel(&metalLookAndFeel);
 
     // Load background image 
-    backgroundImage = juce::ImageCache::getFromMemory(BinaryData::background_png, BinaryData::background_pngSize);
+    backgroundImage = juce::ImageCache::getFromMemory(BinaryData::background_clean_png, BinaryData::background_clean_pngSize);
     
     // Load header logo image
     headerLogoImage = juce::ImageCache::getFromMemory(BinaryData::header_logo_png, BinaryData::header_logo_pngSize);
@@ -100,30 +100,56 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
     // Info Panel (overlay)
     addChildComponent(infoPanel);
 
-    // === PITCH + MODULATION Combined Section ===
+    // === LEFT PANEL: TONE (vertical faders) ===
+    setupVerticalFader(lowCutFader, lowCutLabel, lowCutValueLabel, "LOW CUT");
+    lowCutAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        audioProcessor.getAPVTS(), "lowCut", lowCutFader);
     
-    // Power button for PITCH+MOD (uses "engage" parameter)
-    addAndMakeVisible(pitchModPowerButton);
-    pitchModPowerButton.setClickingTogglesState(true);
+    setupVerticalFader(highCutFader, highCutLabel, highCutValueLabel, "HIGH CUT");
+    highCutAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        audioProcessor.getAPVTS(), "highCut", highCutFader);
+    
+    setupVerticalFader(midBoostFader, midBoostLabel, midBoostValueLabel, "MID BOOST");
+    saturationAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        audioProcessor.getAPVTS(), "saturation", midBoostFader);
+
+    // === RIGHT PANEL: OUTPUT (vertical faders) ===
+    setupVerticalFader(mixFader, mixLabel, mixValueLabel, "MIX");
+    mixAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        audioProcessor.getAPVTS(), "mix", mixFader);
+    
+    setupVerticalFader(driveFader, driveLabel, driveValueLabel, "DRIVE");
+    driveAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        audioProcessor.getAPVTS(), "drive", driveFader);
+    
+    setupVerticalFader(volumeFader, volumeLabel, volumeValueLabel, "VOLUME");
+    outputGainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        audioProcessor.getAPVTS(), "outputGain", volumeFader);
+
+    // === CENTER TOP: VOLTAGE Section ===
+    
+    // Power button for VOLTAGE (uses "engage" parameter)
+    addAndMakeVisible(pitchBypassButton);
+    pitchBypassButton.setClickingTogglesState(true);
     engageAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
-        audioProcessor.getAPVTS(), "engage", pitchModPowerButton);
-    pitchModPowerButton.onClick = [this]() { updateSectionEnableStates(); };
+        audioProcessor.getAPVTS(), "engage", pitchBypassButton);
+    pitchBypassButton.onClick = [this]() { updateSectionEnableStates(); };
 
     // PITCH subheader label
     pitchSubLabel.setText("PITCH", juce::dontSendNotification);
     pitchSubLabel.setJustificationType(juce::Justification::centred);
     pitchSubLabel.setColour(juce::Label::textColourId, MetalLookAndFeel::getAccentOrangeBright());
-    pitchSubLabel.setFont(juce::Font(11.0f, juce::Font::bold));
+    pitchSubLabel.setFont(juce::Font(10.0f, juce::Font::bold));
     addAndMakeVisible(pitchSubLabel);
     
     // MODULATION subheader label
     modulationSubLabel.setText("MODULATION", juce::dontSendNotification);
     modulationSubLabel.setJustificationType(juce::Justification::centred);
     modulationSubLabel.setColour(juce::Label::textColourId, MetalLookAndFeel::getAccentOrangeBright());
-    modulationSubLabel.setFont(juce::Font(11.0f, juce::Font::bold));
+    modulationSubLabel.setFont(juce::Font(10.0f, juce::Font::bold));
     addAndMakeVisible(modulationSubLabel);
 
-    // PITCH controls
+    // Octave dropdown
     addAndMakeVisible(octaveModeBox);
     octaveModeBox.addItem("-2 OCT", 1);
     octaveModeBox.addItem("-1 OCT", 2);
@@ -133,9 +159,10 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
     octaveModeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
         audioProcessor.getAPVTS(), "octaveMode", octaveModeBox);
 
+    // PITCH knobs
     addAndMakeVisible(pitchRangeKnob);
     pitchRangeKnob.setValueSuffix(" st");
-    pitchRangeKnob.setValueMultiplier(1.0f);  // Now 0-24 semitones directly
+    pitchRangeKnob.setValueMultiplier(1.0f);
     randomRangeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         audioProcessor.getAPVTS(), "randomRange", pitchRangeKnob.getSlider());
 
@@ -159,16 +186,16 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
     
     riseFaderLabel.setText("RISE", juce::dontSendNotification);
     riseFaderLabel.setJustificationType(juce::Justification::centred);
-    riseFaderLabel.setFont(juce::Font(11.0f));  // Phase 1 UI: Increased from 9px to 11px
-    riseFaderLabel.setColour(juce::Label::textColourId, MetalLookAndFeel::getTextLight());
+    riseFaderLabel.setFont(juce::Font(10.0f));
+    riseFaderLabel.setColour(juce::Label::textColourId, MetalLookAndFeel::getTextDim());
     addAndMakeVisible(riseFaderLabel);
     
     riseFaderValueLabel.setJustificationType(juce::Justification::centred);
-    riseFaderValueLabel.setFont(juce::Font(10.0f, juce::Font::bold));
+    riseFaderValueLabel.setFont(juce::Font(9.0f, juce::Font::bold));
     riseFaderValueLabel.setColour(juce::Label::textColourId, MetalLookAndFeel::getAccentOrangeBright());
     addAndMakeVisible(riseFaderValueLabel);
 
-    // MODULATION controls
+    // MODULATION knobs
     addAndMakeVisible(angerKnob);
     angerKnob.setValueSuffix("%");
     angerKnob.setValueMultiplier(100.0f);
@@ -187,31 +214,12 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
     speedAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         audioProcessor.getAPVTS(), "speed", modRateKnob.getSlider());
 
-    // === TONE Section ===
-    addAndMakeVisible(lowCutKnob);
-    lowCutKnob.setValueSuffix("%");
-    lowCutKnob.setValueMultiplier(100.0f);
-    lowCutAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        audioProcessor.getAPVTS(), "lowCut", lowCutKnob.getSlider());
-
-    addAndMakeVisible(highCutKnob);
-    highCutKnob.setValueSuffix("%");
-    highCutKnob.setValueMultiplier(100.0f);
-    highCutAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        audioProcessor.getAPVTS(), "highCut", highCutKnob.getSlider());
-
-    addAndMakeVisible(midBoostKnob);
-    midBoostKnob.setValueSuffix("%");
-    midBoostKnob.setValueMultiplier(100.0f);
-    saturationAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        audioProcessor.getAPVTS(), "saturation", midBoostKnob.getSlider());
-
-    // === SWARM Section (Chorus) ===
-    addAndMakeVisible(swarmPowerButton);
-    swarmPowerButton.setClickingTogglesState(true);
+    // === CENTER BOTTOM LEFT: SWARM Section ===
+    addAndMakeVisible(swarmBypassButton);
+    swarmBypassButton.setClickingTogglesState(true);
     chorusEngageAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
-        audioProcessor.getAPVTS(), "chorusEngage", swarmPowerButton);
-    swarmPowerButton.onClick = [this]() { updateSectionEnableStates(); };
+        audioProcessor.getAPVTS(), "chorusEngage", swarmBypassButton);
+    swarmBypassButton.onClick = [this]() { updateSectionEnableStates(); };
 
     addAndMakeVisible(swarmDepthKnob);
     swarmDepthKnob.setValueSuffix("%");
@@ -231,25 +239,24 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
     chorusMixAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         audioProcessor.getAPVTS(), "chorusMix", swarmMixKnob.getSlider());
 
-    addAndMakeVisible(chorusModeButton);
-    chorusModeButton.setColour(juce::ToggleButton::textColourId, MetalLookAndFeel::getTextLight());
-    chorusModeButton.setColour(juce::ToggleButton::tickColourId, MetalLookAndFeel::getAccentOrange());
+    addAndMakeVisible(deepModeButton);
+    deepModeButton.setColour(juce::ToggleButton::textColourId, MetalLookAndFeel::getTextLight());
+    deepModeButton.setColour(juce::ToggleButton::tickColourId, MetalLookAndFeel::getAccentOrange());
     chorusModeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
-        audioProcessor.getAPVTS(), "chorusMode", chorusModeButton);
+        audioProcessor.getAPVTS(), "chorusMode", deepModeButton);
     
-    // "DEEP" label under toggle (Phase 3 UI)
-    chorusModeLabel.setText("DEEP", juce::dontSendNotification);
-    chorusModeLabel.setJustificationType(juce::Justification::centred);
-    chorusModeLabel.setFont(juce::Font(11.0f));
-    chorusModeLabel.setColour(juce::Label::textColourId, MetalLookAndFeel::getAccentOrangeBright());
-    addAndMakeVisible(chorusModeLabel);
+    deepModeLabel.setText("DEEP", juce::dontSendNotification);
+    deepModeLabel.setJustificationType(juce::Justification::centred);
+    deepModeLabel.setFont(juce::Font(10.0f, juce::Font::bold));
+    deepModeLabel.setColour(juce::Label::textColourId, MetalLookAndFeel::getAccentOrangeBright());
+    addAndMakeVisible(deepModeLabel);
 
-    // === FLOW Section (Stutter/Gate) ===
-    addAndMakeVisible(flowPowerButton);
-    flowPowerButton.setClickingTogglesState(true);
+    // === CENTER BOTTOM RIGHT: FLOW Section ===
+    addAndMakeVisible(flowBypassButton);
+    flowBypassButton.setClickingTogglesState(true);
     flowEngageAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
-        audioProcessor.getAPVTS(), "flowEngage", flowPowerButton);
-    flowPowerButton.onClick = [this]() { updateSectionEnableStates(); };
+        audioProcessor.getAPVTS(), "flowEngage", flowBypassButton);
+    flowBypassButton.onClick = [this]() { updateSectionEnableStates(); };
 
     addAndMakeVisible(flowAmountKnob);
     flowAmountKnob.setValueSuffix("%");
@@ -263,27 +270,6 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
     flowSpeedAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         audioProcessor.getAPVTS(), "flowSpeed", flowSpeedKnob.getSlider());
 
-    // flowModeButton removed - flowMode is always true (Hard mode)
-
-    // === OUTPUT Section ===
-    addAndMakeVisible(mixKnob);
-    mixKnob.setValueSuffix("%");
-    mixKnob.setValueMultiplier(100.0f);
-    mixAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        audioProcessor.getAPVTS(), "mix", mixKnob.getSlider());
-
-    addAndMakeVisible(volumeKnob);
-    volumeKnob.setValueSuffix("%");
-    volumeKnob.setValueMultiplier(100.0f);
-    outputGainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        audioProcessor.getAPVTS(), "outputGain", volumeKnob.getSlider());
-
-    addAndMakeVisible(driveKnob);
-    driveKnob.setValueSuffix("%");
-    driveKnob.setValueMultiplier(100.0f);
-    driveAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        audioProcessor.getAPVTS(), "drive", driveKnob.getSlider());
-
     // === BYPASS Footswitch ===
     addAndMakeVisible(bypassFootswitch);
     bypassFootswitch.onClick = [this](bool isOn) {
@@ -296,8 +282,8 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
     // Start timer for LED updates and section enable states
     startTimerHz(30);
 
-    // v1.1.0: Set plugin window size (90px header + content + metal strip + footswitch)
-    setSize(1000, 800);
+    // v1.2.0: Set plugin window size (minimal layout)
+    setSize(850, 550);
     
     // Initial update of section enable states
     updateSectionEnableStates();
@@ -308,13 +294,37 @@ SwarmnesssAudioProcessorEditor::~SwarmnesssAudioProcessorEditor() {
     setLookAndFeel(nullptr);
 }
 
+void SwarmnesssAudioProcessorEditor::setupVerticalFader(juce::Slider& fader, juce::Label& label, 
+                                                         juce::Label& valueLabel, const juce::String& labelText,
+                                                         float multiplier) {
+    fader.setSliderStyle(juce::Slider::LinearVertical);
+    fader.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+    fader.setPopupDisplayEnabled(false, false, this);
+    fader.onValueChange = [&fader, &valueLabel, multiplier]() {
+        int value = static_cast<int>(fader.getValue() * multiplier);
+        valueLabel.setText(juce::String(value) + "%", juce::dontSendNotification);
+    };
+    addAndMakeVisible(fader);
+    
+    label.setText(labelText, juce::dontSendNotification);
+    label.setJustificationType(juce::Justification::centred);
+    label.setFont(juce::Font(9.0f));
+    label.setColour(juce::Label::textColourId, MetalLookAndFeel::getTextDim());
+    addAndMakeVisible(label);
+    
+    valueLabel.setJustificationType(juce::Justification::centred);
+    valueLabel.setFont(juce::Font(9.0f, juce::Font::bold));
+    valueLabel.setColour(juce::Label::textColourId, MetalLookAndFeel::getAccentOrangeBright());
+    addAndMakeVisible(valueLabel);
+}
+
 void SwarmnesssAudioProcessorEditor::timerCallback() {
     // Update bypass footswitch LED
     auto bypassed = *audioProcessor.getAPVTS().getRawParameterValue("globalBypass") > 0.5f;
     bypassFootswitch.setLEDState(bypassed ? FootswitchButton::DimRed : FootswitchButton::BrightRed);
     bypassFootswitch.setOn(!bypassed);
     
-    // Periodically update section enable states (in case parameters change externally)
+    // Periodically update section enable states
     updateSectionEnableStates();
     
     // Update preset name with dirty indicator
@@ -330,142 +340,52 @@ void SwarmnesssAudioProcessorEditor::setSectionEnabled(std::vector<juce::Compone
 }
 
 void SwarmnesssAudioProcessorEditor::updateSectionEnableStates() {
-    // PITCH + MODULATION section
-    bool pitchEnabled = pitchModPowerButton.getToggleState();
+    // VOLTAGE section
+    bool voltageEnabled = pitchBypassButton.getToggleState();
     setSectionEnabled({
         &octaveModeBox, &pitchRangeKnob, &pitchSpeedKnob, &riseFader,
         &riseFaderLabel, &riseFaderValueLabel, &pitchSubLabel,
         &angerKnob, &rushKnob, &modRateKnob, &modulationSubLabel
-    }, pitchEnabled);
+    }, voltageEnabled);
     
     // SWARM section
-    bool swarmEnabled = swarmPowerButton.getToggleState();
+    bool swarmEnabled = swarmBypassButton.getToggleState();
     setSectionEnabled({
-        &swarmDepthKnob, &swarmRateKnob, &swarmMixKnob, &chorusModeButton, &chorusModeLabel
+        &swarmDepthKnob, &swarmRateKnob, &swarmMixKnob, &deepModeButton, &deepModeLabel
     }, swarmEnabled);
     
     // FLOW section
-    bool flowEnabled = flowPowerButton.getToggleState();
+    bool flowEnabled = flowBypassButton.getToggleState();
     setSectionEnabled({
         &flowAmountKnob, &flowSpeedKnob
     }, flowEnabled);
 }
 
-void SwarmnesssAudioProcessorEditor::drawSectionFrame(juce::Graphics& g, juce::Rectangle<int> bounds, const juce::String& title) {
-    const float cornerSize = 10.0f;  // v1.1.0: 10px border-radius
-    const float borderWidth = 2.0f;   // v1.1.0: 2px orange border
-    
-    // v1.1.0: Drop shadow effect
-    juce::DropShadow shadow(juce::Colour(0x80000000), 12, juce::Point<int>(0, 4));
-    juce::Path shadowPath;
-    shadowPath.addRoundedRectangle(bounds.toFloat(), cornerSize);
-    shadow.drawForPath(g, shadowPath);
-    
-    // v1.1.0: Section background gradient #2E2E2E (top) → #262626 (bottom) - "pedal" style
-    juce::ColourGradient bgGrad(juce::Colour(0xff2E2E2E), bounds.toFloat().getCentreX(), bounds.toFloat().getY(),
-                                 juce::Colour(0xff262626), bounds.toFloat().getCentreX(), bounds.toFloat().getBottom(), false);
-    g.setGradientFill(bgGrad);
-    g.fillRoundedRectangle(bounds.toFloat(), cornerSize);
-    
-    // v1.1.0: Inner glow - 1px blur orange inside
-    g.setColour(juce::Colour(0x30FF9500));
-    g.drawRoundedRectangle(bounds.toFloat().reduced(3.0f), cornerSize - 2, 2.0f);
-    
-    // v1.1.0: Orange border 2px #FF9500
-    g.setColour(juce::Colour(0xffFF9500));
-    g.drawRoundedRectangle(bounds.toFloat().reduced(borderWidth * 0.5f), cornerSize, borderWidth);
-    
-    // v1.1.0: Bevel effect - 1px #3A3A3A highlight at top
-    g.setColour(juce::Colour(0xff3A3A3A));
-    g.drawLine(bounds.toFloat().getX() + cornerSize + 2, bounds.toFloat().getY() + 3.0f,
-               bounds.toFloat().getRight() - cornerSize - 2, bounds.toFloat().getY() + 3.0f, 1.0f);
-    
-    // v1.1.0: Bevel effect - 1px #1A1A1A shadow at bottom
-    g.setColour(juce::Colour(0xff1A1A1A));
-    g.drawLine(bounds.toFloat().getX() + cornerSize + 2, bounds.toFloat().getBottom() - 3.0f,
-               bounds.toFloat().getRight() - cornerSize - 2, bounds.toFloat().getBottom() - 3.0f, 1.0f);
-    
-    // v1.1.0: Section title - orange #FF9500
-    g.setColour(juce::Colour(0xffFF9500));
-    g.setFont(juce::Font(14.0f, juce::Font::bold));
-    g.drawText(title.toUpperCase(), bounds.getX(), bounds.getY() + 6, bounds.getWidth(), 18, 
-               juce::Justification::centred, false);
-}
-
-void SwarmnesssAudioProcessorEditor::drawCombinedSectionFrame(juce::Graphics& g, juce::Rectangle<int> bounds) {
-    const float cornerSize = 10.0f;  // v1.1.0: 10px border-radius
-    const float borderWidth = 2.0f;   // v1.1.0: 2px orange border
-    
-    // v1.1.0: Drop shadow effect
-    juce::DropShadow shadow(juce::Colour(0x80000000), 12, juce::Point<int>(0, 4));
-    juce::Path shadowPath;
-    shadowPath.addRoundedRectangle(bounds.toFloat(), cornerSize);
-    shadow.drawForPath(g, shadowPath);
-    
-    // v1.1.0: Section background gradient #2E2E2E (top) → #262626 (bottom) - "pedal" style
-    juce::ColourGradient bgGrad(juce::Colour(0xff2E2E2E), bounds.toFloat().getCentreX(), bounds.toFloat().getY(),
-                                 juce::Colour(0xff262626), bounds.toFloat().getCentreX(), bounds.toFloat().getBottom(), false);
-    g.setGradientFill(bgGrad);
-    g.fillRoundedRectangle(bounds.toFloat(), cornerSize);
-    
-    // v1.1.0: Inner glow - 1px blur orange inside
-    g.setColour(juce::Colour(0x30FF9500));
-    g.drawRoundedRectangle(bounds.toFloat().reduced(3.0f), cornerSize - 2, 2.0f);
-    
-    // v1.1.0: Orange border 2px #FF9500
-    g.setColour(juce::Colour(0xffFF9500));
-    g.drawRoundedRectangle(bounds.toFloat().reduced(borderWidth * 0.5f), cornerSize, borderWidth);
-    
-    // v1.1.0: Bevel effect - 1px #3A3A3A highlight at top
-    g.setColour(juce::Colour(0xff3A3A3A));
-    g.drawLine(bounds.toFloat().getX() + cornerSize + 2, bounds.toFloat().getY() + 3.0f,
-               bounds.toFloat().getRight() - cornerSize - 2, bounds.toFloat().getY() + 3.0f, 1.0f);
-    
-    // v1.1.0: Bevel effect - 1px #1A1A1A shadow at bottom
-    g.setColour(juce::Colour(0xff1A1A1A));
-    g.drawLine(bounds.toFloat().getX() + cornerSize + 2, bounds.toFloat().getBottom() - 3.0f,
-               bounds.toFloat().getRight() - cornerSize - 2, bounds.toFloat().getBottom() - 3.0f, 1.0f);
-    
-    // v1.1.0: Combined title "VOLTAGE" - orange #FF9500
-    g.setColour(juce::Colour(0xffFF9500));
-    g.setFont(juce::Font(14.0f, juce::Font::bold));
-    g.drawText("VOLTAGE", bounds.getX(), bounds.getY() + 6, bounds.getWidth() - 45, 18, 
-               juce::Justification::centred, false);
-}
-
 void SwarmnesssAudioProcessorEditor::paint(juce::Graphics& g) {
-    const int headerHeight = 90;  // v1.1.0: Increased from 70 to 90px
+    const int headerHeight = 50;
+    const int leftPanelWidth = 70;
+    const int rightPanelWidth = 70;
     
-    // v1.1.0: Draw clean background (gradient or image)
+    // v1.2.0: Dark background
+    g.fillAll(juce::Colour(0xff1A1A1A));
+    
+    // Draw background image in content area (if valid)
     if (backgroundImage.isValid()) {
-        auto contentArea = juce::Rectangle<float>(0, (float)headerHeight, (float)getWidth(), (float)(getHeight() - headerHeight));
+        auto contentArea = juce::Rectangle<float>((float)leftPanelWidth, (float)headerHeight, 
+                                                   (float)(getWidth() - leftPanelWidth - rightPanelWidth), 
+                                                   (float)(getHeight() - headerHeight));
+        g.setOpacity(0.3f);  // Subtle background
         g.drawImage(backgroundImage, contentArea, juce::RectanglePlacement::stretchToFit);
-    } else {
-        // v1.1.0: Fallback gradient #1A1A1A → #0D0D0D
-        juce::ColourGradient bgGrad(juce::Colour(0xff1A1A1A), 0, (float)headerHeight,
-                                     juce::Colour(0xff0D0D0D), 0, (float)getHeight(), false);
-        g.setGradientFill(bgGrad);
-        g.fillRect(0, headerHeight, getWidth(), getHeight() - headerHeight);
+        g.setOpacity(1.0f);
     }
     
-    // v1.1.0: Subtle dark overlay (less opacity to show cleaner background)
-    g.setColour(juce::Colour(0x60000000));
-    g.fillRect(0, headerHeight, getWidth(), getHeight() - headerHeight);
-
-    // === HEADER SECTION v1.1.0 ===
-    // Header background - gradient #252525 (top) → #1A1A1A (bottom)
-    juce::ColourGradient headerGrad(juce::Colour(0xff252525), 0, 0,
-                                     juce::Colour(0xff1A1A1A), 0, (float)headerHeight, false);
-    g.setGradientFill(headerGrad);
+    // === HEADER SECTION v1.2.0 ===
+    g.setColour(juce::Colour(0xff1F1F1F));
     g.fillRect(0, 0, getWidth(), headerHeight);
     
-    // v1.1.0: Orange accent line 2px at bottom of header
-    g.setColour(juce::Colour(0xffFF9500));
-    g.fillRect(0, headerHeight - 2, getWidth(), 2);
-    
-    // v1.1.0: Draw header logo centered, scaled to fit fully
+    // Draw header logo
     if (headerLogoImage.isValid()) {
-        float logoScale = (float)(headerHeight - 20) / (float)headerLogoImage.getHeight();
+        float logoScale = (float)(headerHeight - 16) / (float)headerLogoImage.getHeight();
         float logoW = headerLogoImage.getWidth() * logoScale;
         float logoH = headerLogoImage.getHeight() * logoScale;
         float logoX = (getWidth() - logoW) * 0.5f;
@@ -477,181 +397,202 @@ void SwarmnesssAudioProcessorEditor::paint(juce::Graphics& g) {
                     juce::RectanglePlacement::centred);
     }
 
-    // v1.1.0: Version number (top right in header)
+    // === LEFT PANEL (TONE) ===
+    g.setColour(juce::Colour(0xff1A1A1A));
+    g.fillRect(0, headerHeight, leftPanelWidth, getHeight() - headerHeight);
+    
+    // === RIGHT PANEL (OUTPUT) ===
+    g.fillRect(getWidth() - rightPanelWidth, headerHeight, rightPanelWidth, getHeight() - headerHeight);
+    
+    // === DIVIDER LINES v1.2.0 ===
+    g.setColour(juce::Colour(0xff333333));
+    
+    // Vertical dividers
+    g.drawLine((float)leftPanelWidth, (float)headerHeight, (float)leftPanelWidth, (float)getHeight(), 1.0f);
+    g.drawLine((float)(getWidth() - rightPanelWidth), (float)headerHeight, 
+               (float)(getWidth() - rightPanelWidth), (float)getHeight(), 1.0f);
+    
+    // Horizontal divider between VOLTAGE and SWARM/FLOW (at y=280)
+    int dividerY = 260;
+    g.drawLine((float)leftPanelWidth, (float)dividerY, (float)(getWidth() - rightPanelWidth), (float)dividerY, 1.0f);
+    
+    // Vertical divider between SWARM and FLOW
+    int centerX = getWidth() / 2;
+    g.drawLine((float)centerX, (float)dividerY, (float)centerX, (float)(getHeight() - 100), 1.0f);
+    
+    // === SECTION TITLES v1.2.0 ===
+    g.setColour(MetalLookAndFeel::getAccentOrange());
+    g.setFont(juce::Font(13.0f, juce::Font::bold));
+    
+    // VOLTAGE title (center top)
+    int voltageX = leftPanelWidth + 10;
+    int voltageWidth = getWidth() - leftPanelWidth - rightPanelWidth - 20;
+    g.drawText("VOLTAGE", voltageX, headerHeight + 8, voltageWidth - 40, 18, juce::Justification::centred);
+    
+    // SWARM title (center bottom left)
+    int swarmWidth = (getWidth() - leftPanelWidth - rightPanelWidth) / 2;
+    g.drawText("SWARM", leftPanelWidth, dividerY + 8, swarmWidth - 40, 18, juce::Justification::centred);
+    
+    // FLOW title (center bottom right)
+    g.drawText("FLOW", centerX, dividerY + 8, swarmWidth - 40, 18, juce::Justification::centred);
+    
+    // Version number (bottom right corner)
     g.setColour(MetalLookAndFeel::getTextDim());
-    g.setFont(juce::Font(11.0f));
-    g.drawText("v1.1.0", getWidth() - 70, 35, 60, 20, juce::Justification::centredRight);
-
-    // Draw section frames (shifted down by headerHeight)
-    int topRowY = headerHeight + 10;      // 100
-    int bottomRowY = headerHeight + 255;  // 345
-    
-    // Top row: PITCH+MODULATION (combined large), TONE
-    drawCombinedSectionFrame(g, juce::Rectangle<int>(15, topRowY, 640, 230));
-    drawSectionFrame(g, juce::Rectangle<int>(670, topRowY, 315, 230), "TONE");
-    
-    // Bottom row: SWARM, FLOW, OUTPUT
-    drawSectionFrame(g, juce::Rectangle<int>(15, bottomRowY, 310, 180), "SWARM");
-    drawSectionFrame(g, juce::Rectangle<int>(340, bottomRowY, 310, 180), "FLOW");
-    drawSectionFrame(g, juce::Rectangle<int>(665, bottomRowY, 320, 180), "OUTPUT");
-    
-    // === v1.1.0: METAL STRIP between sections and footswitch ===
-    int metalStripY = bottomRowY + 190;  // After sections
-    int metalStripHeight = 25;
-    
-    // Brushed metal gradient: #3A3A3A → #2A2A2A → #3A3A3A
-    juce::ColourGradient metalGrad(juce::Colour(0xff3A3A3A), 0, (float)metalStripY,
-                                    juce::Colour(0xff2A2A2A), 0, (float)(metalStripY + metalStripHeight / 2), false);
-    g.setGradientFill(metalGrad);
-    g.fillRect(0, metalStripY, getWidth(), metalStripHeight / 2);
-    
-    juce::ColourGradient metalGrad2(juce::Colour(0xff2A2A2A), 0, (float)(metalStripY + metalStripHeight / 2),
-                                     juce::Colour(0xff3A3A3A), 0, (float)(metalStripY + metalStripHeight), false);
-    g.setGradientFill(metalGrad2);
-    g.fillRect(0, metalStripY + metalStripHeight / 2, getWidth(), metalStripHeight / 2);
-    
-    // v1.1.0: Subtle horizontal lines for brushed metal texture
-    g.setColour(juce::Colour(0x15FFFFFF));
-    for (int i = 0; i < metalStripHeight; i += 2) {
-        g.drawLine(0.0f, (float)(metalStripY + i), (float)getWidth(), (float)(metalStripY + i), 0.5f);
-    }
+    g.setFont(juce::Font(10.0f));
+    g.drawText("v1.2.0", getWidth() - 60, getHeight() - 20, 50, 14, juce::Justification::centredRight);
 }
 
 void SwarmnesssAudioProcessorEditor::resized() {
-    const int knobSize = 70;
-    const int smallKnobSize = 60;
-    const int comboHeight = 24;
-    const int toggleSize = 28;
-    const int powerButtonSize = 30;
-    const int headerHeight = 90;  // v1.1.0: Increased from 70 to 90px
+    const int knobSize = 55;
+    const int smallKnobSize = 50;
+    const int comboHeight = 22;
+    const int headerHeight = 50;
+    const int leftPanelWidth = 70;
+    const int rightPanelWidth = 70;
+    const int faderWidth = 30;
+    const int faderHeight = 100;
+    const int powerButtonSize = 24;
     
-    // === Preset Selector and Buttons (top-left in header) v1.1.0 ===
-    presetSelector.setBounds(20, 30, 140, 28);
-    savePresetButton.setBounds(165, 30, 50, 28);
-    exportPresetButton.setBounds(220, 30, 60, 28);
-    importPresetButton.setBounds(285, 30, 60, 28);
+    // === Preset Selector and Buttons (top-left in header) ===
+    presetSelector.setBounds(10, 12, 100, 26);
+    savePresetButton.setBounds(115, 12, 45, 26);
+    exportPresetButton.setBounds(165, 12, 55, 26);
+    importPresetButton.setBounds(225, 12, 55, 26);
     
-    // === Info Button (top-right in header) v1.1.0 ===
-    infoButton.setBounds(getWidth() - 45, 30, 30, 30);
+    // === Info Button (top-right in header) ===
+    infoButton.setBounds(getWidth() - 35, 12, 26, 26);
     
     // Info Panel (full screen overlay)
     infoPanel.setBounds(getLocalBounds());
     
-    // Section bounds (shifted down by headerHeight)
-    const int topRowY = headerHeight + 10;     // 80
-    const int bottomRowY = headerHeight + 255;  // 325
-
-    // === PITCH + MODULATION Combined Section (15, 80, 640, 230) ===
+    // === LEFT PANEL: TONE (3 vertical faders) ===
     {
-        int baseX = 15;
-        int baseY = topRowY;
-        int sectionWidth = 640;
+        int baseX = 10;
+        int startY = headerHeight + 30;
+        int spacing = 130;
         
-        // Power button in top-right corner of combined section
-        pitchModPowerButton.setBounds(baseX + sectionWidth - 40, baseY + 8, powerButtonSize, powerButtonSize);
+        // LOW CUT fader
+        lowCutFader.setBounds(baseX + 5, startY, faderWidth, faderHeight);
+        lowCutLabel.setBounds(baseX - 5, startY + faderHeight + 2, 50, 12);
+        lowCutValueLabel.setBounds(baseX - 5, startY + faderHeight + 14, 50, 12);
         
-        // Left side: PITCH controls
-        int pitchX = baseX + 15;
-        pitchSubLabel.setBounds(pitchX, baseY + 30, 200, 16);
+        // HIGH CUT fader
+        highCutFader.setBounds(baseX + 5, startY + spacing, faderWidth, faderHeight);
+        highCutLabel.setBounds(baseX - 5, startY + spacing + faderHeight + 2, 50, 12);
+        highCutValueLabel.setBounds(baseX - 5, startY + spacing + faderHeight + 14, 50, 12);
         
-        // Dropdown for octave
-        octaveModeBox.setBounds(pitchX, baseY + 50, 85, comboHeight);
-        
-        // 2 knobs: RANGE, SPEED (Phase 1 UI: 85px spacing)
-        int knobY = baseY + 85;
-        pitchRangeKnob.setBounds(pitchX, knobY, knobSize, knobSize + 30);
-        pitchSpeedKnob.setBounds(pitchX + 85, knobY, knobSize, knobSize + 30);
-        
-        // RISE Vertical Fader
-        int faderWidth = 40;
-        int faderHeight = 110;
-        int faderX = pitchX + 175;
-        int faderY = baseY + 55;
-        riseFader.setBounds(faderX, faderY, faderWidth, faderHeight);
-        riseFaderLabel.setBounds(faderX - 5, faderY + faderHeight, faderWidth + 10, 14);
-        riseFaderValueLabel.setBounds(faderX - 5, faderY + faderHeight + 12, faderWidth + 10, 14);
-        
-        // Right side: MODULATION controls
-        int modX = baseX + 320;
-        modulationSubLabel.setBounds(modX, baseY + 30, 280, 16);
-        
-        // 3 knobs: ANGER, RUSH, RATE (Phase 1 UI: 85px spacing)
-        int modKnobY = baseY + 85;
-        int spacing = 85;
-        angerKnob.setBounds(modX, modKnobY, knobSize, knobSize + 30);
-        rushKnob.setBounds(modX + spacing, modKnobY, knobSize, knobSize + 30);
-        modRateKnob.setBounds(modX + spacing * 2, modKnobY, knobSize, knobSize + 30);
+        // MID BOOST fader
+        midBoostFader.setBounds(baseX + 5, startY + spacing * 2, faderWidth, faderHeight);
+        midBoostLabel.setBounds(baseX - 8, startY + spacing * 2 + faderHeight + 2, 56, 12);
+        midBoostValueLabel.setBounds(baseX - 5, startY + spacing * 2 + faderHeight + 14, 50, 12);
     }
-
-    // === TONE Section (670, 80, 315, 230) ===
+    
+    // === RIGHT PANEL: OUTPUT (3 vertical faders) ===
     {
-        int baseX = 670;
-        int baseY = topRowY;
+        int baseX = getWidth() - rightPanelWidth + 10;
+        int startY = headerHeight + 30;
+        int spacing = 130;
         
-        // 3 knobs in a row (Phase 1 UI: 85px spacing)
-        int knobY = baseY + 70;
-        int spacing = 85;
-        lowCutKnob.setBounds(baseX + 25, knobY, knobSize, knobSize + 30);
-        highCutKnob.setBounds(baseX + 25 + spacing, knobY, knobSize, knobSize + 30);
-        midBoostKnob.setBounds(baseX + 25 + spacing * 2, knobY, knobSize, knobSize + 30);
+        // MIX fader
+        mixFader.setBounds(baseX + 5, startY, faderWidth, faderHeight);
+        mixLabel.setBounds(baseX - 5, startY + faderHeight + 2, 50, 12);
+        mixValueLabel.setBounds(baseX - 5, startY + faderHeight + 14, 50, 12);
+        
+        // DRIVE fader
+        driveFader.setBounds(baseX + 5, startY + spacing, faderWidth, faderHeight);
+        driveLabel.setBounds(baseX - 5, startY + spacing + faderHeight + 2, 50, 12);
+        driveValueLabel.setBounds(baseX - 5, startY + spacing + faderHeight + 14, 50, 12);
+        
+        // VOLUME fader
+        volumeFader.setBounds(baseX + 5, startY + spacing * 2, faderWidth, faderHeight);
+        volumeLabel.setBounds(baseX - 5, startY + spacing * 2 + faderHeight + 2, 50, 12);
+        volumeValueLabel.setBounds(baseX - 5, startY + spacing * 2 + faderHeight + 14, 50, 12);
     }
-
-    // === SWARM Section (15, 325, 310, 180) ===
+    
+    // === CENTER TOP: VOLTAGE Section ===
     {
-        int baseX = 15;
-        int baseY = bottomRowY;
+        int sectionX = leftPanelWidth + 10;
+        int sectionWidth = getWidth() - leftPanelWidth - rightPanelWidth - 20;
+        int baseY = headerHeight + 30;
         
-        // Power button in top-right corner
-        swarmPowerButton.setBounds(baseX + 310 - 40, baseY + 8, powerButtonSize, powerButtonSize);
+        // Power button (top-right of section title)
+        pitchBypassButton.setBounds(sectionX + sectionWidth - 30, headerHeight + 6, powerButtonSize, powerButtonSize);
         
-        // 3 knobs + toggle (Phase 1 UI: 85px spacing for small knobs adjusted to 75px)
-        int knobY = baseY + 45;
-        int spacing = 75;  // Smaller spacing for smallKnobSize
-        swarmDepthKnob.setBounds(baseX + 15, knobY, smallKnobSize, smallKnobSize + 30);
-        swarmRateKnob.setBounds(baseX + 15 + spacing, knobY, smallKnobSize, smallKnobSize + 30);
-        swarmMixKnob.setBounds(baseX + 15 + spacing * 2, knobY, smallKnobSize, smallKnobSize + 30);
+        // Left side: PITCH
+        int pitchX = sectionX + 10;
+        pitchSubLabel.setBounds(pitchX, baseY, 150, 14);
         
-        // MODE toggle + DEEP label (Phase 3 UI)
-        int toggleX = baseX + 15 + spacing * 3;
-        int toggleY = knobY + 15;
-        chorusModeButton.setBounds(toggleX, toggleY, toggleSize + 25, toggleSize);
-        chorusModeLabel.setBounds(toggleX, toggleY + toggleSize + 2, toggleSize + 25, 14);
+        // Octave dropdown
+        octaveModeBox.setBounds(pitchX, baseY + 18, 75, comboHeight);
+        
+        // RANGE and SPEED knobs
+        int knobY = baseY + 50;
+        pitchRangeKnob.setBounds(pitchX, knobY, knobSize, knobSize + 25);
+        pitchSpeedKnob.setBounds(pitchX + 60, knobY, knobSize, knobSize + 25);
+        
+        // RISE Vertical Fader (center)
+        int riseX = sectionX + sectionWidth / 2 - 20;
+        riseFader.setBounds(riseX, baseY + 20, 35, 90);
+        riseFaderLabel.setBounds(riseX - 5, baseY + 112, 45, 12);
+        riseFaderValueLabel.setBounds(riseX - 5, baseY + 124, 45, 12);
+        
+        // Right side: MODULATION
+        int modX = sectionX + sectionWidth / 2 + 40;
+        modulationSubLabel.setBounds(modX, baseY, 200, 14);
+        
+        // ANGER, RUSH, RATE knobs
+        angerKnob.setBounds(modX, knobY, knobSize, knobSize + 25);
+        rushKnob.setBounds(modX + 60, knobY, knobSize, knobSize + 25);
+        modRateKnob.setBounds(modX + 120, knobY, knobSize, knobSize + 25);
     }
-
-    // === FLOW Section (340, 325, 310, 180) ===
+    
+    // === CENTER BOTTOM: SWARM + FLOW ===
+    int dividerY = 260;
+    int swarmFlowWidth = (getWidth() - leftPanelWidth - rightPanelWidth) / 2;
+    
+    // SWARM Section (left)
     {
-        int baseX = 340;
-        int baseY = bottomRowY;
+        int baseX = leftPanelWidth + 10;
+        int baseY = dividerY + 30;
         
-        // Power button in top-right corner
-        flowPowerButton.setBounds(baseX + 310 - 40, baseY + 8, powerButtonSize, powerButtonSize);
+        // Power button
+        swarmBypassButton.setBounds(baseX + swarmFlowWidth - 50, dividerY + 6, powerButtonSize, powerButtonSize);
         
-        // 2 knobs (flowModeButton removed - flowMode is always Hard) (Phase 1 UI: 85px spacing)
-        int knobY = baseY + 45;
-        int spacing = 85;
-        flowAmountKnob.setBounds(baseX + 25, knobY, smallKnobSize, smallKnobSize + 30);
-        flowSpeedKnob.setBounds(baseX + 25 + spacing, knobY, smallKnobSize, smallKnobSize + 30);
+        // 3 knobs + DEEP toggle
+        int knobY = baseY + 15;
+        int spacing = 55;
+        swarmDepthKnob.setBounds(baseX + 10, knobY, smallKnobSize, smallKnobSize + 22);
+        swarmRateKnob.setBounds(baseX + 10 + spacing, knobY, smallKnobSize, smallKnobSize + 22);
+        swarmMixKnob.setBounds(baseX + 10 + spacing * 2, knobY, smallKnobSize, smallKnobSize + 22);
+        
+        // DEEP toggle
+        int toggleX = baseX + 10 + spacing * 3 + 10;
+        deepModeButton.setBounds(toggleX, knobY + 15, 40, 24);
+        deepModeLabel.setBounds(toggleX - 5, knobY + 42, 50, 14);
     }
-
-    // === OUTPUT Section (665, 325, 320, 180) ===
+    
+    // FLOW Section (right)
     {
-        int baseX = 665;
-        int baseY = bottomRowY;
+        int centerX = getWidth() / 2;
+        int baseX = centerX + 10;
+        int baseY = dividerY + 30;
         
-        // 3 knobs (no power button for OUTPUT) (Phase 1 UI: 85px spacing)
-        int knobY = baseY + 45;
-        int spacing = 85;
-        mixKnob.setBounds(baseX + 25, knobY, smallKnobSize, smallKnobSize + 30);
-        driveKnob.setBounds(baseX + 25 + spacing, knobY, smallKnobSize, smallKnobSize + 30);
-        volumeKnob.setBounds(baseX + 25 + spacing * 2, knobY, smallKnobSize, smallKnobSize + 30);
+        // Power button
+        flowBypassButton.setBounds(baseX + swarmFlowWidth - 50, dividerY + 6, powerButtonSize, powerButtonSize);
+        
+        // 2 knobs
+        int knobY = baseY + 15;
+        int spacing = 70;
+        flowAmountKnob.setBounds(baseX + 30, knobY, smallKnobSize, smallKnobSize + 22);
+        flowSpeedKnob.setBounds(baseX + 30 + spacing, knobY, smallKnobSize, smallKnobSize + 22);
     }
-
-    // === BYPASS Footswitch (bottom center, below metal strip) v1.1.0 ===
+    
+    // === BYPASS Footswitch (bottom center) ===
     {
-        int footWidth = 100;
-        int footHeight = 100;
+        int footWidth = 80;
+        int footHeight = 80;
         int footX = (getWidth() - footWidth) / 2;
-        int footY = headerHeight + 475;  // Below metal strip (90 + 10 + 230 + 180 + 25 + pad)
+        int footY = getHeight() - footHeight - 20;
         bypassFootswitch.setBounds(footX, footY, footWidth, footHeight);
     }
 }

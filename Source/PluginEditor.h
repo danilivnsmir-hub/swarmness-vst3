@@ -42,53 +42,51 @@ private:
     InfoPanel infoPanel;
     juce::TextButton infoButton{"i"};
 
-    // === PITCH + MODULATION Combined Section ===
-    // Power button for entire PITCH+MOD section
-    PowerButton pitchModPowerButton;
-    
-    // PITCH controls
+    // === LEFT PANEL: TONE (vertical faders) ===
+    juce::Slider lowCutFader;
+    juce::Slider highCutFader;
+    juce::Slider midBoostFader;
+    juce::Label lowCutLabel, highCutLabel, midBoostLabel;
+    juce::Label lowCutValueLabel, highCutValueLabel, midBoostValueLabel;
+
+    // === RIGHT PANEL: OUTPUT (vertical faders) ===
+    juce::Slider mixFader;
+    juce::Slider driveFader;
+    juce::Slider volumeFader;
+    juce::Label mixLabel, driveLabel, volumeLabel;
+    juce::Label mixValueLabel, driveValueLabel, volumeValueLabel;
+
+    // === CENTER TOP: VOLTAGE Section ===
+    PowerButton pitchBypassButton;  // Power toggle for VOLTAGE
     juce::ComboBox octaveModeBox;
     RotaryKnob pitchRangeKnob{"RANGE"};
     RotaryKnob pitchSpeedKnob{"SPEED"};
     juce::Slider riseFader;
     juce::Label riseFaderLabel;
     juce::Label riseFaderValueLabel;
-
-    // MODULATION controls
     RotaryKnob angerKnob{"ANGER"};
     RotaryKnob rushKnob{"RUSH"};
     RotaryKnob modRateKnob{"RATE"};
+    
+    // PITCH / MODULATION subheaders
+    juce::Label pitchSubLabel;
+    juce::Label modulationSubLabel;
 
-    // === TONE Section (no power button) ===
-    RotaryKnob lowCutKnob{"LOW CUT"};
-    RotaryKnob highCutKnob{"HIGH CUT"};
-    RotaryKnob midBoostKnob{"MID BOOST"};
-
-    // === SWARM Section ===
-    PowerButton swarmPowerButton;
+    // === CENTER BOTTOM LEFT: SWARM Section ===
+    PowerButton swarmBypassButton;
     RotaryKnob swarmDepthKnob{"DEPTH"};
     RotaryKnob swarmRateKnob{"RATE"};
     RotaryKnob swarmMixKnob{"MIX"};
-    juce::ToggleButton chorusModeButton;  // Toggle without built-in text
-    juce::Label chorusModeLabel;  // "DEEP" label below toggle
+    juce::ToggleButton deepModeButton;
+    juce::Label deepModeLabel;
 
-    // === FLOW Section ===
-    PowerButton flowPowerButton;
+    // === CENTER BOTTOM RIGHT: FLOW Section ===
+    PowerButton flowBypassButton;
     RotaryKnob flowAmountKnob{"AMOUNT"};
     RotaryKnob flowSpeedKnob{"SPEED"};
-    // flowModeButton removed - flowMode is always true (Hard)
 
-    // === OUTPUT Section (no power button) ===
-    RotaryKnob mixKnob{"MIX"};
-    RotaryKnob volumeKnob{"VOLUME"};
-    RotaryKnob driveKnob{"DRIVE"};
-
-    // === Footswitch (Bottom Center) ===
+    // === BYPASS Footswitch (Bottom Center) ===
     FootswitchButton bypassFootswitch;
-
-    // Section Labels (for subheaders)
-    juce::Label pitchSubLabel;
-    juce::Label modulationSubLabel;
 
     // Parameter Attachments
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> octaveModeAttachment;
@@ -111,16 +109,15 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> mixAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> outputGainAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> flowEngageAttachment;
-    // flowModeAttachment removed - flowMode is always true (Hard)
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> flowAmountAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> flowSpeedAttachment;
 
-    void drawSectionFrame(juce::Graphics& g, juce::Rectangle<int> bounds, const juce::String& title);
-    void drawCombinedSectionFrame(juce::Graphics& g, juce::Rectangle<int> bounds);
     void refreshPresetList();
     void updatePresetName();
     void updateSectionEnableStates();
     void setSectionEnabled(std::vector<juce::Component*> components, bool enabled);
+    void setupVerticalFader(juce::Slider& fader, juce::Label& label, juce::Label& valueLabel, 
+                            const juce::String& labelText, float multiplier = 100.0f);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SwarmnesssAudioProcessorEditor)
 };
