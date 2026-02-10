@@ -1,7 +1,7 @@
 #include "PresetManager.h"
 
 const juce::String PresetManager::kPresetExtension = ".swpreset";
-const juce::String PresetManager::kPresetVersion = "1.2.3";
+const juce::String PresetManager::kPresetVersion = "1.2.5";
 
 PresetManager::PresetManager(juce::AudioProcessorValueTreeState& apvts)
     : mAPVTS(apvts)
@@ -360,4 +360,102 @@ void PresetManager::initializeFactoryPresets() {
         {{"octaveMode", 0.0f}, // -2 OCT
          {"chaos", 0.0f}, {"panic", 0.0f},
          {"lowCut", 0.0f}, {"highCut", 0.5f}});
+    
+    // ========== v1.2.5 HEAVY MUSIC PRESETS ==========
+    
+    // Breakdown Chaos - Knocked Loose style breakdowns
+    mFactoryPresets["Breakdown Chaos"] = createPreset(
+        "Breakdown Chaos", "For breakdown sections - Knocked Loose style",
+        {{"octaveMode", 1.0f / 4.0f}, // -1 OCT
+         {"randomRange", 0.5f}, {"randomRate", 0.4f},
+         {"rise", 0.05f},
+         {"chaos", 0.7f}, {"panic", 0.3f}, {"speed", 0.25f},
+         {"lowCut", 0.04f}, {"highCut", 0.6f}, {"saturation", 0.3f},
+         {"chorusDepth", 0.2f}, {"chorusRate", 0.15f}, {"chorusMix", 0.25f},
+         {"flowAmount", 0.0f},
+         {"mix", 1.0f}, {"drive", 0.4f}, {"outputGain", 0.8f}});
+    
+    // Deathcore Slam - Slaughter to Prevail brutal lows
+    mFactoryPresets["Deathcore Slam"] = createPreset(
+        "Deathcore Slam", "Brutal low tuned - Slaughter to Prevail style",
+        {{"octaveMode", 0.0f}, // -2 OCT
+         {"randomRange", 0.25f}, {"randomRate", 0.2f},
+         {"rise", 0.1f},
+         {"chaos", 0.5f}, {"panic", 0.6f}, {"speed", 0.15f},
+         {"lowCut", 0.01f}, {"highCut", 0.4f}, {"saturation", 0.5f},
+         {"chorusDepth", 0.3f}, {"chorusRate", 0.1f}, {"chorusMix", 0.4f},
+         {"flowMode", 1.0f}, {"flowAmount", 0.2f}, {"flowSpeed", 0.3f},
+         {"mix", 1.0f}, {"drive", 0.6f}, {"outputGain", 0.75f}});
+    
+    // Atmospheric Void - Sleep Token ambient
+    mFactoryPresets["Atmospheric Void"] = createPreset(
+        "Atmospheric Void", "Ambient/atmospheric - Sleep Token style",
+        {{"octaveMode", 2.0f / 4.0f}, // 0 (no shift)
+         {"randomRange", 0.125f}, {"randomRate", 0.1f},
+         {"rise", 0.5f},
+         {"chaos", 0.1f}, {"panic", 0.05f}, {"speed", 0.08f},
+         {"lowCut", 0.05f}, {"highCut", 0.9f}, {"saturation", 0.1f},
+         {"chorusDepth", 0.6f}, {"chorusRate", 0.25f}, {"chorusMix", 0.5f},
+         {"flowMode", 1.0f}, {"flowAmount", 0.4f}, {"flowSpeed", 0.2f},
+         {"mix", 0.7f}, {"drive", 0.1f}, {"outputGain", 0.85f}});
+    
+    // Nu-Metal Aggression - Alpha Wolf style
+    mFactoryPresets["Nu-Metal Aggression"] = createPreset(
+        "Nu-Metal Aggression", "Nu-metalcore aggression - Alpha Wolf style",
+        {{"octaveMode", 1.0f / 4.0f}, // -1 OCT
+         {"randomRange", 0.33f}, {"randomRate", 0.35f},
+         {"rise", 0.08f},
+         {"chaos", 0.6f}, {"panic", 0.4f}, {"speed", 0.3f},
+         {"lowCut", 0.03f}, {"highCut", 0.5f}, {"saturation", 0.4f},
+         {"chorusDepth", 0.25f}, {"chorusRate", 0.2f}, {"chorusMix", 0.3f},
+         {"flowAmount", 0.15f}, {"flowSpeed", 0.25f},
+         {"mix", 1.0f}, {"drive", 0.5f}, {"outputGain", 0.8f}});
+    
+    // Hardcore Fury - fast hardcore punk
+    mFactoryPresets["Hardcore Fury"] = createPreset(
+        "Hardcore Fury", "Fast hardcore punk - Knocked Loose style",
+        {{"octaveMode", 2.0f / 4.0f}, // 0 (no shift)
+         {"randomRange", 0.17f}, {"randomRate", 0.6f},
+         {"rise", 0.03f},
+         {"chaos", 0.8f}, {"panic", 0.7f}, {"speed", 0.5f},
+         {"lowCut", 0.05f}, {"highCut", 0.7f}, {"saturation", 0.2f},
+         {"chorusDepth", 0.1f}, {"chorusRate", 0.3f}, {"chorusMix", 0.15f},
+         {"flowAmount", 0.3f}, {"flowSpeed", 0.6f},
+         {"mix", 1.0f}, {"drive", 0.35f}, {"outputGain", 0.85f}});
+    
+    // Djent Pulse - tight djent rhythm
+    mFactoryPresets["Djent Pulse"] = createPreset(
+        "Djent Pulse", "Tight djent rhythm",
+        {{"octaveMode", 2.0f / 4.0f}, // 0 (no shift)
+         {"randomRange", 0.08f}, {"randomRate", 0.15f},
+         {"rise", 0.02f},
+         {"chaos", 0.3f}, {"panic", 0.2f}, {"speed", 0.4f},
+         {"lowCut", 0.04f}, {"highCut", 0.6f}, {"saturation", 0.35f},
+         {"chorusDepth", 0.15f}, {"chorusRate", 0.35f}, {"chorusMix", 0.2f},
+         {"flowAmount", 0.5f}, {"flowSpeed", 0.4f},
+         {"mix", 0.9f}, {"drive", 0.25f}, {"outputGain", 0.8f}});
+    
+    // Ritual Drone - dark atmospheric
+    mFactoryPresets["Ritual Drone"] = createPreset(
+        "Ritual Drone", "Dark atmospheric - Sleep Token ritual vibes",
+        {{"octaveMode", 1.0f / 4.0f}, // -1 OCT
+         {"randomRange", 0.21f}, {"randomRate", 0.08f},
+         {"rise", 0.8f},
+         {"chaos", 0.15f}, {"panic", 0.1f}, {"speed", 0.05f},
+         {"lowCut", 0.025f}, {"highCut", 0.8f}, {"saturation", 0.2f},
+         {"chorusDepth", 0.7f}, {"chorusRate", 0.12f}, {"chorusMix", 0.6f},
+         {"flowMode", 1.0f}, {"flowAmount", 0.6f}, {"flowSpeed", 0.15f},
+         {"mix", 0.8f}, {"drive", 0.15f}, {"outputGain", 0.75f}});
+    
+    // Scream Machine - for harsh vocals processing
+    mFactoryPresets["Scream Machine"] = createPreset(
+        "Scream Machine", "For harsh vocals processing",
+        {{"octaveMode", 3.0f / 4.0f}, // +1 OCT
+         {"randomRange", 0.75f}, {"randomRate", 0.5f},
+         {"rise", 0.04f},
+         {"chaos", 0.9f}, {"panic", 0.5f}, {"speed", 0.35f},
+         {"lowCut", 0.1f}, {"highCut", 0.4f}, {"saturation", 0.6f},
+         {"chorusDepth", 0.2f}, {"chorusRate", 0.4f}, {"chorusMix", 0.25f},
+         {"flowAmount", 0.25f}, {"flowSpeed", 0.45f},
+         {"mix", 0.85f}, {"drive", 0.7f}, {"outputGain", 0.7f}});
 }

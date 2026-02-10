@@ -455,7 +455,7 @@ void SwarmnesssAudioProcessorEditor::paint(juce::Graphics& g) {
     // v1.2.4: Version number (bottom right corner, 8px padding, 40% opacity)
     g.setColour(juce::Colours::white.withAlpha(0.4f));
     g.setFont(juce::Font(10.0f));
-    g.drawText("v1.2.4", getWidth() - 50 - GRID, getHeight() - 16 - GRID, 50, 16, juce::Justification::right);
+    g.drawText("v1.2.5", getWidth() - 50 - GRID, getHeight() - 16 - GRID, 50, 16, juce::Justification::right);
 }
 
 void SwarmnesssAudioProcessorEditor::resized() {
@@ -485,53 +485,59 @@ void SwarmnesssAudioProcessorEditor::resized() {
     // Info Panel (full screen overlay)
     infoPanel.setBounds(getLocalBounds());
     
-    // === LEFT PANEL: TONE (3 vertical faders, symmetrical) ===
+    // === LEFT PANEL: TONE (3 vertical faders, centered with 8px gaps) ===
     {
-        int sideY = contentY + 40;
-        int sideSpacing = (contentHeight - 40 - faderHeight * 3) / 2;
-        int sliderX = PADDING + (sidePanelWidth - faderWidth) / 2;
+        int sideSliderHeight = 80;
+        int sideSliderWidth = 32;
+        int sideGap = 8;
+        int totalSlidersHeight = sideSliderHeight * 3 + sideGap * 2; // 3 faders + 2 gaps
+        int sideStartY = HEADER_HEIGHT + (getHeight() - HEADER_HEIGHT - totalSlidersHeight) / 2;
+        int sliderX = PADDING + (sidePanelWidth - sideSliderWidth) / 2;
         
         // LOW CUT fader
-        lowCutFader.setBounds(sliderX, sideY, faderWidth, faderHeight);
-        lowCutLabel.setBounds(PADDING, sideY + faderHeight + 2, sidePanelWidth, 12);
-        lowCutValueLabel.setBounds(PADDING, sideY + faderHeight + 14, sidePanelWidth, 12);
+        lowCutFader.setBounds(sliderX, sideStartY, sideSliderWidth, sideSliderHeight);
+        lowCutLabel.setBounds(PADDING, sideStartY + sideSliderHeight + 2, sidePanelWidth, 12);
+        lowCutValueLabel.setBounds(PADDING, sideStartY + sideSliderHeight + 14, sidePanelWidth, 12);
         
         // HIGH CUT fader
-        int highCutY = sideY + faderHeight + sideSpacing;
-        highCutFader.setBounds(sliderX, highCutY, faderWidth, faderHeight);
-        highCutLabel.setBounds(PADDING, highCutY + faderHeight + 2, sidePanelWidth, 12);
-        highCutValueLabel.setBounds(PADDING, highCutY + faderHeight + 14, sidePanelWidth, 12);
+        int highCutY = sideStartY + sideSliderHeight + sideGap;
+        highCutFader.setBounds(sliderX, highCutY, sideSliderWidth, sideSliderHeight);
+        highCutLabel.setBounds(PADDING, highCutY + sideSliderHeight + 2, sidePanelWidth, 12);
+        highCutValueLabel.setBounds(PADDING, highCutY + sideSliderHeight + 14, sidePanelWidth, 12);
         
         // MID BOOST fader
-        int midBoostY = highCutY + faderHeight + sideSpacing;
-        midBoostFader.setBounds(sliderX, midBoostY, faderWidth, faderHeight);
-        midBoostLabel.setBounds(PADDING - 4, midBoostY + faderHeight + 2, sidePanelWidth + 8, 12);
-        midBoostValueLabel.setBounds(PADDING, midBoostY + faderHeight + 14, sidePanelWidth, 12);
+        int midBoostY = highCutY + sideSliderHeight + sideGap;
+        midBoostFader.setBounds(sliderX, midBoostY, sideSliderWidth, sideSliderHeight);
+        midBoostLabel.setBounds(PADDING - 4, midBoostY + sideSliderHeight + 2, sidePanelWidth + 8, 12);
+        midBoostValueLabel.setBounds(PADDING, midBoostY + sideSliderHeight + 14, sidePanelWidth, 12);
     }
     
-    // === RIGHT PANEL: OUTPUT (3 vertical faders, symmetrical) ===
+    // === RIGHT PANEL: OUTPUT (3 vertical faders, centered with 8px gaps) ===
     {
         int rightSideX = getWidth() - PADDING - sidePanelWidth;
-        int sideY = contentY + 40;
-        int sideSpacing = (contentHeight - 40 - faderHeight * 3) / 2;
-        int sliderX = rightSideX + (sidePanelWidth - faderWidth) / 2;
+        int sideSliderHeight = 80;
+        int sideSliderWidth = 32;
+        int sideGap = 8;
+        int totalSlidersHeight = sideSliderHeight * 3 + sideGap * 2; // 3 faders + 2 gaps
+        int sideStartY = HEADER_HEIGHT + (getHeight() - HEADER_HEIGHT - totalSlidersHeight) / 2;
+        int sliderX = rightSideX + (sidePanelWidth - sideSliderWidth) / 2;
         
         // MIX fader
-        mixFader.setBounds(sliderX, sideY, faderWidth, faderHeight);
-        mixLabel.setBounds(rightSideX, sideY + faderHeight + 2, sidePanelWidth, 12);
-        mixValueLabel.setBounds(rightSideX, sideY + faderHeight + 14, sidePanelWidth, 12);
+        mixFader.setBounds(sliderX, sideStartY, sideSliderWidth, sideSliderHeight);
+        mixLabel.setBounds(rightSideX, sideStartY + sideSliderHeight + 2, sidePanelWidth, 12);
+        mixValueLabel.setBounds(rightSideX, sideStartY + sideSliderHeight + 14, sidePanelWidth, 12);
         
         // DRIVE fader
-        int driveY = sideY + faderHeight + sideSpacing;
-        driveFader.setBounds(sliderX, driveY, faderWidth, faderHeight);
-        driveLabel.setBounds(rightSideX, driveY + faderHeight + 2, sidePanelWidth, 12);
-        driveValueLabel.setBounds(rightSideX, driveY + faderHeight + 14, sidePanelWidth, 12);
+        int driveY = sideStartY + sideSliderHeight + sideGap;
+        driveFader.setBounds(sliderX, driveY, sideSliderWidth, sideSliderHeight);
+        driveLabel.setBounds(rightSideX, driveY + sideSliderHeight + 2, sidePanelWidth, 12);
+        driveValueLabel.setBounds(rightSideX, driveY + sideSliderHeight + 14, sidePanelWidth, 12);
         
         // VOLUME fader
-        int volumeY = driveY + faderHeight + sideSpacing;
-        volumeFader.setBounds(sliderX, volumeY, faderWidth, faderHeight);
-        volumeLabel.setBounds(rightSideX, volumeY + faderHeight + 2, sidePanelWidth, 12);
-        volumeValueLabel.setBounds(rightSideX, volumeY + faderHeight + 14, sidePanelWidth, 12);
+        int volumeY = driveY + sideSliderHeight + sideGap;
+        volumeFader.setBounds(sliderX, volumeY, sideSliderWidth, sideSliderHeight);
+        volumeLabel.setBounds(rightSideX, volumeY + sideSliderHeight + 2, sidePanelWidth, 12);
+        volumeValueLabel.setBounds(rightSideX, volumeY + sideSliderHeight + 14, sidePanelWidth, 12);
     }
     
     // === CENTER TOP: VOLTAGE Section v1.2.4 ===
