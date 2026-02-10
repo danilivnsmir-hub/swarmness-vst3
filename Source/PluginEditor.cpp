@@ -458,7 +458,7 @@ void SwarmnesssAudioProcessorEditor::paint(juce::Graphics& g) {
     // Version number (top right, below info button area)
     g.setColour(MetalLookAndFeel::getTextDim());
     g.setFont(juce::Font(11.0f));
-    g.drawText("v3.2.6", getWidth() - 70, 20, 60, 20, juce::Justification::centredRight);
+    g.drawText("v3.2.7", getWidth() - 70, 20, 60, 20, juce::Justification::centredRight);
 
     // Draw section frames
     // Top row: PITCH+MODULATION (combined large), TONE

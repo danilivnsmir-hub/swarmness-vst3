@@ -102,6 +102,7 @@ private:
     std::atomic<float>* pFlowAmount = nullptr;
     std::atomic<float>* pFlowSpeed = nullptr;
     std::atomic<float>* pGlobalBypass = nullptr;
+    std::atomic<float>* pGlobalEngage = nullptr;
 
     juce::AudioBuffer<float> mDryBuffer;
     double mCurrentSampleRate = 44100.0;

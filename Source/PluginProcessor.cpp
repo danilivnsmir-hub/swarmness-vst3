@@ -41,6 +41,7 @@ SwarmnesssAudioProcessor::SwarmnesssAudioProcessor()
     pFlowAmount = mAPVTS.getRawParameterValue("flowAmount");
     pFlowSpeed = mAPVTS.getRawParameterValue("flowSpeed");
     pGlobalBypass = mAPVTS.getRawParameterValue("globalBypass");
+    pGlobalEngage = mAPVTS.getRawParameterValue("globalEngage");
     
     // Initialize dirty tracking after all parameters are set up
     mPresetManager->initializeDirtyTracking();
@@ -144,8 +145,11 @@ void SwarmnesssAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
     for (int i = getTotalNumInputChannels(); i < getTotalNumOutputChannels(); ++i)
         buffer.clear(i, 0, numSamples);
 
-    // Global Bypass - pass input through unchanged
-    if (*pGlobalBypass > 0.5f) {
+    // Global Bypass/Engage logic
+    // Bypass=true OR Engage=false → bypass the effect
+    // This allows both traditional bypass AND momentary "engage" control
+    bool isBypassed = (*pGlobalBypass > 0.5f) || (*pGlobalEngage < 0.5f);
+    if (isBypassed) {
         return;
     }
 
@@ -331,70 +335,71 @@ void SwarmnesssAudioProcessor::setStateInformation(const void* data, int sizeInB
 juce::AudioProcessorValueTreeState::ParameterLayout SwarmnesssAudioProcessor::createParameterLayout() {
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
 
-    // === PITCH Section (Octave + randomizer) ===
+    // === VOLTAGE Section (Pitch + Randomizer) ===
     params.push_back(std::make_unique<juce::AudioParameterChoice>(
-        "octaveMode", "Octave Mode", juce::StringArray{"-2 OCT", "-1 OCT", "0", "+1 OCT", "+2 OCT"}, 3));
+        "octaveMode", "VOLTAGE Octave", juce::StringArray{"-2 OCT", "-1 OCT", "0", "+1 OCT", "+2 OCT"}, 3));
     params.push_back(std::make_unique<juce::AudioParameterBool>(
-        "engage", "Engage", true));
+        "engage", "VOLTAGE On", true));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "rise", "Rise", 0.0f, 1.0f, 0.05f));
+        "rise", "VOLTAGE Rise", 0.0f, 1.0f, 0.05f));
 
     // Pitch Randomizer (RANGE and SPEED knobs)
-    // randomRange: 0-24 semitones (integer)
     params.push_back(std::make_unique<juce::AudioParameterInt>(
-        "randomRange", "Random Range", 0, 24, 0));
+        "randomRange", "VOLTAGE Range", 0, 24, 0));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "randomRate", "Random Rate", 0.0f, 1.0f, 0.1f));
+        "randomRate", "VOLTAGE Speed", 0.0f, 1.0f, 0.1f));
 
     // === MODULATION Section ===
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "panic", "Panic", 0.0f, 1.0f, 0.0f));
+        "panic", "MOD Rush", 0.0f, 1.0f, 0.0f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "chaos", "Chaos", 0.0f, 1.0f, 0.0f));
+        "chaos", "MOD Anger", 0.0f, 1.0f, 0.0f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "speed", "Speed", 0.0f, 1.0f, 0.0f));
+        "speed", "MOD Rate", 0.0f, 1.0f, 0.0f));
 
     // === TONE Section ===
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "lowCut", "Low Cut", 0.0f, 1.0f, 0.0f));
+        "lowCut", "TONE Low Cut", 0.0f, 1.0f, 0.0f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "highCut", "High Cut", 0.0f, 1.0f, 1.0f));
+        "highCut", "TONE High Cut", 0.0f, 1.0f, 1.0f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "saturation", "Saturation", 0.0f, 1.0f, 0.0f));
+        "saturation", "TONE Mid Boost", 0.0f, 1.0f, 0.0f));
 
     // === SWARM Section (Chorus) ===
     params.push_back(std::make_unique<juce::AudioParameterBool>(
-        "chorusEngage", "Chorus Engage", true));  // ON/OFF for SWARM section
+        "chorusEngage", "SWARM On", true));
     params.push_back(std::make_unique<juce::AudioParameterBool>(
-        "chorusMode", "Chorus Mode", false));  // false=Classic, true=Deep
+        "chorusMode", "SWARM Deep", false));  // false=Classic, true=Deep
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "chorusRate", "Chorus Rate", 0.0f, 1.0f, 0.2f));
+        "chorusRate", "SWARM Rate", 0.0f, 1.0f, 0.2f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "chorusDepth", "Chorus Depth", 0.0f, 1.0f, 0.5f));
+        "chorusDepth", "SWARM Depth", 0.0f, 1.0f, 0.5f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "chorusMix", "Chorus Mix", 0.0f, 1.0f, 0.0f));
+        "chorusMix", "SWARM Mix", 0.0f, 1.0f, 0.0f));
 
     // === OUTPUT Section ===
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "mix", "Mix", 0.0f, 1.0f, 1.0f));  // Default 100% wet
+        "mix", "OUT Mix", 0.0f, 1.0f, 1.0f));  // Default 100% wet
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "drive", "Drive", 0.0f, 1.0f, 0.0f));
+        "drive", "OUT Drive", 0.0f, 1.0f, 0.0f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "outputGain", "Output Gain", 0.0f, 1.0f, 0.8f));
+        "outputGain", "OUT Level", 0.0f, 1.0f, 0.8f));
 
     // === FLOW Section (stutter/gate) ===
     params.push_back(std::make_unique<juce::AudioParameterBool>(
-        "flowEngage", "Flow Engage", true));  // ON/OFF for FLOW section
+        "flowEngage", "FLOW On", true));
     params.push_back(std::make_unique<juce::AudioParameterBool>(
-        "flowMode", "Flow Mode", true));  // false=Smooth, true=Hard
+        "flowMode", "FLOW Hard", true));  // false=Smooth, true=Hard
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "flowAmount", "Flow Amount", 0.0f, 1.0f, 0.0f));  // Depth of gate effect
+        "flowAmount", "FLOW Amount", 0.0f, 1.0f, 0.0f));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "flowSpeed", "Flow Speed", 0.0f, 1.0f, 0.3f));  // Rate of stutters
+        "flowSpeed", "FLOW Speed", 0.0f, 1.0f, 0.3f));
 
     // === GLOBAL ===
     params.push_back(std::make_unique<juce::AudioParameterBool>(
-        "globalBypass", "Global Bypass", false));
+        "globalBypass", "Bypass", false));
+    params.push_back(std::make_unique<juce::AudioParameterBool>(
+        "globalEngage", "Engage", true));  // Inverted bypass for momentary MIDI
 
     return {params.begin(), params.end()};
 }
