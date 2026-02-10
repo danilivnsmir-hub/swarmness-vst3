@@ -1,10 +1,16 @@
 #pragma once
 #include <JuceHeader.h>
+#include "BinaryData.h"
 
 class MetalLookAndFeel : public juce::LookAndFeel_V4 {
 public:
     MetalLookAndFeel();
     ~MetalLookAndFeel() override = default;
+    
+    // Image assets for controls
+    juce::Image knobImage;
+    juce::Image toggleImage;
+    juce::Image faderImage;
 
     void drawRotarySlider(juce::Graphics& g, int x, int y, int width, int height,
                           float sliderPosProportional, float rotaryStartAngle,

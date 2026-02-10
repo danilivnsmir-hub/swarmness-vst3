@@ -1,5 +1,6 @@
 #pragma once
 #include <JuceHeader.h>
+#include "BinaryData.h"
 
 class FootswitchButton : public juce::Component,
                          public juce::Timer {
@@ -28,6 +29,9 @@ private:
     bool mIsPressed = false;
     LEDState mLEDState = Green;
     bool mBlinkState = false;
+    
+    // v1.0.0: Image asset
+    juce::Image footswitchImage;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FootswitchButton)
 };

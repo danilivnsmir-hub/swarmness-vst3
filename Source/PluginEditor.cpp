@@ -6,8 +6,11 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
 {
     setLookAndFeel(&metalLookAndFeel);
 
-    // Load background image (logo is already in the background)
+    // Load background image 
     backgroundImage = juce::ImageCache::getFromMemory(BinaryData::background_png, BinaryData::background_pngSize);
+    
+    // Load header logo image
+    headerLogoImage = juce::ImageCache::getFromMemory(BinaryData::header_logo_png, BinaryData::header_logo_pngSize);
 
     // Preset Panel (hidden by default)
     presetPanel = std::make_unique<PresetPanel>(audioProcessor.getPresetManager());
@@ -294,7 +297,7 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
     startTimerHz(30);
 
     // Set plugin window size
-    setSize(1000, 700);
+    setSize(1000, 770);  // Added 70px header
     
     // Initial update of section enable states
     updateSectionEnableStates();
@@ -443,32 +446,61 @@ void SwarmnesssAudioProcessorEditor::drawCombinedSectionFrame(juce::Graphics& g,
 }
 
 void SwarmnesssAudioProcessorEditor::paint(juce::Graphics& g) {
-    // Draw background image (scaled to fit) - logo is in the background
+    const int headerHeight = 70;
+    
+    // Draw background image (scaled to fit content area below header)
     if (backgroundImage.isValid()) {
-        g.drawImage(backgroundImage, getLocalBounds().toFloat(),
-                    juce::RectanglePlacement::stretchToFit);
+        auto contentArea = juce::Rectangle<float>(0, (float)headerHeight, (float)getWidth(), (float)(getHeight() - headerHeight));
+        g.drawImage(backgroundImage, contentArea, juce::RectanglePlacement::stretchToFit);
     } else {
         g.fillAll(MetalLookAndFeel::getBackgroundDark());
     }
     
-    // Dark overlay to make background less distracting
+    // Dark overlay to make background less distracting (content area only)
     g.setColour(juce::Colour(0x99000000));
-    g.fillRect(getLocalBounds());
+    g.fillRect(0, headerHeight, getWidth(), getHeight() - headerHeight);
 
-    // Version number (top right, below info button area)
+    // === HEADER SECTION ===
+    // Header background - dark gradient
+    juce::ColourGradient headerGrad(juce::Colour(0xff1a1a1a), 0, 0,
+                                     juce::Colour(0xff0d0d0d), 0, (float)headerHeight, false);
+    g.setGradientFill(headerGrad);
+    g.fillRect(0, 0, getWidth(), headerHeight);
+    
+    // Header bottom border line (orange accent)
+    g.setColour(MetalLookAndFeel::getAccentOrange().withAlpha(0.4f));
+    g.fillRect(0, headerHeight - 2, getWidth(), 2);
+    
+    // Draw header logo centered
+    if (headerLogoImage.isValid()) {
+        // Scale logo to fit header while maintaining aspect ratio
+        float logoScale = (float)(headerHeight - 16) / (float)headerLogoImage.getHeight();
+        int logoW = (int)(headerLogoImage.getWidth() * logoScale);
+        int logoH = (int)(headerLogoImage.getHeight() * logoScale);
+        int logoX = (getWidth() - logoW) / 2;
+        int logoY = (headerHeight - logoH) / 2;
+        
+        g.drawImage(headerLogoImage, logoX, logoY, logoW, logoH,
+                    0, 0, headerLogoImage.getWidth(), headerLogoImage.getHeight());
+    }
+
+    // Version number (top right in header)
     g.setColour(MetalLookAndFeel::getTextDim());
     g.setFont(juce::Font(11.0f));
-    g.drawText("v3.2.7", getWidth() - 70, 20, 60, 20, juce::Justification::centredRight);
+    g.drawText("v1.0.0", getWidth() - 70, 25, 60, 20, juce::Justification::centredRight);
 
-    // Draw section frames
+    // Draw section frames (shifted down by headerHeight)
+    int topRowY = headerHeight + 10;  // 80
+    int bottomRowY = headerHeight + 255;  // 325
+    
     // Top row: PITCH+MODULATION (combined large), TONE
-    drawCombinedSectionFrame(g, juce::Rectangle<int>(15, 80, 640, 230));
-    drawSectionFrame(g, juce::Rectangle<int>(670, 80, 315, 230), "TONE");
+    drawCombinedSectionFrame(g, juce::Rectangle<int>(15, topRowY, 640, 230));
+    drawSectionFrame(g, juce::Rectangle<int>(670, topRowY, 315, 230), "TONE");
     
     // Bottom row: SWARM, FLOW, OUTPUT
-    drawSectionFrame(g, juce::Rectangle<int>(15, 325, 310, 180), "SWARM");
-    drawSectionFrame(g, juce::Rectangle<int>(340, 325, 310, 180), "FLOW");
-    drawSectionFrame(g, juce::Rectangle<int>(665, 325, 320, 180), "OUTPUT");
+    drawSectionFrame(g, juce::Rectangle<int>(15, bottomRowY, 310, 180), "SWARM");
+    drawSectionFrame(g, juce::Rectangle<int>(340, bottomRowY, 310, 180), "FLOW");
+    drawSectionFrame(g, juce::Rectangle<int>(665, bottomRowY, 320, 180), "OUTPUT");
 }
 
 void SwarmnesssAudioProcessorEditor::resized() {
@@ -477,22 +509,23 @@ void SwarmnesssAudioProcessorEditor::resized() {
     const int comboHeight = 24;
     const int toggleSize = 28;
     const int powerButtonSize = 30;
+    const int headerHeight = 70;
     
-    // === Preset Selector and Buttons (top-left corner) ===
+    // === Preset Selector and Buttons (top-left in header) ===
     presetSelector.setBounds(20, 20, 140, 28);
     savePresetButton.setBounds(165, 20, 50, 28);
     exportPresetButton.setBounds(220, 20, 60, 28);
     importPresetButton.setBounds(285, 20, 60, 28);
     
-    // === Info Button (top-right corner) ===
-    infoButton.setBounds(getWidth() - 45, 15, 30, 30);
+    // === Info Button (top-right in header) ===
+    infoButton.setBounds(getWidth() - 45, 20, 30, 30);
     
     // Info Panel (full screen overlay)
     infoPanel.setBounds(getLocalBounds());
     
-    // Section bounds
-    const int topRowY = 80;
-    const int bottomRowY = 325;
+    // Section bounds (shifted down by headerHeight)
+    const int topRowY = headerHeight + 10;     // 80
+    const int bottomRowY = headerHeight + 255;  // 325
 
     // === PITCH + MODULATION Combined Section (15, 80, 640, 230) ===
     {
@@ -604,7 +637,7 @@ void SwarmnesssAudioProcessorEditor::resized() {
         int footWidth = 100;
         int footHeight = 100;
         int footX = (getWidth() - footWidth) / 2;
-        int footY = 530;
+        int footY = headerHeight + 460;  // 530 -> 600
         bypassFootswitch.setBounds(footX, footY, footWidth, footHeight);
     }
 }

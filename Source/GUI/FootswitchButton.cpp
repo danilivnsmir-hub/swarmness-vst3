@@ -3,6 +3,9 @@
 
 FootswitchButton::FootswitchButton() {
     startTimerHz(4); // For blinking LED
+    
+    // v1.0.0: Load footswitch image
+    footswitchImage = juce::ImageCache::getFromMemory(BinaryData::footswitch_png, BinaryData::footswitch_pngSize);
 }
 
 void FootswitchButton::paint(juce::Graphics& g) {
@@ -12,146 +15,63 @@ void FootswitchButton::paint(juce::Graphics& g) {
     const float centreX = w * 0.5f;
     const float centreY = h * 0.5f;
     
-    // === HEXAGONAL OUTER BEZEL ===
-    const float hexRadius = juce::jmin(w, h) * 0.45f;
-    {
-        juce::Path hexPath;
-        for (int i = 0; i < 6; i++) {
-            float angle = juce::MathConstants<float>::pi / 6.0f + i * juce::MathConstants<float>::pi / 3.0f;
-            float hx = centreX + hexRadius * std::cos(angle);
-            float hy = centreY + hexRadius * std::sin(angle);
-            if (i == 0) hexPath.startNewSubPath(hx, hy);
-            else hexPath.lineTo(hx, hy);
-        }
-        hexPath.closeSubPath();
+    // v1.0.0: Image-based footswitch rendering
+    if (footswitchImage.isValid()) {
+        // Draw the base footswitch image
+        float pressOffset = mIsPressed ? 2.0f : 0.0f;
         
-        // Hexagon gradient (brushed metal) - darker when pressed
-        juce::Colour topCol = mIsPressed ? MetalLookAndFeel::getMetalGrey() : MetalLookAndFeel::getMetalLight();
-        juce::Colour botCol = mIsPressed ? MetalLookAndFeel::getMetalDark() : MetalLookAndFeel::getMetalGrey();
-        
-        juce::ColourGradient hexGrad(topCol, centreX, centreY - hexRadius,
-                                      botCol, centreX, centreY + hexRadius, false);
-        g.setGradientFill(hexGrad);
-        g.fillPath(hexPath);
-        
-        // Hex border - thicker dark edge
-        g.setColour(juce::Colours::black.withAlpha(0.7f));
-        g.strokePath(hexPath, juce::PathStrokeType(2.5f));
-        
-        // Inner highlight
-        g.setColour(juce::Colours::white.withAlpha(0.1f));
-        g.strokePath(hexPath, juce::PathStrokeType(1.0f));
-    }
-
-    // === OUTER RING (grooved rim) ===
-    const float outerRingRadius = hexRadius - 8.0f;
-    {
-        juce::ColourGradient ringGrad(MetalLookAndFeel::getMetalLight().brighter(0.1f), 
-                                       centreX, centreY - outerRingRadius,
-                                       MetalLookAndFeel::getMetalDark(), 
-                                       centreX, centreY + outerRingRadius, false);
-        g.setGradientFill(ringGrad);
-        g.fillEllipse(centreX - outerRingRadius, centreY - outerRingRadius, 
-                      outerRingRadius * 2.0f, outerRingRadius * 2.0f);
-        
-        // Groove shadow
-        g.setColour(juce::Colours::black.withAlpha(0.4f));
-        g.drawEllipse(centreX - outerRingRadius, centreY - outerRingRadius,
-                      outerRingRadius * 2.0f, outerRingRadius * 2.0f, 2.0f);
-    }
-
-    // === INNER GROOVE ===
-    const float innerGrooveRadius = hexRadius - 14.0f;
-    {
-        g.setColour(MetalLookAndFeel::getMetalDark().darker(0.3f));
-        g.fillEllipse(centreX - innerGrooveRadius, centreY - innerGrooveRadius,
-                      innerGrooveRadius * 2.0f, innerGrooveRadius * 2.0f);
-    }
-
-    // === CENTER CAP (main button surface) ===
-    const float capRadius = hexRadius - 18.0f;
-    const float pressOffset = mIsPressed ? 2.0f : 0.0f;
-    {
-        // Button cap gradient
-        juce::Colour capTop = mIsPressed ? MetalLookAndFeel::getMetalGrey() 
-                                          : MetalLookAndFeel::getMetalLight().brighter(0.2f);
-        juce::Colour capBot = mIsPressed ? MetalLookAndFeel::getMetalDark() 
-                                          : MetalLookAndFeel::getMetalMid();
-        
-        juce::ColourGradient capGrad(capTop, centreX, centreY - capRadius + pressOffset,
-                                      capBot, centreX, centreY + capRadius + pressOffset, false);
-        g.setGradientFill(capGrad);
-        g.fillEllipse(centreX - capRadius, centreY - capRadius + pressOffset,
-                      capRadius * 2.0f, capRadius * 2.0f);
-        
-        // Highlight arc
-        if (!mIsPressed) {
-            g.setColour(juce::Colours::white.withAlpha(0.2f));
-            juce::Path highlightArc;
-            highlightArc.addCentredArc(centreX, centreY, capRadius - 3, capRadius - 3,
-                                       0.0f, -2.8f, -0.3f, true);
-            g.strokePath(highlightArc, juce::PathStrokeType(3.0f));
+        // Apply slight darkening when pressed
+        if (mIsPressed) {
+            g.setColour(juce::Colours::black.withAlpha(0.1f));
         }
         
-        // Border
-        g.setColour(juce::Colours::black.withAlpha(0.5f));
-        g.drawEllipse(centreX - capRadius, centreY - capRadius + pressOffset,
-                      capRadius * 2.0f, capRadius * 2.0f, 1.5f);
-    }
-
-    // === LED INDICATOR (inside button, at top) ===
-    const float ledSize = 12.0f;
-    const float ledX = centreX - ledSize * 0.5f;
-    const float ledY = 6.0f;  // Fixed position at top of button
-    
-    {
-        // Determine LED color
-        juce::Colour ledColour;
-        bool isLit = true;
+        g.drawImage(footswitchImage, 
+                    bounds.getX(), bounds.getY() + pressOffset, 
+                    bounds.getWidth(), bounds.getHeight() - pressOffset,
+                    0, 0, footswitchImage.getWidth(), footswitchImage.getHeight());
         
-        switch (mLEDState) {
-            case Off:
-                ledColour = MetalLookAndFeel::getAccentRedDim().darker(0.5f);
-                isLit = false;
-                break;
-            case Green:
-                ledColour = MetalLookAndFeel::getLEDGreen();
-                break;
-            case Red:
-            case BrightRed:
-                ledColour = MetalLookAndFeel::getLEDRed();
-                break;
-            case OrangeBlinking:
-                isLit = mBlinkState;
-                ledColour = mBlinkState ? MetalLookAndFeel::getLEDOrange() 
-                                        : MetalLookAndFeel::getAccentRedDim().darker(0.5f);
-                break;
-            case DimRed:
-                ledColour = MetalLookAndFeel::getAccentRedDim();
-                isLit = false;
-                break;
-        }
-
-        // LED glow
-        if (isLit) {
-            juce::ColourGradient glowGrad(ledColour.withAlpha(0.5f), ledX + ledSize * 0.5f, ledY + ledSize * 0.5f,
-                                           ledColour.withAlpha(0.0f), ledX + ledSize * 0.5f, ledY - ledSize, true);
+        // Draw LED glow on top when ON
+        if (mIsOn) {
+            const float ledSize = w * 0.15f;
+            const float ledX = centreX - ledSize * 0.5f;
+            const float ledY = h * 0.08f;  // Top of button
+            
+            // Orange LED glow
+            juce::Colour ledColour = MetalLookAndFeel::getLEDOrange();
+            
+            // Handle blinking state
+            if (mLEDState == OrangeBlinking && !mBlinkState) {
+                ledColour = ledColour.withAlpha(0.3f);
+            }
+            
+            // Outer glow
+            juce::ColourGradient glowGrad(ledColour.withAlpha(0.6f), centreX, ledY + ledSize * 0.5f,
+                                           ledColour.withAlpha(0.0f), centreX, ledY - ledSize * 2.0f, true);
             g.setGradientFill(glowGrad);
             g.fillEllipse(ledX - ledSize, ledY - ledSize, ledSize * 3.0f, ledSize * 3.0f);
+            
+            // LED center
+            g.setColour(ledColour);
+            g.fillEllipse(ledX, ledY, ledSize, ledSize);
+            
+            // LED highlight
+            g.setColour(juce::Colours::white.withAlpha(0.4f));
+            g.fillEllipse(ledX + 2.0f, ledY + 2.0f, ledSize * 0.3f, ledSize * 0.3f);
         }
-
-        // LED body
-        g.setColour(ledColour);
-        g.fillEllipse(ledX, ledY, ledSize, ledSize);
+    } else {
+        // Fallback: simple circle if image not loaded
+        const float radius = juce::jmin(w, h) * 0.4f;
         
-        // LED bezel
-        g.setColour(juce::Colours::black.withAlpha(0.6f));
-        g.drawEllipse(ledX, ledY, ledSize, ledSize, 1.0f);
+        g.setColour(mIsPressed ? MetalLookAndFeel::getMetalGrey() : MetalLookAndFeel::getMetalLight());
+        g.fillEllipse(centreX - radius, centreY - radius, radius * 2.0f, radius * 2.0f);
         
-        // LED highlight
-        if (isLit) {
-            g.setColour(juce::Colours::white.withAlpha(0.5f));
-            g.fillEllipse(ledX + 2.0f, ledY + 2.0f, 3.0f, 3.0f);
+        g.setColour(MetalLookAndFeel::getMetalDark());
+        g.drawEllipse(centreX - radius, centreY - radius, radius * 2.0f, radius * 2.0f, 2.0f);
+        
+        // LED indicator
+        if (mIsOn) {
+            g.setColour(MetalLookAndFeel::getLEDOrange());
+            g.fillEllipse(centreX - 6, 8, 12, 12);
         }
     }
 }

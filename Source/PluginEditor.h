@@ -23,8 +23,9 @@ private:
     SwarmnesssAudioProcessor& audioProcessor;
     MetalLookAndFeel metalLookAndFeel;
 
-    // Background image (logo is in background - no separate logo)
+    // Background image and header logo
     juce::Image backgroundImage;
+    juce::Image headerLogoImage;
 
     // Preset Panel
     std::unique_ptr<PresetPanel> presetPanel;
