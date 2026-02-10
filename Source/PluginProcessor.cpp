@@ -35,6 +35,8 @@ SwarmnesssAudioProcessor::SwarmnesssAudioProcessor()
     pMix = mAPVTS.getRawParameterValue("mix");
     pDrive = mAPVTS.getRawParameterValue("drive");
     pOutputGain = mAPVTS.getRawParameterValue("outputGain");
+    pChorusEngage = mAPVTS.getRawParameterValue("chorusEngage");
+    pFlowEngage = mAPVTS.getRawParameterValue("flowEngage");
     pFlowMode = mAPVTS.getRawParameterValue("flowMode");
     pFlowAmount = mAPVTS.getRawParameterValue("flowAmount");
     pFlowSpeed = mAPVTS.getRawParameterValue("flowSpeed");
@@ -246,8 +248,8 @@ void SwarmnesssAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
         mSaturation.process(buffer);
     }
     
-    // Chorus/SWARM modulation
-    if (*pChorusMix > 0.01f) {
+    // Chorus/SWARM modulation (only if engaged)
+    if (*pChorusEngage > 0.5f && *pChorusMix > 0.01f) {
         // chorusMode: false=Classic (0), true=Deep (1)
         mChorusEngine.setMode(*pChorusMode > 0.5f ? ChorusEngine::Mode::Deep : ChorusEngine::Mode::Classic);
         mChorusEngine.setRate(0.1f + *pChorusRate * 4.9f);  // 0.1-5 Hz
@@ -256,8 +258,8 @@ void SwarmnesssAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
         mChorusEngine.process(buffer);
     }
     
-    // Flow Engine (stutter/gate)
-    if (*pFlowAmount > 0.01f) {
+    // Flow Engine (stutter/gate) - only if engaged
+    if (*pFlowEngage > 0.5f && *pFlowAmount > 0.01f) {
         // flowMode: false=Static (Smooth), true=Pulse (Hard)
         mFlowEngine.setMode(*pFlowMode > 0.5f ? FlowEngine::Mode::Pulse : FlowEngine::Mode::Static);
         mFlowEngine.setFlowAmount(*pFlowAmount);
@@ -349,6 +351,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout SwarmnesssAudioProcessor::cr
 
     // === SWARM Section (Chorus) ===
     params.push_back(std::make_unique<juce::AudioParameterBool>(
+        "chorusEngage", "Chorus Engage", true));  // ON/OFF for SWARM section
+    params.push_back(std::make_unique<juce::AudioParameterBool>(
         "chorusMode", "Chorus Mode", false));  // false=Classic, true=Deep
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         "chorusRate", "Chorus Rate", 0.0f, 1.0f, 0.2f));
@@ -366,6 +370,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout SwarmnesssAudioProcessor::cr
         "outputGain", "Output Gain", 0.0f, 1.0f, 0.8f));
 
     // === FLOW Section (stutter/gate) ===
+    params.push_back(std::make_unique<juce::AudioParameterBool>(
+        "flowEngage", "Flow Engage", true));  // ON/OFF for FLOW section
     params.push_back(std::make_unique<juce::AudioParameterBool>(
         "flowMode", "Flow Mode", true));  // false=Smooth, true=Hard
     params.push_back(std::make_unique<juce::AudioParameterFloat>(

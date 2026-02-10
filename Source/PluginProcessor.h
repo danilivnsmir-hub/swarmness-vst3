@@ -88,6 +88,7 @@ private:
     std::atomic<float>* pSpeed = nullptr;
     std::atomic<float>* pLowCut = nullptr;
     std::atomic<float>* pHighCut = nullptr;
+    std::atomic<float>* pChorusEngage = nullptr;
     std::atomic<float>* pChorusMode = nullptr;
     std::atomic<float>* pChorusRate = nullptr;
     std::atomic<float>* pChorusDepth = nullptr;
@@ -96,6 +97,7 @@ private:
     std::atomic<float>* pMix = nullptr;
     std::atomic<float>* pDrive = nullptr;
     std::atomic<float>* pOutputGain = nullptr;
+    std::atomic<float>* pFlowEngage = nullptr;
     std::atomic<float>* pFlowMode = nullptr;
     std::atomic<float>* pFlowAmount = nullptr;
     std::atomic<float>* pFlowSpeed = nullptr;
