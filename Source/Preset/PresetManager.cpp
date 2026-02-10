@@ -361,100 +361,103 @@ void PresetManager::initializeFactoryPresets() {
          {"chaos", 0.0f}, {"panic", 0.0f},
          {"lowCut", 0.0f}, {"highCut", 0.5f}});
     
-    // ========== v1.2.5 HEAVY MUSIC PRESETS ==========
+    // ========== v1.2.5 HEAVY MUSIC PRESETS (Momentary Use) ==========
+    // Designed for momentary engagement - short rise times for instant response
     
-    // Breakdown Chaos - Knocked Loose style breakdowns
+    // 1. Breakdown Chaos - for breakdowns, momentary
     mFactoryPresets["Breakdown Chaos"] = createPreset(
-        "Breakdown Chaos", "For breakdown sections - Knocked Loose style",
+        "Breakdown Chaos", "For breakdown sections - instant chaos",
         {{"octaveMode", 1.0f / 4.0f}, // -1 OCT
-         {"randomRange", 0.5f}, {"randomRate", 0.4f},
-         {"rise", 0.05f},
-         {"chaos", 0.7f}, {"panic", 0.3f}, {"speed", 0.25f},
-         {"lowCut", 0.04f}, {"highCut", 0.6f}, {"saturation", 0.3f},
+         {"randomRange", 0.5f}, {"randomRate", 0.4f},   // range: 12 st, speed: 0.4
+         {"rise", 0.025f},                              // 50ms - short!
+         {"chaos", 0.8f}, {"panic", 0.5f}, {"speed", 0.3f}, // anger: 0.8, rush: 0.5, rate: 0.3
+         {"lowCut", 0.04f}, {"highCut", 0.6f}, {"saturation", 0.4f}, // midBoost: 0.4
          {"chorusDepth", 0.2f}, {"chorusRate", 0.15f}, {"chorusMix", 0.25f},
-         {"flowAmount", 0.0f},
+         {"flowAmount", 0.0f}, {"flowSpeed", 0.0f},
          {"mix", 1.0f}, {"drive", 0.4f}, {"outputGain", 0.8f}});
     
-    // Deathcore Slam - Slaughter to Prevail brutal lows
-    mFactoryPresets["Deathcore Slam"] = createPreset(
-        "Deathcore Slam", "Brutal low tuned - Slaughter to Prevail style",
+    // 2. Slam - brutal low slam accent
+    mFactoryPresets["Slam"] = createPreset(
+        "Slam", "Brutal low slam riff accent",
         {{"octaveMode", 0.0f}, // -2 OCT
-         {"randomRange", 0.25f}, {"randomRate", 0.2f},
-         {"rise", 0.1f},
-         {"chaos", 0.5f}, {"panic", 0.6f}, {"speed", 0.15f},
-         {"lowCut", 0.01f}, {"highCut", 0.4f}, {"saturation", 0.5f},
+         {"randomRange", 0.25f}, {"randomRate", 0.2f},  // range: 6 st
+         {"rise", 0.015f},                              // 30ms - very short
+         {"chaos", 0.6f}, {"panic", 0.7f}, {"speed", 0.2f},
+         {"lowCut", 0.02f}, {"highCut", 0.4f}, {"saturation", 0.7f}, // high midBoost for density
          {"chorusDepth", 0.3f}, {"chorusRate", 0.1f}, {"chorusMix", 0.4f},
-         {"flowMode", 1.0f}, {"flowAmount", 0.2f}, {"flowSpeed", 0.3f},
+         {"chorusMode", 1.0f},                          // deep ON
+         {"flowAmount", 0.2f}, {"flowSpeed", 0.3f},
          {"mix", 1.0f}, {"drive", 0.6f}, {"outputGain", 0.75f}});
     
-    // Atmospheric Void - Sleep Token ambient
+    // 3. Atmospheric Void - ambient (единственный с длинным rise)
     mFactoryPresets["Atmospheric Void"] = createPreset(
-        "Atmospheric Void", "Ambient/atmospheric - Sleep Token style",
+        "Atmospheric Void", "Ambient transitions - Sleep Token style",
         {{"octaveMode", 2.0f / 4.0f}, // 0 (no shift)
-         {"randomRange", 0.125f}, {"randomRate", 0.1f},
-         {"rise", 0.5f},
+         {"randomRange", 0.125f}, {"randomRate", 0.1f}, // range: 3 st
+         {"rise", 0.25f},                               // 500ms - long for ambient
          {"chaos", 0.1f}, {"panic", 0.05f}, {"speed", 0.08f},
          {"lowCut", 0.05f}, {"highCut", 0.9f}, {"saturation", 0.1f},
          {"chorusDepth", 0.6f}, {"chorusRate", 0.25f}, {"chorusMix", 0.5f},
-         {"flowMode", 1.0f}, {"flowAmount", 0.4f}, {"flowSpeed", 0.2f},
+         {"chorusMode", 1.0f},                          // deep ON
+         {"flowAmount", 0.4f}, {"flowSpeed", 0.2f},
          {"mix", 0.7f}, {"drive", 0.1f}, {"outputGain", 0.85f}});
     
-    // Nu-Metal Aggression - Alpha Wolf style
+    // 4. Nu-Metal Aggression - Alpha Wolf style
     mFactoryPresets["Nu-Metal Aggression"] = createPreset(
         "Nu-Metal Aggression", "Nu-metalcore aggression - Alpha Wolf style",
         {{"octaveMode", 1.0f / 4.0f}, // -1 OCT
-         {"randomRange", 0.33f}, {"randomRate", 0.35f},
-         {"rise", 0.08f},
-         {"chaos", 0.6f}, {"panic", 0.4f}, {"speed", 0.3f},
-         {"lowCut", 0.03f}, {"highCut", 0.5f}, {"saturation", 0.4f},
+         {"randomRange", 0.33f}, {"randomRate", 0.35f}, // range: 8 st
+         {"rise", 0.03f},                               // 60ms
+         {"chaos", 0.65f}, {"panic", 0.45f}, {"speed", 0.35f},
+         {"lowCut", 0.03f}, {"highCut", 0.5f}, {"saturation", 0.5f},
          {"chorusDepth", 0.25f}, {"chorusRate", 0.2f}, {"chorusMix", 0.3f},
          {"flowAmount", 0.15f}, {"flowSpeed", 0.25f},
          {"mix", 1.0f}, {"drive", 0.5f}, {"outputGain", 0.8f}});
     
-    // Hardcore Fury - fast hardcore punk
+    // 5. Hardcore Fury - fast hardcore punk
     mFactoryPresets["Hardcore Fury"] = createPreset(
-        "Hardcore Fury", "Fast hardcore punk - Knocked Loose style",
+        "Hardcore Fury", "Fast hardcore punk - high energy",
         {{"octaveMode", 2.0f / 4.0f}, // 0 (no shift)
-         {"randomRange", 0.17f}, {"randomRate", 0.6f},
-         {"rise", 0.03f},
-         {"chaos", 0.8f}, {"panic", 0.7f}, {"speed", 0.5f},
-         {"lowCut", 0.05f}, {"highCut", 0.7f}, {"saturation", 0.2f},
+         {"randomRange", 0.17f}, {"randomRate", 0.6f},  // range: 4 st
+         {"rise", 0.0125f},                             // 25ms - very fast
+         {"chaos", 0.85f}, {"panic", 0.75f}, {"speed", 0.55f},
+         {"lowCut", 0.05f}, {"highCut", 0.7f}, {"saturation", 0.3f},
          {"chorusDepth", 0.1f}, {"chorusRate", 0.3f}, {"chorusMix", 0.15f},
          {"flowAmount", 0.3f}, {"flowSpeed", 0.6f},
          {"mix", 1.0f}, {"drive", 0.35f}, {"outputGain", 0.85f}});
     
-    // Djent Pulse - tight djent rhythm
-    mFactoryPresets["Djent Pulse"] = createPreset(
-        "Djent Pulse", "Tight djent rhythm",
+    // 6. Djent Stab - short tight djent accent
+    mFactoryPresets["Djent Stab"] = createPreset(
+        "Djent Stab", "Short tight djent accent",
         {{"octaveMode", 2.0f / 4.0f}, // 0 (no shift)
-         {"randomRange", 0.08f}, {"randomRate", 0.15f},
-         {"rise", 0.02f},
-         {"chaos", 0.3f}, {"panic", 0.2f}, {"speed", 0.4f},
-         {"lowCut", 0.04f}, {"highCut", 0.6f}, {"saturation", 0.35f},
+         {"randomRange", 0.08f}, {"randomRate", 0.15f}, // range: 2 st
+         {"rise", 0.0075f},                             // 15ms - maximum short
+         {"chaos", 0.35f}, {"panic", 0.25f}, {"speed", 0.45f},
+         {"lowCut", 0.04f}, {"highCut", 0.6f}, {"saturation", 0.45f},
          {"chorusDepth", 0.15f}, {"chorusRate", 0.35f}, {"chorusMix", 0.2f},
          {"flowAmount", 0.5f}, {"flowSpeed", 0.4f},
          {"mix", 0.9f}, {"drive", 0.25f}, {"outputGain", 0.8f}});
     
-    // Ritual Drone - dark atmospheric
-    mFactoryPresets["Ritual Drone"] = createPreset(
-        "Ritual Drone", "Dark atmospheric - Sleep Token ritual vibes",
-        {{"octaveMode", 1.0f / 4.0f}, // -1 OCT
-         {"randomRange", 0.21f}, {"randomRate", 0.08f},
-         {"rise", 0.8f},
-         {"chaos", 0.15f}, {"panic", 0.1f}, {"speed", 0.05f},
-         {"lowCut", 0.025f}, {"highCut", 0.8f}, {"saturation", 0.2f},
-         {"chorusDepth", 0.7f}, {"chorusRate", 0.12f}, {"chorusMix", 0.6f},
-         {"flowMode", 1.0f}, {"flowAmount", 0.6f}, {"flowSpeed", 0.15f},
-         {"mix", 0.8f}, {"drive", 0.15f}, {"outputGain", 0.75f}});
+    // 7. Chainsaw Massacre - Swedish death metal HM-2 style
+    mFactoryPresets["Chainsaw Massacre"] = createPreset(
+        "Chainsaw Massacre", "Swedish death metal HM-2 chainsaw tone",
+        {{"octaveMode", 2.0f / 4.0f}, // 0 (no shift)
+         {"randomRange", 0.0f}, {"randomRate", 0.0f},   // no pitch random
+         {"rise", 0.01f},                               // 20ms
+         {"chaos", 0.0f}, {"panic", 0.0f}, {"speed", 0.0f}, // effects off
+         {"lowCut", 0.03f}, {"highCut", 0.5f}, {"saturation", 1.0f}, // MAX midBoost - key to chainsaw!
+         {"chorusDepth", 0.0f}, {"chorusRate", 0.0f}, {"chorusMix", 0.0f},
+         {"flowAmount", 0.0f}, {"flowSpeed", 0.0f},
+         {"mix", 0.0f}, {"drive", 0.0f}, {"outputGain", 0.9f}}); // dry signal + mid boost
     
-    // Scream Machine - for harsh vocals processing
+    // 8. Scream Machine - harsh vocals
     mFactoryPresets["Scream Machine"] = createPreset(
         "Scream Machine", "For harsh vocals processing",
         {{"octaveMode", 3.0f / 4.0f}, // +1 OCT
-         {"randomRange", 0.75f}, {"randomRate", 0.5f},
-         {"rise", 0.04f},
-         {"chaos", 0.9f}, {"panic", 0.5f}, {"speed", 0.35f},
-         {"lowCut", 0.1f}, {"highCut", 0.4f}, {"saturation", 0.6f},
+         {"randomRange", 0.75f}, {"randomRate", 0.5f},  // range: 18 st
+         {"rise", 0.02f},                               // 40ms
+         {"chaos", 0.95f}, {"panic", 0.55f}, {"speed", 0.4f}, // maximum chaos
+         {"lowCut", 0.1f}, {"highCut", 0.4f}, {"saturation", 0.65f},
          {"chorusDepth", 0.2f}, {"chorusRate", 0.4f}, {"chorusMix", 0.25f},
          {"flowAmount", 0.25f}, {"flowSpeed", 0.45f},
          {"mix", 0.85f}, {"drive", 0.7f}, {"outputGain", 0.7f}});

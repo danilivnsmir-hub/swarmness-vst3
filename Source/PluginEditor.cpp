@@ -103,28 +103,33 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
     addChildComponent(infoPanel);
 
     // === LEFT PANEL: TONE (vertical faders) ===
-    setupVerticalFader(lowCutFader, lowCutLabel, lowCutValueLabel, "LOW CUT");
+    // Low Cut & High Cut: Keep as % (filter frequency parameters)
+    setupVerticalFader(lowCutFader, lowCutLabel, lowCutValueLabel, "LOW CUT", FaderScaleMode::Percent);
     lowCutAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         audioProcessor.getAPVTS(), "lowCut", lowCutFader);
     
-    setupVerticalFader(highCutFader, highCutLabel, highCutValueLabel, "HIGH CUT");
+    setupVerticalFader(highCutFader, highCutLabel, highCutValueLabel, "HIGH CUT", FaderScaleMode::Percent);
     highCutAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         audioProcessor.getAPVTS(), "highCut", highCutFader);
     
-    setupVerticalFader(midBoostFader, midBoostLabel, midBoostValueLabel, "MID BOOST");
+    // Mid Boost: Scale 1-10 with step 0.5
+    setupVerticalFader(midBoostFader, midBoostLabel, midBoostValueLabel, "MID BOOST", FaderScaleMode::Scale1to10_Step05);
     saturationAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         audioProcessor.getAPVTS(), "saturation", midBoostFader);
 
     // === RIGHT PANEL: OUTPUT (vertical faders) ===
-    setupVerticalFader(mixFader, mixLabel, mixValueLabel, "MIX");
+    // Mix & Volume: Scale 1-10 with step 0.1
+    setupVerticalFader(mixFader, mixLabel, mixValueLabel, "MIX", FaderScaleMode::Scale1to10_Step01);
     mixAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         audioProcessor.getAPVTS(), "mix", mixFader);
     
-    setupVerticalFader(driveFader, driveLabel, driveValueLabel, "DRIVE");
+    // Drive: Scale 1-10 with step 0.5
+    setupVerticalFader(driveFader, driveLabel, driveValueLabel, "DRIVE", FaderScaleMode::Scale1to10_Step05);
     driveAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         audioProcessor.getAPVTS(), "drive", driveFader);
     
-    setupVerticalFader(volumeFader, volumeLabel, volumeValueLabel, "VOLUME");
+    // Volume: Scale 1-10 with step 0.1
+    setupVerticalFader(volumeFader, volumeLabel, volumeValueLabel, "VOLUME", FaderScaleMode::Scale1to10_Step01);
     outputGainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         audioProcessor.getAPVTS(), "outputGain", volumeFader);
 
@@ -165,12 +170,12 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
     addAndMakeVisible(pitchRangeKnob);
     pitchRangeKnob.setValueSuffix(" st");
     pitchRangeKnob.setValueMultiplier(1.0f);
+    pitchRangeKnob.setScaleMode(RotaryKnob::ScaleMode::Custom);  // Keep semitones as-is
     randomRangeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         audioProcessor.getAPVTS(), "randomRange", pitchRangeKnob.getSlider());
 
     addAndMakeVisible(pitchSpeedKnob);
-    pitchSpeedKnob.setValueSuffix("%");
-    pitchSpeedKnob.setValueMultiplier(100.0f);
+    pitchSpeedKnob.setScaleMode(RotaryKnob::ScaleMode::Scale1to10_Step05);  // Speed: 0.5 step
     randomRateAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         audioProcessor.getAPVTS(), "randomRate", pitchSpeedKnob.getSlider());
 
@@ -199,20 +204,17 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
 
     // MODULATION knobs
     addAndMakeVisible(angerKnob);
-    angerKnob.setValueSuffix("%");
-    angerKnob.setValueMultiplier(100.0f);
+    angerKnob.setScaleMode(RotaryKnob::ScaleMode::Scale1to10_Step01);  // Anger: 0.1 step
     chaosAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         audioProcessor.getAPVTS(), "chaos", angerKnob.getSlider());
 
     addAndMakeVisible(rushKnob);
-    rushKnob.setValueSuffix("%");
-    rushKnob.setValueMultiplier(100.0f);
+    rushKnob.setScaleMode(RotaryKnob::ScaleMode::Scale1to10_Step01);  // Rush: 0.1 step
     panicAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         audioProcessor.getAPVTS(), "panic", rushKnob.getSlider());
 
     addAndMakeVisible(modRateKnob);
-    modRateKnob.setValueSuffix("%");
-    modRateKnob.setValueMultiplier(100.0f);
+    modRateKnob.setScaleMode(RotaryKnob::ScaleMode::Scale1to10_Step05);  // Rate: 0.5 step
     speedAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         audioProcessor.getAPVTS(), "speed", modRateKnob.getSlider());
 
@@ -224,20 +226,17 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
     swarmBypassButton.onClick = [this]() { updateSectionEnableStates(); };
 
     addAndMakeVisible(swarmDepthKnob);
-    swarmDepthKnob.setValueSuffix("%");
-    swarmDepthKnob.setValueMultiplier(100.0f);
+    swarmDepthKnob.setScaleMode(RotaryKnob::ScaleMode::Scale1to10_Step01);  // Depth: 0.1 step
     chorusDepthAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         audioProcessor.getAPVTS(), "chorusDepth", swarmDepthKnob.getSlider());
 
     addAndMakeVisible(swarmRateKnob);
-    swarmRateKnob.setValueSuffix("%");
-    swarmRateKnob.setValueMultiplier(100.0f);
+    swarmRateKnob.setScaleMode(RotaryKnob::ScaleMode::Scale1to10_Step01);  // Chorus Rate: 0.1 step
     chorusRateAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         audioProcessor.getAPVTS(), "chorusRate", swarmRateKnob.getSlider());
 
     addAndMakeVisible(swarmMixKnob);
-    swarmMixKnob.setValueSuffix("%");
-    swarmMixKnob.setValueMultiplier(100.0f);
+    swarmMixKnob.setScaleMode(RotaryKnob::ScaleMode::Scale1to10_Step01);  // Mix: 0.1 step
     chorusMixAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         audioProcessor.getAPVTS(), "chorusMix", swarmMixKnob.getSlider());
 
@@ -261,14 +260,12 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
     flowBypassButton.onClick = [this]() { updateSectionEnableStates(); };
 
     addAndMakeVisible(flowAmountKnob);
-    flowAmountKnob.setValueSuffix("%");
-    flowAmountKnob.setValueMultiplier(100.0f);
+    flowAmountKnob.setScaleMode(RotaryKnob::ScaleMode::Scale1to10_Step05);  // Flow Amount: 0.5 step
     flowAmountAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         audioProcessor.getAPVTS(), "flowAmount", flowAmountKnob.getSlider());
 
     addAndMakeVisible(flowSpeedKnob);
-    flowSpeedKnob.setValueSuffix("%");
-    flowSpeedKnob.setValueMultiplier(100.0f);
+    flowSpeedKnob.setScaleMode(RotaryKnob::ScaleMode::Scale1to10_Step05);  // Flow Speed: 0.5 step
     flowSpeedAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         audioProcessor.getAPVTS(), "flowSpeed", flowSpeedKnob.getSlider());
 
@@ -298,13 +295,35 @@ SwarmnesssAudioProcessorEditor::~SwarmnesssAudioProcessorEditor() {
 
 void SwarmnesssAudioProcessorEditor::setupVerticalFader(juce::Slider& fader, juce::Label& label, 
                                                          juce::Label& valueLabel, const juce::String& labelText,
-                                                         float multiplier) {
+                                                         FaderScaleMode scaleMode) {
     fader.setSliderStyle(juce::Slider::LinearVertical);
     fader.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
     fader.setPopupDisplayEnabled(false, false, this);
-    fader.onValueChange = [&fader, &valueLabel, multiplier]() {
-        int value = static_cast<int>(fader.getValue() * multiplier);
-        valueLabel.setText(juce::String(value) + "%", juce::dontSendNotification);
+    fader.onValueChange = [&fader, &valueLabel, scaleMode]() {
+        float normalizedValue = static_cast<float>(fader.getValue());
+        juce::String valueText;
+        
+        switch (scaleMode) {
+            case FaderScaleMode::Scale1to10_Step01: {
+                float displayValue = 1.0f + normalizedValue * 9.0f;
+                valueText = juce::String(displayValue, 1);
+                break;
+            }
+            case FaderScaleMode::Scale1to10_Step05: {
+                float displayValue = 1.0f + normalizedValue * 9.0f;
+                float rounded = std::round(displayValue * 2.0f) / 2.0f;
+                valueText = juce::String(rounded, 1);
+                break;
+            }
+            case FaderScaleMode::Custom:
+            case FaderScaleMode::Percent:
+            default: {
+                int value = static_cast<int>(normalizedValue * 100.0f);
+                valueText = juce::String(value) + "%";
+                break;
+            }
+        }
+        valueLabel.setText(valueText, juce::dontSendNotification);
     };
     addAndMakeVisible(fader);
     

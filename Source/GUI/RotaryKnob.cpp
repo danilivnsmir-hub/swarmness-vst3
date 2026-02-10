@@ -60,9 +60,21 @@ void RotaryKnob::labelTextChanged(juce::Label* labelThatHasChanged) {
     if (labelThatHasChanged == &mValueLabel && mIsEditingValue) {
         float newValue = parseValueFromText(mValueLabel.getText());
         
-        // Convert back to slider value (divide by multiplier)
-        if (mValueMultiplier != 0.0f) {
-            newValue /= mValueMultiplier;
+        // Convert back based on scale mode
+        switch (mScaleMode) {
+            case ScaleMode::Scale1to10_Step01:
+            case ScaleMode::Scale1to10_Step05:
+                // Convert from 1.0-10.0 back to 0-1 normalized
+                newValue = (newValue - 1.0f) / 9.0f;
+                break;
+            case ScaleMode::Percent:
+            case ScaleMode::Custom:
+            default:
+                // Convert back to slider value (divide by multiplier)
+                if (mValueMultiplier != 0.0f) {
+                    newValue /= mValueMultiplier;
+                }
+                break;
         }
         
         // Clamp to slider range
@@ -113,22 +125,40 @@ float RotaryKnob::parseValueFromText(const juce::String& text) {
 void RotaryKnob::updateValueDisplay() {
     if (mIsEditingValue) return;
     
-    float value = static_cast<float>(mSlider.getValue()) * mValueMultiplier;
+    float normalizedValue = static_cast<float>(mSlider.getValue());
     juce::String valueText;
     
-    if (mValueMultiplier == 100.0f) {
-        // Percentage display
-        valueText = juce::String(static_cast<int>(value)) + mValueSuffix;
-    } else if (std::abs(value) < 10.0f && mValueMultiplier == 1.0f) {
-        // Small values with decimal (but not for semitones)
-        if (mValueSuffix.contains("st")) {
-            valueText = juce::String(static_cast<int>(value)) + mValueSuffix;
-        } else {
-            valueText = juce::String(value, 1) + mValueSuffix;
+    switch (mScaleMode) {
+        case ScaleMode::Scale1to10_Step01: {
+            // Convert 0-1 to 1.0-10.0 with 0.1 step precision
+            float displayValue = 1.0f + normalizedValue * 9.0f;
+            valueText = juce::String(displayValue, 1);  // 1 decimal place
+            break;
         }
-    } else {
-        // Larger values without decimal
-        valueText = juce::String(static_cast<int>(value)) + mValueSuffix;
+        case ScaleMode::Scale1to10_Step05: {
+            // Convert 0-1 to 1.0-10.0 with 0.5 step precision (rounded)
+            float displayValue = 1.0f + normalizedValue * 9.0f;
+            float rounded = std::round(displayValue * 2.0f) / 2.0f;  // Round to nearest 0.5
+            valueText = juce::String(rounded, 1);  // 1 decimal place
+            break;
+        }
+        case ScaleMode::Percent: {
+            // Traditional percentage display
+            float value = normalizedValue * mValueMultiplier;
+            valueText = juce::String(static_cast<int>(value)) + mValueSuffix;
+            break;
+        }
+        case ScaleMode::Custom:
+        default: {
+            // Custom display (semitones, Hz, ms, etc.)
+            float value = normalizedValue * mValueMultiplier;
+            if (std::abs(value) < 10.0f && mValueMultiplier == 1.0f && !mValueSuffix.contains("st")) {
+                valueText = juce::String(value, 1) + mValueSuffix;
+            } else {
+                valueText = juce::String(static_cast<int>(value)) + mValueSuffix;
+            }
+            break;
+        }
     }
     
     mValueLabel.setText(valueText, juce::dontSendNotification);

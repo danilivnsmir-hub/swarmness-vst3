@@ -21,10 +21,13 @@ public:
     void mouseEnter(const juce::MouseEvent& event) override;
     void mouseExit(const juce::MouseEvent& event) override;
 
+    enum class ScaleMode { Percent, Scale1to10_Step01, Scale1to10_Step05, Custom };
+    
     juce::Slider& getSlider() { return mSlider; }
     void setLabelText(const juce::String& text);
     void setValueSuffix(const juce::String& suffix) { mValueSuffix = suffix; }
     void setValueMultiplier(float mult) { mValueMultiplier = mult; }
+    void setScaleMode(ScaleMode mode) { mScaleMode = mode; }
     bool isHovered() const { return mIsHovered; }
 
 private:
@@ -33,6 +36,7 @@ private:
     juce::Label mValueLabel;
     juce::String mValueSuffix;
     float mValueMultiplier = 1.0f;
+    ScaleMode mScaleMode = ScaleMode::Percent;
     bool mIsEditingValue = false;
     bool mIsHovered = false;  // Phase 3 UI: Hover state
     

@@ -131,8 +131,9 @@ private:
     void updatePresetName();
     void updateSectionEnableStates();
     void setSectionEnabled(std::vector<juce::Component*> components, bool enabled);
+    enum class FaderScaleMode { Percent, Scale1to10_Step01, Scale1to10_Step05, Custom };
     void setupVerticalFader(juce::Slider& fader, juce::Label& label, juce::Label& valueLabel, 
-                            const juce::String& labelText, float multiplier = 100.0f);
+                            const juce::String& labelText, FaderScaleMode scaleMode = FaderScaleMode::Percent);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SwarmnesssAudioProcessorEditor)
 };
