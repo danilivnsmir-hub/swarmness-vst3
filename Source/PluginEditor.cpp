@@ -296,8 +296,8 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
     // Start timer for LED updates and section enable states
     startTimerHz(30);
 
-    // Set plugin window size
-    setSize(1000, 770);  // Added 70px header
+    // v1.1.0: Set plugin window size (90px header + content + metal strip + footswitch)
+    setSize(1000, 800);
     
     // Initial update of section enable states
     updateSectionEnableStates();
@@ -352,149 +352,139 @@ void SwarmnesssAudioProcessorEditor::updateSectionEnableStates() {
 }
 
 void SwarmnesssAudioProcessorEditor::drawSectionFrame(juce::Graphics& g, juce::Rectangle<int> bounds, const juce::String& title) {
-    const float cornerSize = 12.0f;
-    const float borderWidth = 1.5f;
+    const float cornerSize = 10.0f;  // v1.1.0: 10px border-radius
+    const float borderWidth = 2.0f;   // v1.1.0: 2px orange border
     
-    // Phase 1 UI: Drop shadow effect
+    // v1.1.0: Drop shadow effect
     juce::DropShadow shadow(juce::Colour(0x80000000), 12, juce::Point<int>(0, 4));
     juce::Path shadowPath;
     shadowPath.addRoundedRectangle(bounds.toFloat(), cornerSize);
     shadow.drawForPath(g, shadowPath);
     
-    // Phase 2 UI: Gradient background (from #141414 top to #0F0F0F bottom)
-    juce::ColourGradient bgGrad(juce::Colour(0xe0141414), bounds.toFloat().getCentreX(), bounds.toFloat().getY(),
-                                 juce::Colour(0xe00a0a0a), bounds.toFloat().getCentreX(), bounds.toFloat().getBottom(), false);
+    // v1.1.0: Section background gradient #2E2E2E (top) → #262626 (bottom) - "pedal" style
+    juce::ColourGradient bgGrad(juce::Colour(0xff2E2E2E), bounds.toFloat().getCentreX(), bounds.toFloat().getY(),
+                                 juce::Colour(0xff262626), bounds.toFloat().getCentreX(), bounds.toFloat().getBottom(), false);
     g.setGradientFill(bgGrad);
     g.fillRoundedRectangle(bounds.toFloat(), cornerSize);
     
-    // Orange glow effect
-    g.setColour(juce::Colour(0x4dFF8C00));
-    g.drawRoundedRectangle(bounds.toFloat().expanded(2), cornerSize + 2, 3.0f);
+    // v1.1.0: Inner glow - 1px blur orange inside
+    g.setColour(juce::Colour(0x30FF9500));
+    g.drawRoundedRectangle(bounds.toFloat().reduced(3.0f), cornerSize - 2, 2.0f);
     
-    // Orange border
-    g.setColour(juce::Colour(0xffFF8C00));
+    // v1.1.0: Orange border 2px #FF9500
+    g.setColour(juce::Colour(0xffFF9500));
     g.drawRoundedRectangle(bounds.toFloat().reduced(borderWidth * 0.5f), cornerSize, borderWidth);
     
-    // Phase 2 UI: Inner highlight (1px light line at top edge)
-    {
-        juce::Path highlightPath;
-        auto innerBounds = bounds.toFloat().reduced(3.0f);
-        highlightPath.addArc(innerBounds.getX() + cornerSize, innerBounds.getY(), 
-                            (innerBounds.getWidth() - cornerSize * 2), cornerSize * 2,
-                            -juce::MathConstants<float>::pi, 0.0f, true);
-        g.setColour(juce::Colour(0x302A2A2A));
-        g.strokePath(highlightPath, juce::PathStrokeType(1.0f));
-        
-        // Simple horizontal line highlight
-        g.setColour(juce::Colour(0x282A2A2A));
-        g.drawLine(bounds.toFloat().getX() + cornerSize + 2, bounds.toFloat().getY() + 2.5f,
-                   bounds.toFloat().getRight() - cornerSize - 2, bounds.toFloat().getY() + 2.5f, 1.0f);
-    }
+    // v1.1.0: Bevel effect - 1px #3A3A3A highlight at top
+    g.setColour(juce::Colour(0xff3A3A3A));
+    g.drawLine(bounds.toFloat().getX() + cornerSize + 2, bounds.toFloat().getY() + 3.0f,
+               bounds.toFloat().getRight() - cornerSize - 2, bounds.toFloat().getY() + 3.0f, 1.0f);
     
-    // Section title
-    g.setColour(juce::Colours::white);
+    // v1.1.0: Bevel effect - 1px #1A1A1A shadow at bottom
+    g.setColour(juce::Colour(0xff1A1A1A));
+    g.drawLine(bounds.toFloat().getX() + cornerSize + 2, bounds.toFloat().getBottom() - 3.0f,
+               bounds.toFloat().getRight() - cornerSize - 2, bounds.toFloat().getBottom() - 3.0f, 1.0f);
+    
+    // v1.1.0: Section title - orange #FF9500
+    g.setColour(juce::Colour(0xffFF9500));
     g.setFont(juce::Font(14.0f, juce::Font::bold));
     g.drawText(title.toUpperCase(), bounds.getX(), bounds.getY() + 6, bounds.getWidth(), 18, 
                juce::Justification::centred, false);
 }
 
 void SwarmnesssAudioProcessorEditor::drawCombinedSectionFrame(juce::Graphics& g, juce::Rectangle<int> bounds) {
-    const float cornerSize = 12.0f;
-    const float borderWidth = 1.5f;
+    const float cornerSize = 10.0f;  // v1.1.0: 10px border-radius
+    const float borderWidth = 2.0f;   // v1.1.0: 2px orange border
     
-    // Phase 1 UI: Drop shadow effect
+    // v1.1.0: Drop shadow effect
     juce::DropShadow shadow(juce::Colour(0x80000000), 12, juce::Point<int>(0, 4));
     juce::Path shadowPath;
     shadowPath.addRoundedRectangle(bounds.toFloat(), cornerSize);
     shadow.drawForPath(g, shadowPath);
     
-    // Phase 2 UI: Gradient background (from #141414 top to #0F0F0F bottom)
-    juce::ColourGradient bgGrad(juce::Colour(0xe0141414), bounds.toFloat().getCentreX(), bounds.toFloat().getY(),
-                                 juce::Colour(0xe00a0a0a), bounds.toFloat().getCentreX(), bounds.toFloat().getBottom(), false);
+    // v1.1.0: Section background gradient #2E2E2E (top) → #262626 (bottom) - "pedal" style
+    juce::ColourGradient bgGrad(juce::Colour(0xff2E2E2E), bounds.toFloat().getCentreX(), bounds.toFloat().getY(),
+                                 juce::Colour(0xff262626), bounds.toFloat().getCentreX(), bounds.toFloat().getBottom(), false);
     g.setGradientFill(bgGrad);
     g.fillRoundedRectangle(bounds.toFloat(), cornerSize);
     
-    // Orange glow effect
-    g.setColour(juce::Colour(0x4dFF8C00));
-    g.drawRoundedRectangle(bounds.toFloat().expanded(2), cornerSize + 2, 3.0f);
+    // v1.1.0: Inner glow - 1px blur orange inside
+    g.setColour(juce::Colour(0x30FF9500));
+    g.drawRoundedRectangle(bounds.toFloat().reduced(3.0f), cornerSize - 2, 2.0f);
     
-    // Orange border
-    g.setColour(juce::Colour(0xffFF8C00));
+    // v1.1.0: Orange border 2px #FF9500
+    g.setColour(juce::Colour(0xffFF9500));
     g.drawRoundedRectangle(bounds.toFloat().reduced(borderWidth * 0.5f), cornerSize, borderWidth);
     
-    // Phase 2 UI: Inner highlight (1px light line at top edge)
-    {
-        juce::Path highlightPath;
-        auto innerBounds = bounds.toFloat().reduced(3.0f);
-        highlightPath.addArc(innerBounds.getX() + cornerSize, innerBounds.getY(), 
-                            (innerBounds.getWidth() - cornerSize * 2), cornerSize * 2,
-                            -juce::MathConstants<float>::pi, 0.0f, true);
-        g.setColour(juce::Colour(0x302A2A2A));
-        g.strokePath(highlightPath, juce::PathStrokeType(1.0f));
-        
-        // Simple horizontal line highlight
-        g.setColour(juce::Colour(0x282A2A2A));
-        g.drawLine(bounds.toFloat().getX() + cornerSize + 2, bounds.toFloat().getY() + 2.5f,
-                   bounds.toFloat().getRight() - cornerSize - 2, bounds.toFloat().getY() + 2.5f, 1.0f);
-    }
+    // v1.1.0: Bevel effect - 1px #3A3A3A highlight at top
+    g.setColour(juce::Colour(0xff3A3A3A));
+    g.drawLine(bounds.toFloat().getX() + cornerSize + 2, bounds.toFloat().getY() + 3.0f,
+               bounds.toFloat().getRight() - cornerSize - 2, bounds.toFloat().getY() + 3.0f, 1.0f);
     
-    // Combined title: "VOLTAGE"
-    g.setColour(juce::Colours::white);
+    // v1.1.0: Bevel effect - 1px #1A1A1A shadow at bottom
+    g.setColour(juce::Colour(0xff1A1A1A));
+    g.drawLine(bounds.toFloat().getX() + cornerSize + 2, bounds.toFloat().getBottom() - 3.0f,
+               bounds.toFloat().getRight() - cornerSize - 2, bounds.toFloat().getBottom() - 3.0f, 1.0f);
+    
+    // v1.1.0: Combined title "VOLTAGE" - orange #FF9500
+    g.setColour(juce::Colour(0xffFF9500));
     g.setFont(juce::Font(14.0f, juce::Font::bold));
     g.drawText("VOLTAGE", bounds.getX(), bounds.getY() + 6, bounds.getWidth() - 45, 18, 
                juce::Justification::centred, false);
 }
 
 void SwarmnesssAudioProcessorEditor::paint(juce::Graphics& g) {
-    const int headerHeight = 70;
+    const int headerHeight = 90;  // v1.1.0: Increased from 70 to 90px
     
-    // Draw background image (scaled to fit content area below header)
+    // v1.1.0: Draw clean background (gradient or image)
     if (backgroundImage.isValid()) {
         auto contentArea = juce::Rectangle<float>(0, (float)headerHeight, (float)getWidth(), (float)(getHeight() - headerHeight));
         g.drawImage(backgroundImage, contentArea, juce::RectanglePlacement::stretchToFit);
     } else {
-        g.fillAll(MetalLookAndFeel::getBackgroundDark());
+        // v1.1.0: Fallback gradient #1A1A1A → #0D0D0D
+        juce::ColourGradient bgGrad(juce::Colour(0xff1A1A1A), 0, (float)headerHeight,
+                                     juce::Colour(0xff0D0D0D), 0, (float)getHeight(), false);
+        g.setGradientFill(bgGrad);
+        g.fillRect(0, headerHeight, getWidth(), getHeight() - headerHeight);
     }
     
-    // Dark overlay to make background less distracting (content area only)
-    g.setColour(juce::Colour(0x99000000));
+    // v1.1.0: Subtle dark overlay (less opacity to show cleaner background)
+    g.setColour(juce::Colour(0x60000000));
     g.fillRect(0, headerHeight, getWidth(), getHeight() - headerHeight);
 
-    // === HEADER SECTION ===
-    // Header background - dark gradient
-    juce::ColourGradient headerGrad(juce::Colour(0xff1a1a1a), 0, 0,
-                                     juce::Colour(0xff0d0d0d), 0, (float)headerHeight, false);
+    // === HEADER SECTION v1.1.0 ===
+    // Header background - gradient #252525 (top) → #1A1A1A (bottom)
+    juce::ColourGradient headerGrad(juce::Colour(0xff252525), 0, 0,
+                                     juce::Colour(0xff1A1A1A), 0, (float)headerHeight, false);
     g.setGradientFill(headerGrad);
     g.fillRect(0, 0, getWidth(), headerHeight);
     
-    // Header bottom border line (orange accent)
-    g.setColour(MetalLookAndFeel::getAccentOrange().withAlpha(0.4f));
+    // v1.1.0: Orange accent line 2px at bottom of header
+    g.setColour(juce::Colour(0xffFF9500));
     g.fillRect(0, headerHeight - 2, getWidth(), 2);
     
-    // Draw header logo centered
+    // v1.1.0: Draw header logo centered, scaled to fit fully
     if (headerLogoImage.isValid()) {
-        // v1.0.1: Scale logo to fit header while maintaining aspect ratio with high-quality interpolation
-        float logoScale = (float)(headerHeight - 16) / (float)headerLogoImage.getHeight();
+        float logoScale = (float)(headerHeight - 20) / (float)headerLogoImage.getHeight();
         float logoW = headerLogoImage.getWidth() * logoScale;
         float logoH = headerLogoImage.getHeight() * logoScale;
         float logoX = (getWidth() - logoW) * 0.5f;
         float logoY = (headerHeight - logoH) * 0.5f;
         
-        // v1.0.1: Use high-quality resampling for crisp logo
         g.setImageResamplingQuality(juce::Graphics::highResamplingQuality);
         g.drawImage(headerLogoImage, 
                     juce::Rectangle<float>(logoX, logoY, logoW, logoH),
                     juce::RectanglePlacement::centred);
     }
 
-    // Version number (top right in header)
+    // v1.1.0: Version number (top right in header)
     g.setColour(MetalLookAndFeel::getTextDim());
     g.setFont(juce::Font(11.0f));
-    g.drawText("v1.0.1", getWidth() - 70, 25, 60, 20, juce::Justification::centredRight);
+    g.drawText("v1.1.0", getWidth() - 70, 35, 60, 20, juce::Justification::centredRight);
 
     // Draw section frames (shifted down by headerHeight)
-    int topRowY = headerHeight + 10;  // 80
-    int bottomRowY = headerHeight + 255;  // 325
+    int topRowY = headerHeight + 10;      // 100
+    int bottomRowY = headerHeight + 255;  // 345
     
     // Top row: PITCH+MODULATION (combined large), TONE
     drawCombinedSectionFrame(g, juce::Rectangle<int>(15, topRowY, 640, 230));
@@ -504,6 +494,27 @@ void SwarmnesssAudioProcessorEditor::paint(juce::Graphics& g) {
     drawSectionFrame(g, juce::Rectangle<int>(15, bottomRowY, 310, 180), "SWARM");
     drawSectionFrame(g, juce::Rectangle<int>(340, bottomRowY, 310, 180), "FLOW");
     drawSectionFrame(g, juce::Rectangle<int>(665, bottomRowY, 320, 180), "OUTPUT");
+    
+    // === v1.1.0: METAL STRIP between sections and footswitch ===
+    int metalStripY = bottomRowY + 190;  // After sections
+    int metalStripHeight = 25;
+    
+    // Brushed metal gradient: #3A3A3A → #2A2A2A → #3A3A3A
+    juce::ColourGradient metalGrad(juce::Colour(0xff3A3A3A), 0, (float)metalStripY,
+                                    juce::Colour(0xff2A2A2A), 0, (float)(metalStripY + metalStripHeight / 2), false);
+    g.setGradientFill(metalGrad);
+    g.fillRect(0, metalStripY, getWidth(), metalStripHeight / 2);
+    
+    juce::ColourGradient metalGrad2(juce::Colour(0xff2A2A2A), 0, (float)(metalStripY + metalStripHeight / 2),
+                                     juce::Colour(0xff3A3A3A), 0, (float)(metalStripY + metalStripHeight), false);
+    g.setGradientFill(metalGrad2);
+    g.fillRect(0, metalStripY + metalStripHeight / 2, getWidth(), metalStripHeight / 2);
+    
+    // v1.1.0: Subtle horizontal lines for brushed metal texture
+    g.setColour(juce::Colour(0x15FFFFFF));
+    for (int i = 0; i < metalStripHeight; i += 2) {
+        g.drawLine(0.0f, (float)(metalStripY + i), (float)getWidth(), (float)(metalStripY + i), 0.5f);
+    }
 }
 
 void SwarmnesssAudioProcessorEditor::resized() {
@@ -512,16 +523,16 @@ void SwarmnesssAudioProcessorEditor::resized() {
     const int comboHeight = 24;
     const int toggleSize = 28;
     const int powerButtonSize = 30;
-    const int headerHeight = 70;
+    const int headerHeight = 90;  // v1.1.0: Increased from 70 to 90px
     
-    // === Preset Selector and Buttons (top-left in header) ===
-    presetSelector.setBounds(20, 20, 140, 28);
-    savePresetButton.setBounds(165, 20, 50, 28);
-    exportPresetButton.setBounds(220, 20, 60, 28);
-    importPresetButton.setBounds(285, 20, 60, 28);
+    // === Preset Selector and Buttons (top-left in header) v1.1.0 ===
+    presetSelector.setBounds(20, 30, 140, 28);
+    savePresetButton.setBounds(165, 30, 50, 28);
+    exportPresetButton.setBounds(220, 30, 60, 28);
+    importPresetButton.setBounds(285, 30, 60, 28);
     
-    // === Info Button (top-right in header) ===
-    infoButton.setBounds(getWidth() - 45, 20, 30, 30);
+    // === Info Button (top-right in header) v1.1.0 ===
+    infoButton.setBounds(getWidth() - 45, 30, 30, 30);
     
     // Info Panel (full screen overlay)
     infoPanel.setBounds(getLocalBounds());
@@ -635,12 +646,12 @@ void SwarmnesssAudioProcessorEditor::resized() {
         volumeKnob.setBounds(baseX + 25 + spacing * 2, knobY, smallKnobSize, smallKnobSize + 30);
     }
 
-    // === BYPASS Footswitch (bottom center) ===
+    // === BYPASS Footswitch (bottom center, below metal strip) v1.1.0 ===
     {
         int footWidth = 100;
         int footHeight = 100;
         int footX = (getWidth() - footWidth) / 2;
-        int footY = headerHeight + 460;  // 530 -> 600
+        int footY = headerHeight + 475;  // Below metal strip (90 + 10 + 230 + 180 + 25 + pad)
         bypassFootswitch.setBounds(footX, footY, footWidth, footHeight);
     }
 }

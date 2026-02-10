@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(Swarmness VERSION 1.0.1)
+project(Swarmness VERSION 1.1.0)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -81,6 +81,7 @@ juce_add_binary_data(SwarmnessBinaryData
         Source/Assets/footswitch.png
         Source/Assets/logo.png
         Source/Assets/background.png
+        Source/Assets/background_clean.png
         Source/Assets/knob_strip.png
         Source/Assets/section_frames.png
         Source/Assets/knob.png

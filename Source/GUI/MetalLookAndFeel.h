@@ -43,19 +43,19 @@ public:
                           bool shouldDrawButtonAsHighlighted,
                           bool shouldDrawButtonAsDown) override;
 
-    // v3.0.0: Yellow-Orange Bee color scheme
+    // v1.1.0: Yellow-Orange Bee color scheme - updated text colors
     static juce::Colour getBackgroundDark()    { return juce::Colour(0xff0a0a0a); }  // Almost black
     static juce::Colour getPanelBackground()   { return juce::Colour(0xff151515); }  // Slightly lighter
-    static juce::Colour getAccentOrange()      { return juce::Colour(0xffFFB300); }  // Main accent - amber
-    static juce::Colour getAccentOrangeBright(){ return juce::Colour(0xffFFC107); }  // Brighter for arcs/LEDs
+    static juce::Colour getAccentOrange()      { return juce::Colour(0xffFF9500); }  // v1.1.0: Main accent #FF9500
+    static juce::Colour getAccentOrangeBright(){ return juce::Colour(0xffFFAA00); }  // Brighter for arcs/LEDs
     static juce::Colour getAccentOrangeDim()   { return juce::Colour(0xff996600); }  // Dim for inactive
     static juce::Colour getAccentYellow()      { return juce::Colour(0xffFFD54F); }  // Yellow highlight
     static juce::Colour getMetalLight()        { return juce::Colour(0xffc0c0c0); }  // Silver highlight
     static juce::Colour getMetalMid()          { return juce::Colour(0xff909090); }  // Mid silver
     static juce::Colour getMetalGrey()         { return juce::Colour(0xff606060); }  // Dark metal
     static juce::Colour getMetalDark()         { return juce::Colour(0xff404040); }  // Very dark metal
-    static juce::Colour getTextLight()         { return juce::Colour(0xffe8e8e8); }  // White text
-    static juce::Colour getTextDim()           { return juce::Colour(0xff888888); }  // Dimmed text
+    static juce::Colour getTextLight()         { return juce::Colour(0xffFFFFFF); }  // v1.1.0: Pure white for values
+    static juce::Colour getTextDim()           { return juce::Colour(0xffAAAAAA); }  // v1.1.0: Light gray #AAAAAA for param names
     static juce::Colour getLEDGreen()          { return juce::Colour(0xff33cc55); }  // Green LED
     static juce::Colour getLEDOrange()         { return juce::Colour(0xffFF8F00); }  // Orange LED
     static juce::Colour getLEDYellow()         { return juce::Colour(0xffFFD700); }  // Yellow LED
