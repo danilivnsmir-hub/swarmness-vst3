@@ -120,7 +120,7 @@ void MetalLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int wid
     {
         juce::Path pointerPath;
         const float pointerLength = capRadius * 0.7f;
-        const float pointerWidth = 2.5f;
+        const float pointerWidth = 3.0f;  // Phase 1 UI: Increased from 2.5px to 3px
         
         pointerPath.addRoundedRectangle(-pointerWidth * 0.5f, -capRadius + 4.0f, 
                                          pointerWidth, pointerLength, pointerWidth * 0.4f);

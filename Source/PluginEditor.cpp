@@ -156,7 +156,7 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
     
     riseFaderLabel.setText("RISE", juce::dontSendNotification);
     riseFaderLabel.setJustificationType(juce::Justification::centred);
-    riseFaderLabel.setFont(juce::Font(9.0f));
+    riseFaderLabel.setFont(juce::Font(11.0f));  // Phase 1 UI: Increased from 9px to 11px
     riseFaderLabel.setColour(juce::Label::textColourId, MetalLookAndFeel::getTextLight());
     addAndMakeVisible(riseFaderLabel);
     
@@ -345,6 +345,12 @@ void SwarmnesssAudioProcessorEditor::drawSectionFrame(juce::Graphics& g, juce::R
     const float cornerSize = 12.0f;
     const float borderWidth = 1.5f;
     
+    // Phase 1 UI: Drop shadow effect
+    juce::DropShadow shadow(juce::Colour(0x80000000), 12, juce::Point<int>(0, 4));
+    juce::Path shadowPath;
+    shadowPath.addRoundedRectangle(bounds.toFloat(), cornerSize);
+    shadow.drawForPath(g, shadowPath);
+    
     // Semi-transparent dark background
     g.setColour(juce::Colour(0xe00f0f0f));
     g.fillRoundedRectangle(bounds.toFloat(), cornerSize);
@@ -367,6 +373,12 @@ void SwarmnesssAudioProcessorEditor::drawSectionFrame(juce::Graphics& g, juce::R
 void SwarmnesssAudioProcessorEditor::drawCombinedSectionFrame(juce::Graphics& g, juce::Rectangle<int> bounds) {
     const float cornerSize = 12.0f;
     const float borderWidth = 1.5f;
+    
+    // Phase 1 UI: Drop shadow effect
+    juce::DropShadow shadow(juce::Colour(0x80000000), 12, juce::Point<int>(0, 4));
+    juce::Path shadowPath;
+    shadowPath.addRoundedRectangle(bounds.toFloat(), cornerSize);
+    shadow.drawForPath(g, shadowPath);
     
     // Semi-transparent dark background
     g.setColour(juce::Colour(0xe00f0f0f));
@@ -403,7 +415,7 @@ void SwarmnesssAudioProcessorEditor::paint(juce::Graphics& g) {
     // Version number (top right, below info button area)
     g.setColour(MetalLookAndFeel::getTextDim());
     g.setFont(juce::Font(11.0f));
-    g.drawText("v3.2.2", getWidth() - 70, 20, 60, 20, juce::Justification::centredRight);
+    g.drawText("v3.2.4", getWidth() - 70, 20, 60, 20, juce::Justification::centredRight);
 
     // Draw section frames
     // Top row: PITCH+MODULATION (combined large), TONE
@@ -455,10 +467,10 @@ void SwarmnesssAudioProcessorEditor::resized() {
         // Dropdown for octave
         octaveModeBox.setBounds(pitchX, baseY + 50, 85, comboHeight);
         
-        // 2 knobs: RANGE, SPEED
+        // 2 knobs: RANGE, SPEED (Phase 1 UI: 85px spacing)
         int knobY = baseY + 85;
         pitchRangeKnob.setBounds(pitchX, knobY, knobSize, knobSize + 30);
-        pitchSpeedKnob.setBounds(pitchX + 80, knobY, knobSize, knobSize + 30);
+        pitchSpeedKnob.setBounds(pitchX + 85, knobY, knobSize, knobSize + 30);
         
         // RISE Vertical Fader
         int faderWidth = 40;
@@ -473,9 +485,9 @@ void SwarmnesssAudioProcessorEditor::resized() {
         int modX = baseX + 320;
         modulationSubLabel.setBounds(modX, baseY + 30, 280, 16);
         
-        // 3 knobs: ANGER, RUSH, RATE
+        // 3 knobs: ANGER, RUSH, RATE (Phase 1 UI: 85px spacing)
         int modKnobY = baseY + 85;
-        int spacing = 90;
+        int spacing = 85;
         angerKnob.setBounds(modX, modKnobY, knobSize, knobSize + 30);
         rushKnob.setBounds(modX + spacing, modKnobY, knobSize, knobSize + 30);
         modRateKnob.setBounds(modX + spacing * 2, modKnobY, knobSize, knobSize + 30);
@@ -486,12 +498,12 @@ void SwarmnesssAudioProcessorEditor::resized() {
         int baseX = 670;
         int baseY = topRowY;
         
-        // 3 knobs in a row
+        // 3 knobs in a row (Phase 1 UI: 85px spacing)
         int knobY = baseY + 70;
-        int spacing = 100;
-        lowCutKnob.setBounds(baseX + 15, knobY, knobSize, knobSize + 30);
-        highCutKnob.setBounds(baseX + 15 + spacing, knobY, knobSize, knobSize + 30);
-        midBoostKnob.setBounds(baseX + 15 + spacing * 2, knobY, knobSize, knobSize + 30);
+        int spacing = 85;
+        lowCutKnob.setBounds(baseX + 25, knobY, knobSize, knobSize + 30);
+        highCutKnob.setBounds(baseX + 25 + spacing, knobY, knobSize, knobSize + 30);
+        midBoostKnob.setBounds(baseX + 25 + spacing * 2, knobY, knobSize, knobSize + 30);
     }
 
     // === SWARM Section (15, 325, 310, 180) ===
@@ -502,15 +514,15 @@ void SwarmnesssAudioProcessorEditor::resized() {
         // Power button in top-right corner
         swarmPowerButton.setBounds(baseX + 310 - 40, baseY + 8, powerButtonSize, powerButtonSize);
         
-        // 3 knobs + toggle
+        // 3 knobs + toggle (Phase 1 UI: 85px spacing for small knobs adjusted to 75px)
         int knobY = baseY + 45;
-        int spacing = 70;
+        int spacing = 75;  // Smaller spacing for smallKnobSize
         swarmDepthKnob.setBounds(baseX + 15, knobY, smallKnobSize, smallKnobSize + 30);
         swarmRateKnob.setBounds(baseX + 15 + spacing, knobY, smallKnobSize, smallKnobSize + 30);
         swarmMixKnob.setBounds(baseX + 15 + spacing * 2, knobY, smallKnobSize, smallKnobSize + 30);
         
         // MODE toggle
-        chorusModeButton.setBounds(baseX + 15 + spacing * 3 + 5, knobY + 20, toggleSize + 25, toggleSize);
+        chorusModeButton.setBounds(baseX + 15 + spacing * 3, knobY + 20, toggleSize + 25, toggleSize);
     }
 
     // === FLOW Section (340, 325, 310, 180) ===
@@ -521,9 +533,9 @@ void SwarmnesssAudioProcessorEditor::resized() {
         // Power button in top-right corner
         flowPowerButton.setBounds(baseX + 310 - 40, baseY + 8, powerButtonSize, powerButtonSize);
         
-        // 2 knobs (flowModeButton removed - flowMode is always Hard)
+        // 2 knobs (flowModeButton removed - flowMode is always Hard) (Phase 1 UI: 85px spacing)
         int knobY = baseY + 45;
-        int spacing = 90;
+        int spacing = 85;
         flowAmountKnob.setBounds(baseX + 25, knobY, smallKnobSize, smallKnobSize + 30);
         flowSpeedKnob.setBounds(baseX + 25 + spacing, knobY, smallKnobSize, smallKnobSize + 30);
     }
@@ -533,12 +545,12 @@ void SwarmnesssAudioProcessorEditor::resized() {
         int baseX = 665;
         int baseY = bottomRowY;
         
-        // 3 knobs (no power button for OUTPUT)
+        // 3 knobs (no power button for OUTPUT) (Phase 1 UI: 85px spacing)
         int knobY = baseY + 45;
-        int spacing = 100;
-        mixKnob.setBounds(baseX + 15, knobY, smallKnobSize, smallKnobSize + 30);
-        driveKnob.setBounds(baseX + 15 + spacing, knobY, smallKnobSize, smallKnobSize + 30);
-        volumeKnob.setBounds(baseX + 15 + spacing * 2, knobY, smallKnobSize, smallKnobSize + 30);
+        int spacing = 85;
+        mixKnob.setBounds(baseX + 25, knobY, smallKnobSize, smallKnobSize + 30);
+        driveKnob.setBounds(baseX + 25 + spacing, knobY, smallKnobSize, smallKnobSize + 30);
+        volumeKnob.setBounds(baseX + 25 + spacing * 2, knobY, smallKnobSize, smallKnobSize + 30);
     }
 
     // === BYPASS Footswitch (bottom center) ===
