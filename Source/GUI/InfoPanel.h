@@ -24,7 +24,7 @@ public:
         // Title
         g.setColour(MetalLookAndFeel::getAccentOrange());
         g.setFont(juce::Font(20.0f, juce::Font::bold));
-        g.drawText("SWARMNESS v3.2.1 - Parameter Guide", panelBounds.getX() + 20, panelBounds.getY() + 15, 
+        g.drawText("SWARMNESS v3.2.2 - Parameter Guide", panelBounds.getX() + 20, panelBounds.getY() + 15, 
                    panelBounds.getWidth() - 40, 30, juce::Justification::centred);
         
         // Parameter descriptions

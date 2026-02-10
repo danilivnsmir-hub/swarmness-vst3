@@ -116,6 +116,7 @@ private:
     void drawSectionFrame(juce::Graphics& g, juce::Rectangle<int> bounds, const juce::String& title);
     void drawCombinedSectionFrame(juce::Graphics& g, juce::Rectangle<int> bounds);
     void refreshPresetList();
+    void updatePresetName();
     void updateSectionEnableStates();
     void setSectionEnabled(std::vector<juce::Component*> components, bool enabled);
 

@@ -292,66 +292,78 @@ void MetalLookAndFeel::drawLinearSlider(juce::Graphics& g, int x, int y, int wid
         return;
     }
     
-    const float trackWidth = 20.0f;
-    const float trackX = x + (width - trackWidth) * 0.5f;
-    const float trackHeight = static_cast<float>(height) - 20.0f;
-    const float trackY = static_cast<float>(y) + 10.0f;
-    const float cornerRadius = 10.0f;
+    const float trackWidth = 24.0f;  // Slightly wider track for better visibility
+    const float trackX = static_cast<float>(x) + (static_cast<float>(width) - trackWidth) * 0.5f;
+    const float thumbMargin = 12.0f;  // Space at top and bottom for thumb
+    const float trackHeight = static_cast<float>(height) - thumbMargin * 2.0f;
+    const float trackY = static_cast<float>(y) + thumbMargin;
+    const float cornerRadius = 8.0f;
     
-    // Track background (dark)
+    // Track background (dark with subtle depth)
     juce::Rectangle<float> trackBounds(trackX, trackY, trackWidth, trackHeight);
+    
+    // Inner shadow effect
+    g.setColour(juce::Colour(0xff0d0d0d));
+    g.fillRoundedRectangle(trackBounds.expanded(1), cornerRadius + 1);
+    
     g.setColour(juce::Colour(0xff1a1a1a));
     g.fillRoundedRectangle(trackBounds, cornerRadius);
     
-    // Track border
+    // Track border with subtle glow
     g.setColour(getMetalDark());
     g.drawRoundedRectangle(trackBounds, cornerRadius, 1.5f);
     
     // Calculate fill based on slider position (inverted for vertical)
-    float normalizedPos = 1.0f - (sliderPos - y) / static_cast<float>(height);
+    float normalizedPos = 1.0f - (sliderPos - static_cast<float>(y)) / static_cast<float>(height);
     normalizedPos = juce::jlimit(0.0f, 1.0f, normalizedPos);
     float fillHeight = trackHeight * normalizedPos;
     
     // Orange fill from bottom
-    if (fillHeight > 0) {
-        juce::Rectangle<float> fillBounds(trackX + 2, trackY + trackHeight - fillHeight, 
-                                           trackWidth - 4, fillHeight);
+    if (fillHeight > 2.0f) {
+        juce::Rectangle<float> fillBounds(trackX + 3, trackY + trackHeight - fillHeight + 2, 
+                                           trackWidth - 6, fillHeight - 4);
         
-        // Gradient fill for glow effect
-        juce::ColourGradient fillGrad(getAccentOrangeBright(), trackX, fillBounds.getY(),
-                                       getAccentOrange().darker(0.3f), trackX + trackWidth, fillBounds.getY(), false);
+        // Gradient fill for glow effect (vertical gradient for better appearance)
+        juce::ColourGradient fillGrad(getAccentOrangeBright(), fillBounds.getCentreX(), fillBounds.getY(),
+                                       getAccentOrange().darker(0.2f), fillBounds.getCentreX(), fillBounds.getBottom(), false);
         g.setGradientFill(fillGrad);
-        g.fillRoundedRectangle(fillBounds, cornerRadius - 2);
+        g.fillRoundedRectangle(fillBounds, cornerRadius - 3);
         
-        // Glow effect
-        g.setColour(getAccentOrange().withAlpha(0.3f));
-        g.drawRoundedRectangle(fillBounds.expanded(1), cornerRadius - 1, 2.0f);
+        // Glow effect around fill
+        g.setColour(getAccentOrange().withAlpha(0.4f));
+        g.drawRoundedRectangle(fillBounds.expanded(1), cornerRadius - 2, 2.0f);
     }
     
-    // Thumb/handle
-    const float thumbHeight = 20.0f;
-    const float thumbWidth = trackWidth + 8.0f;
-    const float thumbX = trackX - 4.0f;
-    const float thumbY = sliderPos - thumbHeight * 0.5f;
+    // Thumb/handle - wider for easier grabbing
+    const float thumbHeight = 18.0f;
+    const float thumbWidth = trackWidth + 10.0f;
+    const float thumbX = trackX - 5.0f;
+    const float thumbY = juce::jlimit(static_cast<float>(y), 
+                                       static_cast<float>(y + height) - thumbHeight, 
+                                       sliderPos - thumbHeight * 0.5f);
     
     // Thumb shadow
-    g.setColour(juce::Colours::black.withAlpha(0.4f));
-    g.fillRoundedRectangle(thumbX + 1, thumbY + 1, thumbWidth, thumbHeight, 4.0f);
+    g.setColour(juce::Colours::black.withAlpha(0.5f));
+    g.fillRoundedRectangle(thumbX + 2, thumbY + 2, thumbWidth, thumbHeight, 4.0f);
     
-    // Thumb body - metal gradient
-    juce::ColourGradient thumbGrad(getMetalLight(), thumbX, thumbY,
-                                    getMetalGrey(), thumbX, thumbY + thumbHeight, false);
+    // Thumb body - brushed metal gradient
+    juce::ColourGradient thumbGrad(getMetalLight().brighter(0.1f), thumbX, thumbY,
+                                    getMetalGrey().darker(0.1f), thumbX, thumbY + thumbHeight, false);
     g.setGradientFill(thumbGrad);
     g.fillRoundedRectangle(thumbX, thumbY, thumbWidth, thumbHeight, 4.0f);
+    
+    // Thumb highlight (top edge)
+    g.setColour(juce::Colours::white.withAlpha(0.15f));
+    g.drawLine(thumbX + 4, thumbY + 2, thumbX + thumbWidth - 4, thumbY + 2, 1.0f);
     
     // Thumb border
     g.setColour(getMetalDark());
     g.drawRoundedRectangle(thumbX, thumbY, thumbWidth, thumbHeight, 4.0f, 1.0f);
     
-    // Thumb grip lines
-    g.setColour(getMetalDark().withAlpha(0.5f));
+    // Thumb grip lines (orange accent)
+    g.setColour(getAccentOrange().withAlpha(0.6f));
     for (int i = -1; i <= 1; ++i) {
-        float lineY = thumbY + thumbHeight * 0.5f + i * 4.0f;
-        g.drawLine(thumbX + 4, lineY, thumbX + thumbWidth - 4, lineY, 1.0f);
+        float lineY = thumbY + thumbHeight * 0.5f + i * 3.5f;
+        g.drawLine(thumbX + 6, lineY, thumbX + thumbWidth - 6, lineY, 1.5f);
     }
 }

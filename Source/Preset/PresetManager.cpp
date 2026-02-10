@@ -1,12 +1,77 @@
 #include "PresetManager.h"
 
 const juce::String PresetManager::kPresetExtension = ".swpreset";
-const juce::String PresetManager::kPresetVersion = "3.0.0";
+const juce::String PresetManager::kPresetVersion = "3.2.2";
 
 PresetManager::PresetManager(juce::AudioProcessorValueTreeState& apvts)
     : mAPVTS(apvts)
 {
     initializeFactoryPresets();
+    registerParameterListeners();
+    saveSnapshot();
+}
+
+PresetManager::~PresetManager() {
+    unregisterParameterListeners();
+}
+
+void PresetManager::registerParameterListeners() {
+    for (auto* param : mAPVTS.processor.getParameters()) {
+        if (auto* paramWithID = dynamic_cast<juce::AudioProcessorParameterWithID*>(param)) {
+            mAPVTS.addParameterListener(paramWithID->getParameterID(), this);
+        }
+    }
+}
+
+void PresetManager::unregisterParameterListeners() {
+    for (auto* param : mAPVTS.processor.getParameters()) {
+        if (auto* paramWithID = dynamic_cast<juce::AudioProcessorParameterWithID*>(param)) {
+            mAPVTS.removeParameterListener(paramWithID->getParameterID(), this);
+        }
+    }
+}
+
+void PresetManager::parameterChanged(const juce::String& parameterID, float newValue) {
+    // Check if value differs from snapshot
+    auto it = mSnapshot.find(parameterID);
+    if (it != mSnapshot.end()) {
+        if (std::abs(it->second - newValue) > 0.0001f) {
+            markDirty();
+        }
+    } else {
+        markDirty();
+    }
+}
+
+void PresetManager::markDirty() {
+    mIsDirty = true;
+}
+
+void PresetManager::markClean() {
+    mIsDirty = false;
+}
+
+void PresetManager::saveSnapshot() {
+    mSnapshot.clear();
+    for (auto* param : mAPVTS.processor.getParameters()) {
+        if (auto* paramWithID = dynamic_cast<juce::AudioProcessorParameterWithID*>(param)) {
+            mSnapshot[paramWithID->getParameterID()] = param->getValue();
+        }
+    }
+}
+
+bool PresetManager::hasChangedFromSnapshot() const {
+    for (auto* param : mAPVTS.processor.getParameters()) {
+        if (auto* paramWithID = dynamic_cast<juce::AudioProcessorParameterWithID*>(param)) {
+            auto it = mSnapshot.find(paramWithID->getParameterID());
+            if (it != mSnapshot.end()) {
+                if (std::abs(it->second - param->getValue()) > 0.0001f) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
 }
 
 juce::File PresetManager::getPresetsDirectory() const {
@@ -63,6 +128,8 @@ void PresetManager::savePreset(const juce::String& name) {
     juce::String jsonString = juce::JSON::toString(presetData, true);
     presetFile.replaceWithText(jsonString);
     mCurrentPresetName = name;
+    saveSnapshot();
+    markClean();
 }
 
 void PresetManager::loadPreset(const juce::String& name) {
@@ -85,6 +152,8 @@ void PresetManager::loadPresetFromFile(const juce::File& file) {
     if (presetData.isObject()) {
         applyPresetFromVar(presetData);
         mCurrentPresetName = presetData["name"].toString();
+        saveSnapshot();
+        markClean();
     }
 }
 
@@ -145,6 +214,8 @@ void PresetManager::loadFactoryPreset(const juce::String& name) {
     if (mFactoryPresets.count(name) > 0) {
         applyPresetFromVar(mFactoryPresets[name]);
         mCurrentPresetName = name;
+        saveSnapshot();
+        markClean();
     }
 }
 

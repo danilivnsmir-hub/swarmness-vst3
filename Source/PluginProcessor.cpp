@@ -166,7 +166,7 @@ void SwarmnesssAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
     mPitchShifter.setRiseTime(riseMs);
     
     // Update PitchRandomizer (RANGE and SPEED knobs)
-    float randomRange = *pRandomRange * 24.0f;  // 0-24 semitones
+    float randomRange = *pRandomRange;  // Now directly 0-24 semitones (int parameter)
     float randomRate = 0.1f + *pRandomRate * 9.9f;  // 0.1-10 Hz
     mPitchRandomizer.setRandomRange(randomRange);
     mPitchRandomizer.setRandomRate(randomRate);
@@ -328,8 +328,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout SwarmnesssAudioProcessor::cr
         "rise", "Rise", 0.0f, 1.0f, 0.05f));
 
     // Pitch Randomizer (RANGE and SPEED knobs)
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "randomRange", "Random Range", 0.0f, 1.0f, 0.0f));
+    // randomRange: 0-24 semitones (integer)
+    params.push_back(std::make_unique<juce::AudioParameterInt>(
+        "randomRange", "Random Range", 0, 24, 0));
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         "randomRate", "Random Rate", 0.0f, 1.0f, 0.1f));
 

@@ -131,8 +131,8 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
         audioProcessor.getAPVTS(), "octaveMode", octaveModeBox);
 
     addAndMakeVisible(pitchRangeKnob);
-    pitchRangeKnob.setValueSuffix("%");
-    pitchRangeKnob.setValueMultiplier(100.0f);
+    pitchRangeKnob.setValueSuffix(" st");
+    pitchRangeKnob.setValueMultiplier(1.0f);  // Now 0-24 semitones directly
     randomRangeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         audioProcessor.getAPVTS(), "randomRange", pitchRangeKnob.getSlider());
 
@@ -310,6 +310,9 @@ void SwarmnesssAudioProcessorEditor::timerCallback() {
     
     // Periodically update section enable states (in case parameters change externally)
     updateSectionEnableStates();
+    
+    // Update preset name with dirty indicator
+    updatePresetName();
 }
 
 void SwarmnesssAudioProcessorEditor::setSectionEnabled(std::vector<juce::Component*> components, bool enabled) {
@@ -404,7 +407,7 @@ void SwarmnesssAudioProcessorEditor::paint(juce::Graphics& g) {
     // Version number (top right, below info button area)
     g.setColour(MetalLookAndFeel::getTextDim());
     g.setFont(juce::Font(11.0f));
-    g.drawText("v3.2.1", getWidth() - 70, 20, 60, 20, juce::Justification::centredRight);
+    g.drawText("v3.2.2", getWidth() - 70, 20, 60, 20, juce::Justification::centredRight);
 
     // Draw section frames
     // Top row: PITCH+MODULATION (combined large), TONE
@@ -557,14 +560,22 @@ void SwarmnesssAudioProcessorEditor::resized() {
 
 void SwarmnesssAudioProcessorEditor::refreshPresetList() {
     presetSelector.clear();
-    auto presets = audioProcessor.getPresetManager().getAllPresetNames();
+    auto presets = audioProcessor.getPresetManager().getPresetList();
     int index = 1;
     for (const auto& name : presets) {
         presetSelector.addItem(name, index++);
     }
     
+    updatePresetName();
+}
+
+void SwarmnesssAudioProcessorEditor::updatePresetName() {
     auto current = audioProcessor.getPresetManager().getCurrentPresetName();
     if (current.isNotEmpty()) {
+        // Add "*" if preset is dirty (modified)
+        if (audioProcessor.getPresetManager().isDirty()) {
+            current += " *";
+        }
         presetSelector.setText(current, juce::dontSendNotification);
     }
 }
