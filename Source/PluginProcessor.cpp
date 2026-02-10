@@ -41,6 +41,9 @@ SwarmnesssAudioProcessor::SwarmnesssAudioProcessor()
     pFlowAmount = mAPVTS.getRawParameterValue("flowAmount");
     pFlowSpeed = mAPVTS.getRawParameterValue("flowSpeed");
     pGlobalBypass = mAPVTS.getRawParameterValue("globalBypass");
+    
+    // Initialize dirty tracking after all parameters are set up
+    mPresetManager->initializeDirtyTracking();
 }
 
 SwarmnesssAudioProcessor::~SwarmnesssAudioProcessor() {}

@@ -27,6 +27,7 @@ public:
     void markClean();
     void saveSnapshot();
     bool hasChangedFromSnapshot() const;
+    void initializeDirtyTracking();  // Call after processor is fully constructed
     
     // Listener callback
     void parameterChanged(const juce::String& parameterID, float newValue) override;
@@ -48,5 +49,6 @@ private:
     
     // Dirty state tracking
     bool mIsDirty = false;
+    bool mListenersRegistered = false;
     std::map<juce::String, float> mSnapshot;
 };

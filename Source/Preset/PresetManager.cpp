@@ -7,12 +7,23 @@ PresetManager::PresetManager(juce::AudioProcessorValueTreeState& apvts)
     : mAPVTS(apvts)
 {
     initializeFactoryPresets();
-    registerParameterListeners();
-    saveSnapshot();
+    // Defer listener registration to avoid issues during construction
+    // saveSnapshot() called after listeners are registered
+}
+
+void PresetManager::initializeDirtyTracking() {
+    // Called after processor is fully constructed
+    if (!mListenersRegistered) {
+        registerParameterListeners();
+        saveSnapshot();
+        mListenersRegistered = true;
+    }
 }
 
 PresetManager::~PresetManager() {
-    unregisterParameterListeners();
+    if (mListenersRegistered) {
+        unregisterParameterListeners();
+    }
 }
 
 void PresetManager::registerParameterListeners() {
@@ -32,6 +43,9 @@ void PresetManager::unregisterParameterListeners() {
 }
 
 void PresetManager::parameterChanged(const juce::String& parameterID, float newValue) {
+    // Safety check - don't process if not fully initialized
+    if (!mListenersRegistered) return;
+    
     // Check if value differs from snapshot
     auto it = mSnapshot.find(parameterID);
     if (it != mSnapshot.end()) {
