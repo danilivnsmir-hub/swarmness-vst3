@@ -96,6 +96,7 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
     
     // v1.2.6: Delete button for user presets
     addAndMakeVisible(deletePresetButton);
+    deletePresetButton.setButtonText("X");
     deletePresetButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff2a2a2a));
     deletePresetButton.setColour(juce::TextButton::textColourOffId, juce::Colour(0xffff5555)); // Red color
     deletePresetButton.onClick = [this]() {
@@ -104,17 +105,21 @@ SwarmnesssAudioProcessorEditor::SwarmnesssAudioProcessorEditor(SwarmnesssAudioPr
             presetName = presetName.dropLastCharacters(2);
         
         if (!audioProcessor.getPresetManager().isFactoryPreset(presetName) && presetName.isNotEmpty()) {
-            auto ret = juce::AlertWindow::showOkCancelBox(
+            // Use async callback for proper macOS support
+            juce::AlertWindow::showOkCancelBox(
                 juce::MessageBoxIconType::QuestionIcon,
                 "Delete Preset?",
                 "Are you sure you want to delete \"" + presetName + "\"?",
                 "Delete", "Cancel",
-                nullptr, nullptr);
-            if (ret) {
-                audioProcessor.getPresetManager().deletePreset(presetName);
-                refreshPresetList();
-                updateDeleteButtonVisibility();
-            }
+                this,
+                juce::ModalCallbackFunction::create([this, presetName](int result) {
+                    if (result == 1) {
+                        audioProcessor.getPresetManager().deletePreset(presetName);
+                        refreshPresetList();
+                        updateDeleteButtonVisibility();
+                    }
+                })
+            );
         }
     };
     updateDeleteButtonVisibility();

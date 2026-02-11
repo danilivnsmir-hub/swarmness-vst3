@@ -46,7 +46,7 @@ private:
     juce::TextButton savePresetButton{"SAVE"};
     juce::TextButton exportPresetButton{"EXPORT"};
     juce::TextButton importPresetButton{"IMPORT"};
-    juce::TextButton deletePresetButton{"×"};  // v1.2.6: Delete button for user presets
+    juce::TextButton deletePresetButton{"X"};  // v1.2.6: Delete button for user presets
     
     // Info Panel
     InfoPanel infoPanel;
