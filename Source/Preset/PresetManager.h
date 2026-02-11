@@ -7,14 +7,22 @@ public:
     ~PresetManager() override;
 
     void savePreset(const juce::String& name);
+    void saveCurrentPreset();  // v1.2.7: Save current preset (overwrite if user preset)
+    void savePresetAs(const juce::String& name);  // v1.2.7: Save as new preset
     void loadPreset(const juce::String& name);
     void loadPresetFromFile(const juce::File& file);
     bool exportPreset(const juce::File& file);
     bool importPreset(const juce::File& file);
     void deletePreset(const juce::String& name);
     
+    // v1.2.7: Navigation methods
+    void loadPreviousPreset();
+    void loadNextPreset();
+    int getCurrentPresetIndex() const;
+    
     juce::StringArray getPresetList() const;
     juce::String getCurrentPresetName() const { return mCurrentPresetName; }
+    juce::String getDisplayName() const;  // v1.2.7: Returns name with * prefix if dirty
     void setCurrentPresetName(const juce::String& name) { mCurrentPresetName = name; }
 
     juce::File getPresetsDirectory() const;

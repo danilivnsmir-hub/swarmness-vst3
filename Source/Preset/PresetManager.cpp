@@ -1,7 +1,7 @@
 #include "PresetManager.h"
 
 const juce::String PresetManager::kPresetExtension = ".swpreset";
-const juce::String PresetManager::kPresetVersion = "1.2.6";
+const juce::String PresetManager::kPresetVersion = "1.2.7";
 
 PresetManager::PresetManager(juce::AudioProcessorValueTreeState& apvts)
     : mAPVTS(apvts)
@@ -195,6 +195,70 @@ void PresetManager::deletePreset(const juce::String& name) {
     auto presetFile = getPresetsDirectory().getChildFile(name + kPresetExtension);
     if (presetFile.existsAsFile())
         presetFile.deleteFile();
+    
+    // v1.2.7: Switch to another preset after deletion
+    auto presets = getPresetList();
+    if (!presets.isEmpty()) {
+        // Find a different preset to load
+        juce::String nextPreset;
+        for (const auto& preset : presets) {
+            if (preset != name) {
+                nextPreset = preset;
+                break;
+            }
+        }
+        if (nextPreset.isNotEmpty()) {
+            loadPreset(nextPreset);
+        } else if (presets.size() > 0) {
+            loadPreset(presets[0]);
+        }
+    }
+}
+
+// v1.2.7: Save current preset (overwrite if user preset)
+void PresetManager::saveCurrentPreset() {
+    if (!isFactoryPreset(mCurrentPresetName) && mCurrentPresetName.isNotEmpty()) {
+        savePreset(mCurrentPresetName);
+    }
+}
+
+// v1.2.7: Save as new preset
+void PresetManager::savePresetAs(const juce::String& name) {
+    savePreset(name);
+}
+
+// v1.2.7: Get display name with * prefix if dirty
+juce::String PresetManager::getDisplayName() const {
+    if (mIsDirty) {
+        return "* " + mCurrentPresetName;
+    }
+    return mCurrentPresetName;
+}
+
+// v1.2.7: Get current preset index in list
+int PresetManager::getCurrentPresetIndex() const {
+    auto presets = getPresetList();
+    return presets.indexOf(mCurrentPresetName);
+}
+
+// v1.2.7: Load previous preset
+void PresetManager::loadPreviousPreset() {
+    auto presets = getPresetList();
+    if (presets.isEmpty()) return;
+    
+    int currentIndex = presets.indexOf(mCurrentPresetName);
+    int newIndex = (currentIndex <= 0) ? presets.size() - 1 : currentIndex - 1;
+    loadPreset(presets[newIndex]);
+}
+
+// v1.2.7: Load next preset
+void PresetManager::loadNextPreset() {
+    auto presets = getPresetList();
+    if (presets.isEmpty()) return;
+    
+    int currentIndex = presets.indexOf(mCurrentPresetName);
+    int newIndex = (currentIndex >= presets.size() - 1) ? 0 : currentIndex + 1;
+    loadPreset(presets[newIndex]);
 }
 
 juce::StringArray PresetManager::getPresetList() const {

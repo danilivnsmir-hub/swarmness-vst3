@@ -42,11 +42,12 @@ private:
     // Preset Dropdown (simplified UI)
     juce::ComboBox presetSelector;
     
-    // Preset buttons
+    // v1.2.7: New preset buttons layout
+    juce::TextButton prevPresetButton{"<"};
+    juce::TextButton nextPresetButton{">"};
     juce::TextButton savePresetButton{"SAVE"};
-    juce::TextButton exportPresetButton{"EXPORT"};
-    juce::TextButton importPresetButton{"IMPORT"};
-    juce::TextButton deletePresetButton{"X"};  // v1.2.6: Delete button for user presets
+    juce::TextButton saveAsButton{"SAVE AS"};
+    juce::TextButton deletePresetButton{"DELETE"};
     
     // Info Panel
     InfoPanel infoPanel;
