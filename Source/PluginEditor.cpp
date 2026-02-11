@@ -464,12 +464,14 @@ void SwarmnesssAudioProcessorEditor::paint(juce::Graphics& g) {
     g.setColour(MetalLookAndFeel::getAccentOrange());
     g.fillRect(0, HEADER_HEIGHT - 1, getWidth(), 1);
     
-    // Draw header logo (centered in entire width)
+    // Draw header logo (aligned to right edge of VOLTAGE section)
     if (headerLogoImage.isValid()) {
         float logoH = 36.0f;
         float logoScale = logoH / (float)headerLogoImage.getHeight();
         float logoW = headerLogoImage.getWidth() * logoScale;
-        float logoX = (getWidth() - logoW) * 0.5f;
+        // v1.2.8: Align with right edge of VOLTAGE section (before right side panel)
+        float voltageRightEdge = (float)(getWidth() - SIDE_PANEL_WIDTH - PADDING);
+        float logoX = voltageRightEdge - logoW;
         float logoY = (HEADER_HEIGHT - logoH) * 0.5f;
         
         g.setImageResamplingQuality(juce::Graphics::highResamplingQuality);
@@ -528,7 +530,7 @@ void SwarmnesssAudioProcessorEditor::paint(juce::Graphics& g) {
     // v1.2.4: Version number (bottom right corner, 8px padding, 40% opacity)
     g.setColour(juce::Colours::white.withAlpha(0.4f));
     g.setFont(juce::Font(10.0f));
-    g.drawText("v1.2.7", getWidth() - 50 - GRID, getHeight() - 16 - GRID, 50, 16, juce::Justification::right);
+    g.drawText("v1.2.8", getWidth() - 50 - GRID, getHeight() - 16 - GRID, 50, 16, juce::Justification::right);
 }
 
 void SwarmnesssAudioProcessorEditor::resized() {

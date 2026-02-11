@@ -41,6 +41,19 @@ void ChorusEngine::setFeedback(float fb) {
     mFeedback = juce::jlimit(0.0f, 0.9f, fb);
 }
 
+// v1.2.8: Fast linear interpolation for Classic mode
+float ChorusEngine::linearInterpolate(const std::vector<float>& buffer, float pos) {
+    int size = static_cast<int>(buffer.size());
+    int idx0 = static_cast<int>(pos);
+    float frac = pos - idx0;
+    
+    idx0 = ((idx0 % size) + size) % size;
+    int idx1 = (idx0 + 1) % size;
+    
+    return buffer[idx0] + frac * (buffer[idx1] - buffer[idx0]);
+}
+
+// Hermite interpolation for Deep mode (better quality)
 float ChorusEngine::hermiteInterpolate(const std::vector<float>& buffer, float pos) {
     int size = static_cast<int>(buffer.size());
     int x0 = static_cast<int>(pos);
@@ -70,18 +83,24 @@ void ChorusEngine::process(juce::AudioBuffer<float>& buffer) {
 
     // Mode-dependent parameters
     float baseDelay, modDepth, stereoSpread;
+    bool useHermite;
     if (mMode == Deep) {
         baseDelay = 12.0f;   // Wider base delay for lush sound
         modDepth = 6.0f;     // More modulation depth
         stereoSpread = 0.3f; // Stereo phase offset between channels
+        useHermite = true;   // v1.2.8: Use high-quality interpolation for Deep
     } else {
         baseDelay = 7.0f;    // Classic chorus settings
         modDepth = 3.0f;
         stereoSpread = 0.0f;
+        useHermite = false;  // v1.2.8: Use fast linear interpolation for Classic
     }
 
     const float baseDelaySamples = baseDelay * 0.001f * static_cast<float>(mSampleRate);
     const float modDepthSamples = modDepth * 0.001f * static_cast<float>(mSampleRate) * mDepth;
+    
+    // v1.2.8: Pre-calculate LFO increment for efficiency
+    const float lfoIncrement = mRate / static_cast<float>(mSampleRate);
 
     for (int sample = 0; sample < numSamples; ++sample) {
         float mix = mSmoothMix.getNextValue();
@@ -106,23 +125,27 @@ void ChorusEngine::process(juce::AudioBuffer<float>& buffer) {
                 float lfoPhase = mLFOPhases[v] + phaseOffset;
                 if (lfoPhase >= 1.0f) lfoPhase -= 1.0f;
                 
-                float lfoValue = std::sin(lfoPhase * juce::MathConstants<float>::twoPi);
+                // v1.2.8: Use fast sin LUT instead of std::sin
+                float lfoValue = fastSin(lfoPhase);
                 float delaySamples = baseDelaySamples + lfoValue * modDepthSamples;
 
                 float readPos = static_cast<float>(mWritePos) - delaySamples;
                 if (readPos < 0) readPos += kMaxDelayLength;
 
-                float delaySample = hermiteInterpolate(mDelayBuffer[ch], readPos);
+                // v1.2.8: Use linear interpolation for Classic, hermite for Deep
+                float delaySample = useHermite 
+                    ? hermiteInterpolate(mDelayBuffer[ch], readPos)
+                    : linearInterpolate(mDelayBuffer[ch], readPos);
                 chorusOut += delaySample;
 
                 // Advance LFO phase
                 if (ch == 0) {  // Only advance once per sample
-                    mLFOPhases[v] += mRate / static_cast<float>(mSampleRate);
+                    mLFOPhases[v] += lfoIncrement;
                     if (mLFOPhases[v] >= 1.0f) mLFOPhases[v] -= 1.0f;
                 }
             }
 
-            chorusOut /= kNumVoices;
+            chorusOut *= 0.333333f;  // v1.2.8: Multiply instead of divide
 
             // Apply feedback (increased in Deep mode)
             float fbAmount = mMode == Deep ? mFeedback * 1.3f : mFeedback;

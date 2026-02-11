@@ -3,6 +3,7 @@
 #include <JuceHeader.h>
 #include <cmath>
 #include <random>
+#include <array>
 
 /**
  * ModulationGenerator - Original Noise Glitch algorithm
@@ -10,11 +11,19 @@
  * - Panic: slow random pitch drift (0.5-2.5 Hz), up to ±12 semitones
  * - Chaos: fast random pitch jumps (5-35 Hz), up to ±24 semitones
  * - Speed: high-frequency FM modulation (20-320 Hz)
+ * 
+ * v1.2.8: Optimized with sin lookup table for CPU efficiency
  */
 class ModulationGenerator
 {
 public:
-    ModulationGenerator() : rng(std::random_device{}()), dist(-1.0f, 1.0f) {}
+    static constexpr int kLUTSize = 4096;
+    static constexpr float kLUTMask = static_cast<float>(kLUTSize - 1);
+    
+    ModulationGenerator() : rng(std::random_device{}()), dist(-1.0f, 1.0f) {
+        // Initialize sin LUT once
+        initSinLUT();
+    }
     
     void prepare(double sampleRate)
     {
@@ -100,6 +109,7 @@ public:
      * Returns FM modulation factor for Speed parameter.
      * High-frequency oscillation applied to the signal.
      * Returns value in range -1 to +1.
+     * v1.2.8: Uses fast sin LUT for efficiency
      */
     float getFMModulation()
     {
@@ -110,11 +120,17 @@ public:
         if (speedPhase >= 1.0)
             speedPhase -= 1.0;
         
-        float fm = std::sin(static_cast<float>(speedPhase * 2.0 * juce::MathConstants<double>::pi));
+        // v1.2.8: Use fast LUT-based sin instead of std::sin
+        float fm = fastSin(static_cast<float>(speedPhase));
         
         // Add harmonics for "shrill" character
-        float fm2 = std::sin(static_cast<float>(speedPhase * 4.0 * juce::MathConstants<double>::pi)) * 0.3f;
-        float fm3 = std::sin(static_cast<float>(speedPhase * 6.0 * juce::MathConstants<double>::pi)) * 0.15f;
+        float phase2 = static_cast<float>(speedPhase * 2.0);
+        if (phase2 >= 1.0f) phase2 -= 1.0f;
+        float fm2 = fastSin(phase2) * 0.3f;
+        
+        float phase3 = static_cast<float>(speedPhase * 3.0);
+        while (phase3 >= 1.0f) phase3 -= 1.0f;
+        float fm3 = fastSin(phase3) * 0.15f;
         
         return (fm + fm2 + fm3) * speedAmount;
     }
@@ -132,6 +148,28 @@ public:
     }
     
 private:
+    // v1.2.8: Sin lookup table for fast evaluation
+    std::array<float, kLUTSize> sinLUT;
+    
+    void initSinLUT()
+    {
+        for (int i = 0; i < kLUTSize; ++i)
+        {
+            sinLUT[i] = std::sin(2.0f * juce::MathConstants<float>::pi * i / kLUTSize);
+        }
+    }
+    
+    // v1.2.8: Fast sin using LUT with linear interpolation
+    // phase is 0-1 (normalized)
+    float fastSin(float phase) const
+    {
+        float indexF = phase * kLUTMask;
+        int idx0 = static_cast<int>(indexF) & (kLUTSize - 1);
+        int idx1 = (idx0 + 1) & (kLUTSize - 1);
+        float frac = indexF - static_cast<float>(static_cast<int>(indexF));
+        return sinLUT[idx0] + frac * (sinLUT[idx1] - sinLUT[idx0]);
+    }
+    
     double sampleRate = 44100.0;
     
     std::mt19937 rng;
@@ -161,19 +199,34 @@ private:
 /**
  * RingModulator for "Speed" effect
  * Creates aggressive FM/ring mod sounds
+ * v1.2.8: Optimized with sin lookup table
  */
 class RingModulator
 {
 public:
+    static constexpr int kLUTSize = 4096;
+    static constexpr float kLUTMask = static_cast<float>(kLUTSize - 1);
+    
+    RingModulator()
+    {
+        // Initialize sin LUT
+        for (int i = 0; i < kLUTSize; ++i)
+        {
+            sinLUT[i] = std::sin(2.0f * juce::MathConstants<float>::pi * i / kLUTSize);
+        }
+    }
+    
     void prepare(double sampleRate)
     {
         this->sampleRate = sampleRate;
         phase = 0.0;
+        phaseIncrement = 0.0;
     }
     
     void setFrequency(float freqHz)
     {
         frequency = freqHz;
+        phaseIncrement = frequency / sampleRate;
     }
     
     void setAmount(float amt)
@@ -187,11 +240,16 @@ public:
         if (amount < 0.001f)
             return input;
         
-        phase += frequency / sampleRate;
+        // v1.2.8: Use fast LUT-based sin
+        float indexF = static_cast<float>(phase) * kLUTMask;
+        int idx0 = static_cast<int>(indexF) & (kLUTSize - 1);
+        int idx1 = (idx0 + 1) & (kLUTSize - 1);
+        float frac = indexF - static_cast<float>(static_cast<int>(indexF));
+        float modulator = sinLUT[idx0] + frac * (sinLUT[idx1] - sinLUT[idx0]);
+        
+        phase += phaseIncrement;
         if (phase >= 1.0)
             phase -= 1.0;
-        
-        float modulator = std::sin(static_cast<float>(phase * 2.0 * juce::MathConstants<double>::pi));
         
         // Mix dry and ring-modulated signal
         float wet = input * modulator;
@@ -204,8 +262,10 @@ public:
     }
     
 private:
+    std::array<float, kLUTSize> sinLUT;
     double sampleRate = 44100.0;
     double phase = 0.0;
+    double phaseIncrement = 0.0;
     double frequency = 100.0;
     float amount = 0.0f;
 };

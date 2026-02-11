@@ -1,7 +1,7 @@
 #include "PresetManager.h"
 
 const juce::String PresetManager::kPresetExtension = ".swpreset";
-const juce::String PresetManager::kPresetVersion = "1.2.7";
+const juce::String PresetManager::kPresetVersion = "1.2.8";
 
 PresetManager::PresetManager(juce::AudioProcessorValueTreeState& apvts)
     : mAPVTS(apvts)
