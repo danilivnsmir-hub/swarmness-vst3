@@ -1,142 +1,109 @@
 #pragma once
+
 #include <JuceHeader.h>
 #include "PluginProcessor.h"
-#include "GUI/MetalLookAndFeel.h"
-#include "GUI/RotaryKnob.h"
-#include "GUI/FootswitchButton.h"
-#include "GUI/PresetPanel.h"
-#include "GUI/InfoPanel.h"
-#include "GUI/PowerButton.h"
-#include "BinaryData.h"
+#include "GUI/SwarmLookAndFeel.h"
+#include "GUI/Controls.h"
 
-class SwarmnesssAudioProcessorEditor : public juce::AudioProcessorEditor,
-                                        public juce::Timer {
+/** All controls laid out at a fixed base resolution; the editor scales it as a whole. */
+class MainPanel : public juce::Component
+{
 public:
-    SwarmnesssAudioProcessorEditor(SwarmnesssAudioProcessor&);
-    ~SwarmnesssAudioProcessorEditor() override;
+    static constexpr int baseWidth  = 1000;
+    static constexpr int baseHeight = 640;
 
-    void paint(juce::Graphics&) override;
+    explicit MainPanel (SwarmnessAudioProcessor&);
+
     void resized() override;
-    void timerCallback() override;
-
-    // v1.2.4: Grid constants
-    static constexpr int GRID = 8;
-    static constexpr int PADDING = 12;
-    static constexpr int GAP = 24;
-    static constexpr int HEADER_HEIGHT = 56;  // 7 * GRID
-    static constexpr int SIDE_PANEL_WIDTH = 64;  // 8 * GRID
-    static constexpr int KNOB_SIZE = 56;  // 7 * GRID
-    static constexpr int SLIDER_HEIGHT = 24;  // 3 * GRID
+    void tick();   // called by the editor's timer
 
 private:
-    SwarmnesssAudioProcessor& audioProcessor;
-    MetalLookAndFeel metalLookAndFeel;
+    /** Static artwork, cached as an image so animated controls repaint cheaply. */
+    struct Backdrop : juce::Component
+    {
+        std::function<void (juce::Graphics&)> painter;
+        void paint (juce::Graphics& g) override { if (painter) painter (g); }
+    };
 
-    // Background image and header logo
-    juce::Image backgroundImage;
-    juce::Image headerLogoImage;
+    void paintBackdrop (juce::Graphics&);
 
-    // Preset Panel
-    std::unique_ptr<PresetPanel> presetPanel;
-    
-    // Preset Dropdown (simplified UI)
-    juce::ComboBox presetSelector;
-    
-    // v1.2.7: New preset buttons layout
-    juce::TextButton prevPresetButton{"<"};
-    juce::TextButton nextPresetButton{">"};
-    juce::TextButton savePresetButton{"SAVE"};
-    juce::TextButton saveAsButton{"SAVE AS"};
-    juce::TextButton deletePresetButton{"DELETE"};
-    
-    // Info Panel
-    InfoPanel infoPanel;
-    juce::TextButton infoButton{"i"};
+    using APVTS = juce::AudioProcessorValueTreeState;
 
-    // === LEFT PANEL: TONE (vertical faders) ===
-    juce::Slider lowCutFader;
-    juce::Slider highCutFader;
-    juce::Slider midBoostFader;
-    juce::Label lowCutLabel, highCutLabel, midBoostLabel;
-    juce::Label lowCutValueLabel, highCutValueLabel, midBoostValueLabel;
+    void attachButton (juce::Button&, const juce::String& id, const juce::String& tooltip);
+    bool paramOn (const char* id) const;
+    void setSectionDimmed (std::initializer_list<juce::Component*>, bool dimmed);
 
-    // === RIGHT PANEL: OUTPUT (vertical faders) ===
-    juce::Slider mixFader;
-    juce::Slider driveFader;
-    juce::Slider volumeFader;
-    juce::Label mixLabel, driveLabel, volumeLabel;
-    juce::Label mixValueLabel, driveValueLabel, volumeValueLabel;
+    SwarmnessAudioProcessor& processor;
+    APVTS& state;
 
-    // === CENTER TOP: VOLTAGE Section ===
-    PowerButton pitchBypassButton;  // Power toggle for VOLTAGE
-    juce::Label voltageLabel;  // Main VOLTAGE header
-    juce::ComboBox octaveModeBox;
-    RotaryKnob pitchRangeKnob{"RANGE"};
-    RotaryKnob pitchSpeedKnob{"SPEED"};
-    
-    // v1.2.4: RISE as horizontal slider
-    juce::Slider riseSlider;
-    juce::Label riseLabel;
-    juce::Label riseValueLabel;
-    
-    RotaryKnob angerKnob{"ANGER"};
-    RotaryKnob rushKnob{"RUSH"};
-    RotaryKnob modRateKnob{"RATE"};
-    
-    // PITCH / MODULATION subheaders
-    juce::Label pitchSubLabel;
-    juce::Label modulationSubLabel;
+    juce::Image logo;
+    Backdrop backdrop;
 
-    // === CENTER BOTTOM LEFT: SWARM Section ===
-    PowerButton swarmBypassButton;
-    juce::Label swarmLabel;
-    RotaryKnob swarmDepthKnob{"DEPTH"};
-    RotaryKnob swarmRateKnob{"RATE"};
-    RotaryKnob swarmMixKnob{"MIX"};
-    juce::ToggleButton deepModeButton;
-    juce::Label deepModeLabel;
+    // Header
+    PresetBar presetBar;
+    juce::TextButton infoButton { "?" };
 
-    // === CENTER BOTTOM RIGHT: FLOW Section ===
-    PowerButton flowBypassButton;
-    juce::Label flowLabel;
-    RotaryKnob flowAmountKnob{"AMOUNT"};
-    RotaryKnob flowSpeedKnob{"SPEED"};
+    // VOLTAGE
+    PowerButton pitchPower;
+    SegmentedChoice octaveSelector;
+    SegmentedChoice qualitySelector;
+    Knob semiKnob { "SEMI", true }, riseKnob { "RISE" }, rangeKnob { "RANGE" }, speedKnob { "SPEED" };
+    Knob rushKnob { "RUSH" }, angerKnob { "ANGER" }, modRateKnob { "RATE" };
+    PitchScope pitchScope;
 
-    // === BYPASS Footswitch (Bottom Center) ===
-    FootswitchButton bypassFootswitch;
+    // TONE
+    Fader lowCutFader { "LOW CUT" }, highCutFader { "HIGH CUT" }, midFader { "MID" };
 
-    // Parameter Attachments
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> octaveModeAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> engageAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> riseAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> randomRangeAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> randomRateAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> panicAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> chaosAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> speedAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> lowCutAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> highCutAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> chorusEngageAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> chorusModeAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> chorusRateAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> chorusDepthAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> chorusMixAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> saturationAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> driveAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> mixAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> outputGainAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> flowEngageAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> flowAmountAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> flowSpeedAttachment;
+    // OUTPUT
+    Fader mixFader { "MIX" }, driveFader { "DRIVE" }, volumeFader { "VOLUME", true };
 
-    void refreshPresetList();
-    void updatePresetName();
-    void updateSectionEnableStates();
-    void updateDeleteButtonVisibility();  // v1.2.6: Show/hide delete button based on preset type
-    void setSectionEnabled(std::vector<juce::Component*> components, bool enabled);
-    enum class FaderScaleMode { Percent, Scale1to10_Step01, Scale1to10_Step05, LowCutHz, HighCutHz, Custom };
-    void setupVerticalFader(juce::Slider& fader, juce::Label& label, juce::Label& valueLabel, 
-                            const juce::String& labelText, FaderScaleMode scaleMode = FaderScaleMode::Percent);
+    // SWARM
+    PowerButton swarmPower;
+    PillToggle deepToggle { "DEEP" };
+    Knob swarmDepthKnob { "DEPTH" }, swarmRateKnob { "RATE" }, swarmMixKnob { "MIX" };
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SwarmnesssAudioProcessorEditor)
+    // FLOW
+    PowerButton flowPower;
+    PillToggle hardToggle { "HARD" }, syncToggle { "SYNC" };
+    Knob flowAmountKnob { "AMOUNT" }, flowSpeedKnob { "SPEED" }, flowDivKnob { "DIV" };
+
+    // Footer
+    Footswitch footswitch;
+    LevelMeter inMeter { "IN" }, outMeter { "OUT" };
+
+    InfoOverlay infoOverlay;
+
+    std::vector<std::unique_ptr<APVTS::ButtonAttachment>> buttonAttachments;
+
+    // Section rectangles (base coordinates)
+    juce::Rectangle<float> voltageArea, toneArea, outputArea, swarmArea, flowArea;
+    juce::String latencyText;
+    std::array<bool, 3> lastSectionStates { true, true, true };
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainPanel)
+};
+
+//==============================================================================
+class SwarmnessAudioProcessorEditor : public juce::AudioProcessorEditor,
+                                      private juce::Timer
+{
+public:
+    explicit SwarmnessAudioProcessorEditor (SwarmnessAudioProcessor&);
+    ~SwarmnessAudioProcessorEditor() override;
+
+    void paint (juce::Graphics&) override;
+    void resized() override;
+
+    /** Pulls meter / preset / state updates from the processor (normally driven by the timer). */
+    void refresh() { panel.tick(); }
+
+private:
+    void timerCallback() override { refresh(); }
+
+    SwarmnessAudioProcessor& processor;
+    SwarmLookAndFeel lookAndFeel;
+    MainPanel panel;
+    juce::TooltipWindow tooltips { this, 700 };
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SwarmnessAudioProcessorEditor)
 };

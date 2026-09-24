@@ -1,160 +1,156 @@
 cmake_minimum_required(VERSION 3.22)
-project(Swarmness VERSION 1.2.8)
+
+# macOS: universal binary, macOS 10.13+ (must be set before project())
+set(CMAKE_OSX_DEPLOYMENT_TARGET "10.13" CACHE STRING "Minimum macOS version")
+if(APPLE AND NOT DEFINED CMAKE_OSX_ARCHITECTURES)
+    set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "macOS architectures")
+endif()
+
+project(Swarmness VERSION 2.0.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
-# ============================================================================
-# JUCE Setup
-# ============================================================================
-# JUCE_PATH must be provided by user or set via environment variable
-if(NOT DEFINED JUCE_PATH)
-    if(DEFINED ENV{JUCE_PATH})
-        set(JUCE_PATH $ENV{JUCE_PATH})
-    else()
-        message(FATAL_ERROR "JUCE_PATH not defined. Set it via -DJUCE_PATH=/path/to/JUCE or JUCE_PATH environment variable")
-    endif()
-endif()
-
-# Normalize path for Windows compatibility
-file(TO_CMAKE_PATH "${JUCE_PATH}" JUCE_PATH)
-add_subdirectory(${JUCE_PATH} ${CMAKE_BINARY_DIR}/JUCE)
-
-# ============================================================================
-# Platform-Specific Settings
-# ============================================================================
-
-# macOS
-if(APPLE)
-    set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0")
-    set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64")
-endif()
-
-# Windows (MSVC)
 if(WIN32)
-    # Use static runtime for standalone distribution
+    # Static runtime: the plug-in runs without the VC++ redistributable installed.
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
-    
-    # Suppress MSVC warnings for JUCE
-    add_compile_definitions(
-        _CRT_SECURE_NO_WARNINGS
-        _SILENCE_ALL_CXX17_DEPRECATION_WARNINGS
-    )
-    
-    # Enable parallel compilation
-    add_compile_options(/MP)
-    
-    # Set Windows version (Windows 10+)
-    add_compile_definitions(
-        WINVER=0x0A00
-        _WIN32_WINNT=0x0A00
-    )
+endif()
+
+option(SWARMNESS_BUILD_TESTS "Build the offline DSP test runner" ON)
+
+# ============================================================================
+# JUCE: use -DJUCE_PATH=/path/to/JUCE (or the JUCE_PATH env var), otherwise
+# JUCE is fetched automatically.
+# ============================================================================
+set(SWARMNESS_JUCE_TAG "8.0.15")
+
+if(NOT DEFINED JUCE_PATH AND DEFINED ENV{JUCE_PATH})
+    set(JUCE_PATH $ENV{JUCE_PATH})
+endif()
+
+if(DEFINED JUCE_PATH)
+    file(TO_CMAKE_PATH "${JUCE_PATH}" JUCE_PATH)
+    add_subdirectory(${JUCE_PATH} ${CMAKE_BINARY_DIR}/JUCE EXCLUDE_FROM_ALL)
+else()
+    include(FetchContent)
+    FetchContent_Declare(JUCE
+        GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
+        GIT_TAG ${SWARMNESS_JUCE_TAG}
+        GIT_SHALLOW ON)
+    FetchContent_MakeAvailable(JUCE)
 endif()
 
 # ============================================================================
-# Plugin Configuration
+# Plug-in
 # ============================================================================
+set(SWARMNESS_FORMATS VST3 Standalone)
+if(APPLE)
+    list(APPEND SWARMNESS_FORMATS AU)
+endif()
+
 juce_add_plugin(Swarmness
-    JUCE_GENERATE_JUCE_HEADER ON
+    PRODUCT_NAME "Swarmness"
+    VERSION ${PROJECT_VERSION}
     COMPANY_NAME "OpenAudio"
+    COMPANY_WEBSITE "https://github.com/danilivnsmir-hub/swarmness-vst3"
     BUNDLE_ID "com.OpenAudio.Swarmness"
+    PLUGIN_MANUFACTURER_CODE OpAu
+    PLUGIN_CODE SwMs
+    FORMATS ${SWARMNESS_FORMATS}
     IS_SYNTH FALSE
     NEEDS_MIDI_INPUT FALSE
     NEEDS_MIDI_OUTPUT FALSE
     IS_MIDI_EFFECT FALSE
     EDITOR_WANTS_KEYBOARD_FOCUS FALSE
     COPY_PLUGIN_AFTER_BUILD FALSE
-    PLUGIN_MANUFACTURER_CODE OpAu
-    PLUGIN_CODE SwMs
-    FORMATS VST3
-    VST3_CATEGORIES Fx "Pitch Shift" Distortion Modulation
-    PRODUCT_NAME "Swarmness"
-)
+    HARDENED_RUNTIME_ENABLED TRUE
+    VST3_CATEGORIES Fx "Pitch Shift" Modulation
+    AU_MAIN_TYPE kAudioUnitType_Effect
+    MICROPHONE_PERMISSION_ENABLED TRUE
+    MICROPHONE_PERMISSION_TEXT "Swarmness Standalone processes your instrument input.")
 
 juce_generate_juce_header(Swarmness)
 
-# ============================================================================
-# Binary Data (Assets)
-# ============================================================================
 juce_add_binary_data(SwarmnessBinaryData
+    HEADER_NAME BinaryData.h
+    NAMESPACE BinaryData
     SOURCES
-        Source/Assets/footswitch.png
-        Source/Assets/background_clean.png
-        Source/Assets/knob.png
-        Source/Assets/toggle.png
-        Source/Assets/fader.png
-        Source/Assets/power_button.png
         Source/Assets/header_logo.png
-)
+        Source/Assets/Fonts/Rajdhani-Medium.ttf
+        Source/Assets/Fonts/Rajdhani-Bold.ttf)
 
-# ============================================================================
-# Source Files
-# ============================================================================
-target_sources(Swarmness
-    PRIVATE
-        Source/PluginProcessor.cpp
-        Source/PluginEditor.cpp
-        Source/DSP/PitchSlideEngine.cpp
-        Source/DSP/PitchRandomizer.cpp
-        Source/DSP/Modulation.cpp
-        Source/DSP/ChorusEngine.cpp
-        Source/DSP/FlowEngine.cpp
-        Source/DSP/DCBlocker.cpp
-        Source/DSP/Saturation.cpp
-        Source/GUI/MetalLookAndFeel.cpp
-        Source/GUI/RotaryKnob.cpp
-        Source/GUI/FootswitchButton.cpp
-        Source/GUI/PresetPanel.cpp
-        Source/Preset/PresetManager.cpp
-)
+set(SWARMNESS_DSP_SOURCES
+    Source/Parameters.cpp
+    Source/PluginProcessor.cpp
+    Source/Preset/PresetManager.cpp)
 
-# ============================================================================
-# Compile Definitions
-# ============================================================================
-target_compile_definitions(Swarmness
-    PUBLIC
-        JUCE_WEB_BROWSER=0
-        JUCE_USE_CURL=0
-        JUCE_VST3_CAN_REPLACE_VST2=0
-        JUCE_DISPLAY_SPLASH_SCREEN=0
-)
+set(SWARMNESS_GUI_SOURCES
+    Source/PluginEditor.cpp
+    Source/GUI/SwarmLookAndFeel.cpp
+    Source/GUI/Controls.cpp)
 
-# ============================================================================
-# Link Libraries
-# ============================================================================
+target_sources(Swarmness PRIVATE ${SWARMNESS_DSP_SOURCES} ${SWARMNESS_GUI_SOURCES})
+
+target_include_directories(Swarmness PRIVATE Source)
+
+target_compile_definitions(Swarmness PUBLIC
+    JUCE_WEB_BROWSER=0
+    JUCE_USE_CURL=0
+    JUCE_VST3_CAN_REPLACE_VST2=0
+    JUCE_DISPLAY_SPLASH_SCREEN=0
+    JUCE_REPORT_APP_USAGE=0
+    JUCE_MODAL_LOOPS_PERMITTED=0
+    DONT_SET_USING_JUCE_NAMESPACE=1
+    _USE_MATH_DEFINES)
+
 target_link_libraries(Swarmness
     PRIVATE
         SwarmnessBinaryData
-        juce::juce_audio_basics
-        juce::juce_audio_devices
-        juce::juce_audio_formats
-        juce::juce_audio_plugin_client
-        juce::juce_audio_processors
         juce::juce_audio_utils
-        juce::juce_core
         juce::juce_dsp
-        juce::juce_graphics
-        juce::juce_gui_basics
-        juce::juce_gui_extra
     PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags
-        juce::juce_recommended_warning_flags
-)
+        juce::juce_recommended_warning_flags)
 
-# ============================================================================
-# Installation (Optional)
-# ============================================================================
-if(WIN32)
-    # Windows VST3 default path
-    set(VST3_INSTALL_DIR "$ENV{COMMONPROGRAMFILES}/VST3" CACHE PATH "VST3 install directory")
-elseif(APPLE)
-    set(VST3_INSTALL_DIR "$ENV{HOME}/Library/Audio/Plug-Ins/VST3" CACHE PATH "VST3 install directory")
-else()
-    set(VST3_INSTALL_DIR "$ENV{HOME}/.vst3" CACHE PATH "VST3 install directory")
+if(MSVC)
+    target_compile_options(Swarmness PRIVATE /bigobj /MP)
 endif()
 
-install(TARGETS Swarmness_VST3
-    LIBRARY DESTINATION "${VST3_INSTALL_DIR}"
-    RUNTIME DESTINATION "${VST3_INSTALL_DIR}"
-)
+# ============================================================================
+# Offline tests (headless): run with `ctest` after building.
+# ============================================================================
+if(SWARMNESS_BUILD_TESTS)
+    juce_add_console_app(SwarmnessTests PRODUCT_NAME "SwarmnessTests")
+    juce_generate_juce_header(SwarmnessTests)
+
+    target_sources(SwarmnessTests PRIVATE
+        Tests/SwarmnessTests.cpp
+        ${SWARMNESS_DSP_SOURCES}
+        ${SWARMNESS_GUI_SOURCES})
+
+    target_include_directories(SwarmnessTests PRIVATE Source)
+
+    target_compile_definitions(SwarmnessTests PRIVATE
+        JUCE_WEB_BROWSER=0
+        JUCE_USE_CURL=0
+        JUCE_STANDALONE_APPLICATION=1
+        JucePlugin_Name="Swarmness"
+        JucePlugin_VersionString="${PROJECT_VERSION}"
+        DONT_SET_USING_JUCE_NAMESPACE=1
+    _USE_MATH_DEFINES)
+
+    target_link_libraries(SwarmnessTests PRIVATE
+        SwarmnessBinaryData
+        juce::juce_audio_utils
+        juce::juce_dsp
+        juce::juce_recommended_config_flags)
+
+    if(MSVC)
+        target_compile_options(SwarmnessTests PRIVATE /bigobj)
+    endif()
+
+    enable_testing()
+    add_test(NAME SwarmnessDSP COMMAND SwarmnessTests)
+endif()
