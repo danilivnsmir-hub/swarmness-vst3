@@ -18,7 +18,12 @@ stage() {  # stage <name> <bundle> <install location>
   cp -R "$2" "$WORK/$1/root/"
   # Never relocate: always install to the standard plug-in folders.
   pkgbuild --analyze --root "$WORK/$1/root" "$WORK/$1.plist"
-  /usr/libexec/PlistBuddy -c "Set :0:BundleIsRelocatable false" "$WORK/$1.plist"
+  i=0
+  while /usr/libexec/PlistBuddy -c "Print :$i" "$WORK/$1.plist" >/dev/null 2>&1; do
+    /usr/libexec/PlistBuddy -c "Delete :$i:BundleIsRelocatable" "$WORK/$1.plist" >/dev/null 2>&1 || true
+    /usr/libexec/PlistBuddy -c "Add :$i:BundleIsRelocatable bool false" "$WORK/$1.plist"
+    i=$((i + 1))
+  done
   pkgbuild --root "$WORK/$1/root" --component-plist "$WORK/$1.plist" --identifier "$ID.$1" --version "$VERSION" \
            --install-location "$3" "$WORK/$1.pkg"
 }
