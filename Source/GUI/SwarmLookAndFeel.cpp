@@ -212,7 +212,7 @@ void SwarmLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& bu
 
 juce::Font SwarmLookAndFeel::getTextButtonFont (juce::TextButton&, int buttonHeight)
 {
-    return font (juce::jmin (16.0f, buttonHeight * 0.62f), true);
+    return font (juce::jmin (16.0f, (float) buttonHeight * 0.62f), true);
 }
 
 void SwarmLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& button, bool isMouseOver, bool)

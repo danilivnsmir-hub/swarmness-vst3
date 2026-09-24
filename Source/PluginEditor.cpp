@@ -316,7 +316,7 @@ void MainPanel::tick()
 
 //==============================================================================
 SwarmnessAudioProcessorEditor::SwarmnessAudioProcessorEditor (SwarmnessAudioProcessor& p)
-    : AudioProcessorEditor (&p), processor (p), panel (p)
+    : AudioProcessorEditor (&p), swarmProcessor (p), panel (p)
 {
     setLookAndFeel (&lookAndFeel);
     addAndMakeVisible (panel);
@@ -328,7 +328,7 @@ SwarmnessAudioProcessorEditor::SwarmnessAudioProcessorEditor (SwarmnessAudioProc
     if (auto* c = getConstrainer())
         c->setFixedAspectRatio (ratio);
 
-    const float scale = juce::jlimit (0.7f, 2.0f, processor.getUiScale());
+    const float scale = juce::jlimit (0.7f, 2.0f, swarmProcessor.getUiScale());
     setSize (juce::roundToInt (MainPanel::baseWidth * scale), juce::roundToInt (MainPanel::baseHeight * scale));
 
     startTimerHz (30);
@@ -350,5 +350,5 @@ void SwarmnessAudioProcessorEditor::resized()
     const float scale = (float) getWidth() / (float) MainPanel::baseWidth;
     panel.setTransform (juce::AffineTransform::scale (scale));
     panel.setBounds (0, 0, MainPanel::baseWidth, MainPanel::baseHeight);
-    processor.setUiScale (scale);
+    swarmProcessor.setUiScale (scale);
 }

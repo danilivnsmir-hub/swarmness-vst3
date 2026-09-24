@@ -100,7 +100,7 @@ public:
 private:
     void timerCallback() override { refresh(); }
 
-    SwarmnessAudioProcessor& processor;
+    SwarmnessAudioProcessor& swarmProcessor;
     SwarmLookAndFeel lookAndFeel;
     MainPanel panel;
     juce::TooltipWindow tooltips { this, 700 };
