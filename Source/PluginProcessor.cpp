@@ -1,409 +1,401 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
-SwarmnesssAudioProcessor::SwarmnesssAudioProcessor()
-#ifndef JucePlugin_PreferredChannelConfigurations
-    : AudioProcessor(BusesProperties()
-        #if !JucePlugin_IsMidiEffect
-         #if !JucePlugin_IsSynth
-          .withInput("Input", juce::AudioChannelSet::stereo(), true)
-         #endif
-          .withOutput("Output", juce::AudioChannelSet::stereo(), true)
-        #endif
-      ),
-#endif
-      mAPVTS(*this, nullptr, "PARAMETERS", createParameterLayout())
+namespace
 {
-    mPresetManager = std::make_unique<PresetManager>(mAPVTS);
+    constexpr int kControlBlock = 32;   // samples per pitch-modulation update
 
-    // Cache parameter pointers
-    pOctaveMode = mAPVTS.getRawParameterValue("octaveMode");
-    pEngage = mAPVTS.getRawParameterValue("engage");
-    pRise = mAPVTS.getRawParameterValue("rise");
-    pRandomRange = mAPVTS.getRawParameterValue("randomRange");
-    pRandomRate = mAPVTS.getRawParameterValue("randomRate");
-    pPanic = mAPVTS.getRawParameterValue("panic");
-    pChaos = mAPVTS.getRawParameterValue("chaos");
-    pSpeed = mAPVTS.getRawParameterValue("speed");
-    pLowCut = mAPVTS.getRawParameterValue("lowCut");
-    pHighCut = mAPVTS.getRawParameterValue("highCut");
-    pChorusMode = mAPVTS.getRawParameterValue("chorusMode");
-    pChorusRate = mAPVTS.getRawParameterValue("chorusRate");
-    pChorusDepth = mAPVTS.getRawParameterValue("chorusDepth");
-    pChorusMix = mAPVTS.getRawParameterValue("chorusMix");
-    pSaturation = mAPVTS.getRawParameterValue("saturation");
-    pMix = mAPVTS.getRawParameterValue("mix");
-    pDrive = mAPVTS.getRawParameterValue("drive");
-    pOutputGain = mAPVTS.getRawParameterValue("outputGain");
-    pChorusEngage = mAPVTS.getRawParameterValue("chorusEngage");
-    pFlowEngage = mAPVTS.getRawParameterValue("flowEngage");
-    pFlowMode = mAPVTS.getRawParameterValue("flowMode");
-    pFlowAmount = mAPVTS.getRawParameterValue("flowAmount");
-    pFlowSpeed = mAPVTS.getRawParameterValue("flowSpeed");
-    pGlobalBypass = mAPVTS.getRawParameterValue("globalBypass");
-    pGlobalEngage = mAPVTS.getRawParameterValue("globalEngage");
-    
-    // Initialize dirty tracking after all parameters are set up
-    mPresetManager->initializeDirtyTracking();
+    inline void updatePeak (std::atomic<float>& meter, float value) noexcept
+    {
+        auto prev = meter.load (std::memory_order_relaxed);
+        while (value > prev && ! meter.compare_exchange_weak (prev, value, std::memory_order_relaxed)) {}
+    }
 }
 
-SwarmnesssAudioProcessor::~SwarmnesssAudioProcessor() {}
+//==============================================================================
+SwarmnessAudioProcessor::SwarmnessAudioProcessor()
+    : AudioProcessor (BusesProperties()
+                          .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
+                          .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
+      apvts (*this, nullptr, "PARAMETERS", createParameterLayout())
+{
+    auto get = [this] (const char* id)
+    {
+        auto* v = apvts.getRawParameterValue (id);
+        jassert (v != nullptr);
+        return v;
+    };
 
-const juce::String SwarmnesssAudioProcessor::getName() const {
-    return JucePlugin_Name;
+    using namespace ParamIDs;
+    p.pitchOn = get (pitchOn);     p.octave = get (octave);        p.semitone = get (semitone);
+    p.rise = get (rise);           p.randRange = get (randRange);  p.randSpeed = get (randSpeed);
+    p.quality = get (quality);     p.rush = get (rush);            p.anger = get (anger);
+    p.modRate = get (modRate);     p.lowCut = get (lowCut);        p.highCut = get (highCut);
+    p.mid = get (mid);             p.swarmOn = get (swarmOn);      p.swarmDeep = get (swarmDeep);
+    p.swarmRate = get (swarmRate); p.swarmDepth = get (swarmDepth);p.swarmMix = get (swarmMix);
+    p.flowOn = get (flowOn);       p.flowHard = get (flowHard);    p.flowSync = get (flowSync);
+    p.flowAmount = get (flowAmount); p.flowSpeed = get (flowSpeed); p.flowDiv = get (flowDiv);
+    p.mix = get (mix);             p.drive = get (ParamIDs::drive);         p.output = get (output);
+    p.bypass = get (bypass);
+
+    bypassParam = dynamic_cast<juce::AudioParameterBool*> (apvts.getParameter (bypass));
+    jassert (bypassParam != nullptr);
+
+    presetManager = std::make_unique<PresetManager> (apvts);
 }
 
-bool SwarmnesssAudioProcessor::acceptsMidi() const { return false; }
-bool SwarmnesssAudioProcessor::producesMidi() const { return false; }
-bool SwarmnesssAudioProcessor::isMidiEffect() const { return false; }
-double SwarmnesssAudioProcessor::getTailLengthSeconds() const { return 0.1; }
-
-int SwarmnesssAudioProcessor::getNumPrograms() { return 1; }
-int SwarmnesssAudioProcessor::getCurrentProgram() { return 0; }
-void SwarmnesssAudioProcessor::setCurrentProgram(int index) {}
-const juce::String SwarmnesssAudioProcessor::getProgramName(int index) { return {}; }
-void SwarmnesssAudioProcessor::changeProgramName(int index, const juce::String& newName) {}
-
-void SwarmnesssAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
-    mCurrentSampleRate = sampleRate;
-    
-    juce::dsp::ProcessSpec spec;
-    spec.sampleRate = sampleRate;
-    spec.maximumBlockSize = static_cast<juce::uint32>(samplesPerBlock);
-    spec.numChannels = static_cast<juce::uint32>(getTotalNumOutputChannels());
-
-    // Prepare original Noise Glitch DSP modules
-    mPitchShifter.prepare(sampleRate, samplesPerBlock);
-    mModGen.prepare(sampleRate);
-    mRingModL.prepare(sampleRate);
-    mRingModR.prepare(sampleRate);
-    
-    // Prepare DC blockers (high-pass at 20Hz)
-    auto dcCoeffs = juce::dsp::IIR::Coefficients<float>::makeHighPass(sampleRate, 20.0);
-    mDCBlockerL.coefficients = dcCoeffs;
-    mDCBlockerR.coefficients = dcCoeffs;
-    mDCBlockerL.reset();
-    mDCBlockerR.reset();
-    
-    // Prepare smoothed values
-    mMixSmoothed.reset(sampleRate, 0.02);  // 20ms smoothing
-    mGainSmoothed.reset(sampleRate, 0.02);
-
-    // Prepare additional Swarmness modules
-    mPitchRandomizer.prepare(sampleRate);
-    mModulation.prepare(sampleRate);
-    mFilterEngine.prepare(spec);
-    mChorusEngine.prepare(spec);
-    mFlowEngine.prepare(spec);
-    mDCBlocker.prepare(sampleRate);
-    mSaturation.prepare(sampleRate);
-
-    mDryBuffer.setSize(spec.numChannels, samplesPerBlock);
+SwarmnessAudioProcessor::~SwarmnessAudioProcessor()
+{
+    cancelPendingUpdate();
 }
 
-void SwarmnesssAudioProcessor::releaseResources() {
-    mPitchShifter.reset();
-    mModGen.reset();
-    mRingModL.reset();
-    mRingModR.reset();
-    mPitchRandomizer.reset();
-    mModulation.reset();
-    mFilterEngine.reset();
-    mChorusEngine.reset();
-    mFlowEngine.reset();
-    mDCBlocker.reset();
-    mSaturation.reset();
-}
-
-#ifndef JucePlugin_PreferredChannelConfigurations
-bool SwarmnesssAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const {
-  #if JucePlugin_IsMidiEffect
-    juce::ignoreUnused(layouts);
-    return true;
-  #else
-    if (layouts.getMainOutputChannelSet() != juce::AudioChannelSet::mono()
-     && layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo())
+//==============================================================================
+bool SwarmnessAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
+{
+    const auto& out = layouts.getMainOutputChannelSet();
+    if (out != juce::AudioChannelSet::mono() && out != juce::AudioChannelSet::stereo())
         return false;
-
-   #if !JucePlugin_IsSynth
-    if (layouts.getMainOutputChannelSet() != layouts.getMainInputChannelSet())
-        return false;
-   #endif
-
-    return true;
-  #endif
+    return layouts.getMainInputChannelSet() == out;
 }
-#endif
 
-void SwarmnesssAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {
+int SwarmnessAudioProcessor::computeLatency (int qualityIndex) const
+{
+    const int pitch = qualityIndex == 1 ? studioShifter.getLatencySamples() : 0;
+    return pitch + drive.getLatencySamples();
+}
+
+void SwarmnessAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
+{
+    currentSampleRate = sampleRate;
+    maxBlockSize = juce::jmax (1, samplesPerBlock);
+
+    pitchMod.prepare (sampleRate);
+    liveShifter.prepare (sampleRate, 2);
+    studioShifter.prepare (sampleRate, juce::jmax (maxBlockSize, kControlBlock), 2);
+    tone.prepare (sampleRate);
+    drive.prepare (sampleRate, maxBlockSize);
+    swarmChorus.prepare (sampleRate);
+    flow.prepare (sampleRate);
+
+    juce::dsp::ProcessSpec spec { sampleRate, (juce::uint32) maxBlockSize, 2 };
+    const int maxLatency = studioShifter.getLatencySamples() + drive.getLatencySamples() + 64;
+    dryDelay.setMaximumDelayInSamples (maxLatency);
+    dryDelay.prepare (spec);
+    pitchDryDelay.setMaximumDelayInSamples (maxLatency);
+    pitchDryDelay.prepare (spec);
+
+    dryBuffer.setSize (2, maxBlockSize, false, false, true);
+    pitchDryBuffer.setSize (2, maxBlockSize, false, false, true);
+
+    auto initSmoothed = [sampleRate] (juce::SmoothedValue<float>& s, double seconds, float value)
+    {
+        s.reset (sampleRate, seconds);
+        s.setCurrentAndTargetValue (value);
+    };
+
+    initSmoothed (mixSmoothed,        0.03, p.mix->load() * 0.01f);
+    initSmoothed (outputGainSmoothed, 0.03, juce::Decibels::decibelsToGain (p.output->load()));
+    initSmoothed (bypassSmoothed,     0.02, p.bypass->load() > 0.5f ? 1.0f : 0.0f);
+    initSmoothed (pitchWetSmoothed,   0.02, p.pitchOn->load() > 0.5f ? 1.0f : 0.0f);
+
+    wasPitchOn = p.pitchOn->load() > 0.5f;
+    currentRiseMs = -1.0f;
+    const float startSemis = wasPitchOn ? (float) (ParamChoices::octaveIndexToSemitones ((int) p.octave->load())
+                                                   + (int) p.semitone->load())
+                                        : 0.0f;
+    basePitchGlide.reset (startSemis);
+    lastRatio = std::pow (2.0f, startSemis / 12.0f);
+
+    activeQuality = (int) p.quality->load();
+    pitchLatency = activeQuality == 1 ? studioShifter.getLatencySamples() : 0;
+    const int total = computeLatency (activeQuality);
+    dryDelay.setDelay ((float) total);
+    pitchDryDelay.setDelay ((float) pitchLatency);
+    pendingLatency = total;
+    setLatencySamples (total);
+
+    for (auto& m : meters.input)  m = 0.0f;
+    for (auto& m : meters.output) m = 0.0f;
+}
+
+void SwarmnessAudioProcessor::releaseResources()
+{
+    liveShifter.reset();
+    studioShifter.reset();
+    tone.reset();
+    drive.reset();
+    swarmChorus.reset();
+    dryDelay.reset();
+    pitchDryDelay.reset();
+}
+
+void SwarmnessAudioProcessor::handleAsyncUpdate()
+{
+    setLatencySamples (pendingLatency.load());
+}
+
+//==============================================================================
+void SwarmnessAudioProcessor::processPitch (juce::AudioBuffer<float>& buffer, int numChannels, int numSamples)
+{
+    const bool pitchOn = p.pitchOn->load() > 0.5f;
+
+    // Engaging the section makes the pitch "rise" from unison to the target interval.
+    if (pitchOn && ! wasPitchOn)
+        basePitchGlide.reset (0.0f);
+    wasPitchOn = pitchOn;
+
+    const float riseMs = p.rise->load();
+    if (! juce::exactlyEqual (riseMs, currentRiseMs))
+    {
+        currentRiseMs = riseMs;
+        // One-pole reaching ~95% of the interval within the Rise time.
+        basePitchGlide.setTime (currentSampleRate / kControlBlock, juce::jmax (0.0005, riseMs * 0.001 / 3.0));
+    }
+
+    const float targetSemis = pitchOn ? (float) (ParamChoices::octaveIndexToSemitones ((int) p.octave->load())
+                                                 + (int) p.semitone->load())
+                                      : 0.0f;
+
+    pitchMod.setRandom (p.randRange->load(), p.randSpeed->load());
+    pitchMod.setModulation (p.rush->load() * 0.01f, p.anger->load() * 0.01f, p.modRate->load());
+    pitchWetSmoothed.setTargetValue (pitchOn ? 1.0f : 0.0f);
+
+    // Section-bypass path: dry signal aligned with the pitch engine's latency.
+    for (int ch = 0; ch < numChannels; ++ch)
+    {
+        const float* src = buffer.getReadPointer (ch);
+        float* dst = pitchDryBuffer.getWritePointer (ch);
+        for (int i = 0; i < numSamples; ++i)
+        {
+            pitchDryDelay.pushSample (ch, src[i]);
+            dst[i] = pitchDryDelay.popSample (ch);
+        }
+    }
+
+    float* chans[2] = { buffer.getWritePointer (0), buffer.getWritePointer (numChannels > 1 ? 1 : 0) };
+    float semis = 0.0f;
+
+    for (int start = 0; start < numSamples; start += kControlBlock)
+    {
+        const int n = juce::jmin (kControlBlock, numSamples - start);
+
+        const float base = basePitchGlide.process (targetSemis);
+        const float mod  = pitchOn ? pitchMod.advance (n) : 0.0f;
+        semis = juce::jlimit (-36.0f, 36.0f, base + mod);
+        const float ratio = std::pow (2.0f, semis / 12.0f);
+
+        float* sub[2] = { chans[0] + start, chans[1] + start };
+
+        if (activeQuality == 1)
+            studioShifter.process (sub, numChannels, n, ratio);
+        else
+            liveShifter.process (sub, numChannels, n, lastRatio, ratio);
+
+        lastRatio = ratio;
+    }
+
+    meters.pitchSemitones.store (pitchOn ? semis : 0.0f, std::memory_order_relaxed);
+
+    // Crossfade between shifted and aligned-dry when the section is toggled.
+    for (int i = 0; i < numSamples; ++i)
+    {
+        const float w = pitchWetSmoothed.getNextValue();
+        for (int ch = 0; ch < numChannels; ++ch)
+        {
+            float* d = buffer.getWritePointer (ch);
+            const float dry = pitchDryBuffer.getSample (ch, i);
+            d[i] = dry + w * (d[i] - dry);
+        }
+    }
+}
+
+void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+{
     juce::ScopedNoDenormals noDenormals;
-    
-    const int numChannels = buffer.getNumChannels();
-    const int numSamples = buffer.getNumSamples();
 
-    // Clear unused channels
+    const int numChannels = juce::jmin (buffer.getNumChannels(), 2);
+    const int numSamples  = buffer.getNumSamples();
+
     for (int i = getTotalNumInputChannels(); i < getTotalNumOutputChannels(); ++i)
-        buffer.clear(i, 0, numSamples);
+        buffer.clear (i, 0, numSamples);
 
-    // Global Bypass/Engage logic
-    // Bypass=true OR Engage=false → bypass the effect
-    // This allows both traditional bypass AND momentary "engage" control
-    bool isBypassed = (*pGlobalBypass > 0.5f) || (*pGlobalEngage < 0.5f);
-    if (isBypassed) {
+    if (numSamples == 0 || numChannels == 0)
+        return;
+
+    // Hosts may occasionally exceed the announced block size: process in safe chunks.
+    if (numSamples > maxBlockSize)
+    {
+        for (int start = 0; start < numSamples; start += maxBlockSize)
+        {
+            const int n = juce::jmin (maxBlockSize, numSamples - start);
+            juce::AudioBuffer<float> sub (buffer.getArrayOfWritePointers(), buffer.getNumChannels(), start, n);
+            juce::MidiBuffer dummy;
+            processBlock (sub, dummy);
+        }
         return;
     }
 
-    // Get parameter values
-    const int octaveMode = static_cast<int>(*pOctaveMode);
-    const bool octaveActive = *pEngage > 0.5f;
-    const float riseMs = *pRise * 2000.0f;  // 0-2000ms
-    const float panic = *pPanic;             // 0-1 normalized
-    const float chaos = *pChaos;             // 0-1 normalized
-    const float speed = *pSpeed;             // 0-1 normalized
-    const float mix = *pMix;
-    const float outputGainDb = *pOutputGain * 30.0f - 24.0f;  // -24 to +6 dB
-    
-    // Update smoothed parameters
-    mMixSmoothed.setTargetValue(mix);
-    mGainSmoothed.setTargetValue(juce::Decibels::decibelsToGain(outputGainDb));
-    
-    // Update pitch shifter
-    mPitchShifter.setOctaveMode(octaveMode);
-    mPitchShifter.setEngage(octaveActive);
-    mPitchShifter.setRiseTime(riseMs);
-    
-    // Update PitchRandomizer (RANGE and SPEED knobs) - only when VOLTAGE section is active
-    float randomRange = octaveActive ? pRandomRange->load() : 0.0f;  // Now directly 0-24 semitones (int parameter)
-    float randomRate = 0.1f + *pRandomRate * 9.9f;  // 0.1-10 Hz
-    mPitchRandomizer.setRandomRange(randomRange);
-    mPitchRandomizer.setRandomRate(randomRate);
-    
-    // Update modulation generator (original Noise Glitch algorithm)
-    // Modulation is only active when VOLTAGE section (Pitch) is engaged
-    if (octaveActive) {
-        mModGen.setParams(panic, chaos, speed);
-    } else {
-        mModGen.setParams(0.0f, 0.0f, 0.0f);  // Disable modulation when Pitch is off
-    }
-    
-    // Update ring modulators for Speed effect (only when Pitch is active)
-    float ringFreq = octaveActive ? 20.0f + speed * 300.0f : 20.0f;  // 20-320 Hz
-    mRingModL.setFrequency(ringFreq);
-    mRingModR.setFrequency(ringFreq);
-    mRingModL.setAmount(octaveActive ? speed : 0.0f);
-    mRingModR.setAmount(octaveActive ? speed : 0.0f);
-    
-    // Store dry signal
-    mDryBuffer.makeCopyOf(buffer, true);
-    
-    // Get channel pointers
-    float* channelL = buffer.getWritePointer(0);
-    float* channelR = numChannels > 1 ? buffer.getWritePointer(1) : channelL;
-    
-    // === ORIGINAL NOISE GLITCH PROCESSING FLOW ===
-    // Per-sample processing for modulation (only if VOLTAGE section is active)
-    for (int sample = 0; sample < numSamples; ++sample)
+    // ---- Quality (pitch engine) change: swap engines and update reported latency
+    const int quality = (int) p.quality->load();
+    if (quality != activeQuality)
     {
-        float totalPitchMod = 0.0f;
-        
-        if (octaveActive) {
-            // Get modulation values (Panic + Chaos combined pitch modulation)
-            float pitchMod = mModGen.getPitchModulation();
-            
-            // Get random pitch offset from PitchRandomizer (RANGE/SPEED knobs)
-            float randomPitchOffset = mPitchRandomizer.process();
-            
-            // Combine modulations: original Noise Glitch + random pitch
-            totalPitchMod = pitchMod + randomPitchOffset;
-        }
-        
-        // Apply pitch modulation to shifter
-        mPitchShifter.setModulation(totalPitchMod);
+        activeQuality = quality;
+        pitchLatency = quality == 1 ? studioShifter.getLatencySamples() : 0;
+        studioShifter.reset();
+        liveShifter.reset();
+        dryDelay.reset();
+        pitchDryDelay.reset();
+        const int total = computeLatency (quality);
+        dryDelay.setDelay ((float) total);
+        pitchDryDelay.setDelay ((float) pitchLatency);
+        pendingLatency = total;
+        triggerAsyncUpdate();
     }
-    
-    // Process pitch shifting (stereo)
-    mPitchShifter.processStereo(channelL, channelR, numSamples);
-    
-    // Per-sample post-processing
-    for (int sample = 0; sample < numSamples; ++sample)
-    {
-        // Apply ring modulation (Speed effect) - only active when Pitch is engaged
-        channelL[sample] = mRingModL.processSample(channelL[sample]);
-        if (numChannels > 1)
-            channelR[sample] = mRingModR.processSample(channelR[sample]);
-        
-        // Apply DC blocking
-        channelL[sample] = mDCBlockerL.processSample(channelL[sample]);
-        if (numChannels > 1)
-            channelR[sample] = mDCBlockerR.processSample(channelR[sample]);
-        
-        // Get dry samples
-        float dryL = mDryBuffer.getSample(0, sample);
-        float dryR = numChannels > 1 ? mDryBuffer.getSample(1, sample) : dryL;
-        
-        // Mix dry/wet
-        float currentMix = mMixSmoothed.getNextValue();
-        float currentGain = mGainSmoothed.getNextValue();
-        
-        channelL[sample] = (dryL * (1.0f - currentMix) + channelL[sample] * currentMix) * currentGain;
-        if (numChannels > 1)
-            channelR[sample] = (dryR * (1.0f - currentMix) + channelR[sample] * currentMix) * currentGain;
-    }
-    
-    // === ADDITIONAL SWARMNESS PROCESSING ===
-    
-    // Filters (TONE section)
-    mFilterEngine.setLowCut(20.0f + *pLowCut * 480.0f);    // 20-500 Hz
-    mFilterEngine.setHighCut(1000.0f + *pHighCut * 19000.0f);  // 1k-20k Hz
-    mFilterEngine.process(buffer);
-    
-    // Saturation (MID BOOST)
-    if (*pSaturation > 0.01f) {
-        mSaturation.setDrive(*pSaturation);
-        mSaturation.setMix(1.0f);
-        mSaturation.process(buffer);
-    }
-    
-    // Chorus/SWARM modulation (only if engaged)
-    if (*pChorusEngage > 0.5f && *pChorusMix > 0.01f) {
-        // chorusMode: false=Classic (0), true=Deep (1)
-        mChorusEngine.setMode(*pChorusMode > 0.5f ? ChorusEngine::Mode::Deep : ChorusEngine::Mode::Classic);
-        mChorusEngine.setRate(0.1f + *pChorusRate * 4.9f);  // 0.1-5 Hz
-        mChorusEngine.setDepth(*pChorusDepth);
-        mChorusEngine.setMix(*pChorusMix);
-        mChorusEngine.process(buffer);
-    }
-    
-    // Flow Engine (stutter/gate) - only if engaged
-    if (*pFlowEngage > 0.5f && *pFlowAmount > 0.01f) {
-        // flowMode: false=Static (Smooth), true=Pulse (Hard)
-        mFlowEngine.setMode(*pFlowMode > 0.5f ? FlowEngine::Mode::Pulse : FlowEngine::Mode::Static);
-        mFlowEngine.setFlowAmount(*pFlowAmount);
-        mFlowEngine.setPulseRate(0.5f + *pFlowSpeed * 19.5f);
-        for (int sample = 0; sample < numSamples; ++sample) {
-            float flowGain = mFlowEngine.process();
-            for (int ch = 0; ch < numChannels; ++ch) {
-                buffer.getWritePointer(ch)[sample] *= flowGain;
-            }
-        }
-    }
-    
-    // Drive (soft clipping)
-    float drive = *pDrive;
-    if (drive > 0.01f) {
-        float driveAmount = 1.0f + drive * 4.0f;
-        for (int ch = 0; ch < numChannels; ++ch) {
-            auto* data = buffer.getWritePointer(ch);
-            for (int i = 0; i < numSamples; ++i) {
-                data[i] = std::tanh(data[i] * driveAmount) / std::tanh(driveAmount);
-            }
-        }
-    }
-    
-    // Final soft clip to prevent harsh clipping (original Noise Glitch)
+
+    // ---- Input metering
+    for (int ch = 0; ch < numChannels; ++ch)
+        updatePeak (meters.input[(size_t) ch], buffer.getMagnitude (ch, 0, numSamples));
+
+    // ---- Latency-aligned dry copy (for Mix and Bypass)
     for (int ch = 0; ch < numChannels; ++ch)
     {
-        float* channel = buffer.getWritePointer(ch);
-        for (int sample = 0; sample < numSamples; ++sample)
+        const float* src = buffer.getReadPointer (ch);
+        float* dst = dryBuffer.getWritePointer (ch);
+        for (int i = 0; i < numSamples; ++i)
         {
-            channel[sample] = std::tanh(channel[sample]);
+            dryDelay.pushSample (ch, src[i]);
+            dst[i] = dryDelay.popSample (ch);
+        }
+    }
+
+    // ---- VOLTAGE: pitch + modulation
+    processPitch (buffer, numChannels, numSamples);
+
+    // ---- TONE
+    tone.setParams (p.lowCut->load(), p.highCut->load(), p.mid->load());
+    tone.process (buffer.getArrayOfWritePointers(), numChannels, numSamples);
+
+    // ---- DRIVE (4x oversampled)
+    drive.setDrive (p.drive->load() * 0.01f);
+    {
+        juce::dsp::AudioBlock<float> block (buffer.getArrayOfWritePointers(), (size_t) numChannels, (size_t) numSamples);
+        drive.process (block);
+    }
+
+    // ---- SWARM
+    const bool swarmOn = p.swarmOn->load() > 0.5f;
+    swarmChorus.setParams (p.swarmRate->load(), p.swarmDepth->load() * 0.01f,
+                           swarmOn ? p.swarmMix->load() * 0.01f : 0.0f, p.swarmDeep->load() > 0.5f);
+    swarmChorus.process (buffer.getArrayOfWritePointers(), numChannels, numSamples);
+
+    // ---- MIX (equal power)
+    mixSmoothed.setTargetValue (p.mix->load() * 0.01f);
+    for (int i = 0; i < numSamples; ++i)
+    {
+        float dryG, wetG;
+        swarm::equalPowerGains (mixSmoothed.getNextValue(), dryG, wetG);
+        for (int ch = 0; ch < numChannels; ++ch)
+        {
+            float* d = buffer.getWritePointer (ch);
+            d[i] = dryG * dryBuffer.getSample (ch, i) + wetG * d[i];
+        }
+    }
+
+    // ---- FLOW (gate over the whole signal)
+    const bool flowOn = p.flowOn->load() > 0.5f;
+    flow.setParams (flowOn ? p.flowAmount->load() * 0.01f : 0.0f, p.flowHard->load() > 0.5f);
+
+    bool synced = false;
+    if (p.flowSync->load() > 0.5f)
+    {
+        if (auto* ph = getPlayHead())
+        {
+            if (auto pos = ph->getPosition())
+            {
+                const double bpm = pos->getBpm().orFallback (120.0);
+                std::optional<double> ppq;
+                if (pos->getIsPlaying())
+                    if (auto q = pos->getPpqPosition())
+                        ppq = *q - (double) getLatencySamples() / currentSampleRate * bpm / 60.0; // align with PDC
+
+                flow.setSynced (ParamChoices::divisionInBeats ((int) p.flowDiv->load()), bpm, ppq);
+                synced = true;
+            }
+        }
+        if (! synced)
+        {
+            flow.setSynced (ParamChoices::divisionInBeats ((int) p.flowDiv->load()), 120.0, std::nullopt);
+            synced = true;
+        }
+    }
+    if (! synced)
+        flow.setRateHz (p.flowSpeed->load());
+
+    if (! flow.isIdle() || flowOn)
+        flow.process (buffer.getArrayOfWritePointers(), numChannels, numSamples);
+
+    // ---- OUTPUT gain + bypass crossfade
+    outputGainSmoothed.setTargetValue (juce::Decibels::decibelsToGain (p.output->load()));
+    bypassSmoothed.setTargetValue (p.bypass->load() > 0.5f ? 1.0f : 0.0f);
+
+    for (int i = 0; i < numSamples; ++i)
+    {
+        const float g = outputGainSmoothed.getNextValue();
+        const float b = bypassSmoothed.getNextValue();
+        for (int ch = 0; ch < numChannels; ++ch)
+        {
+            float* d = buffer.getWritePointer (ch);
+            const float wet = d[i] * g;
+            d[i] = wet + b * (dryBuffer.getSample (ch, i) - wet);
+        }
+    }
+
+    // Safety: never let a NaN/Inf escape into the host.
+    for (int ch = 0; ch < numChannels; ++ch)
+    {
+        float* d = buffer.getWritePointer (ch);
+        for (int i = 0; i < numSamples; ++i)
+            if (! std::isfinite (d[i]))
+                d[i] = 0.0f;
+    }
+
+    for (int ch = 0; ch < numChannels; ++ch)
+        updatePeak (meters.output[(size_t) ch], buffer.getMagnitude (ch, 0, numSamples));
+}
+
+//==============================================================================
+juce::AudioProcessorEditor* SwarmnessAudioProcessor::createEditor()
+{
+    return new SwarmnessAudioProcessorEditor (*this);
+}
+
+void SwarmnessAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
+{
+    auto state = apvts.copyState();
+    state.setProperty ("presetName", presetManager->getCurrentPresetName(), nullptr);
+    state.setProperty ("pluginVersion", JucePlugin_VersionString, nullptr);
+    state.setProperty ("uiScale", uiScale.load(), nullptr);
+
+    if (auto xml = state.createXml())
+        copyXmlToBinary (*xml, destData);
+}
+
+void SwarmnessAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
+{
+    if (auto xml = getXmlFromBinary (data, sizeInBytes))
+    {
+        if (xml->hasTagName (apvts.state.getType()))
+        {
+            auto tree = juce::ValueTree::fromXml (*xml);
+            uiScale = juce::jlimit (0.7f, 2.0f, (float) tree.getProperty ("uiScale", 1.0f));
+            apvts.replaceState (tree);
+            presetManager->restoreFromState (tree.getProperty ("presetName").toString());
         }
     }
 }
 
-bool SwarmnesssAudioProcessor::hasEditor() const { return true; }
-
-juce::AudioProcessorEditor* SwarmnesssAudioProcessor::createEditor() {
-    return new SwarmnesssAudioProcessorEditor(*this);
-}
-
-void SwarmnesssAudioProcessor::getStateInformation(juce::MemoryBlock& destData) {
-    auto state = mAPVTS.copyState();
-    std::unique_ptr<juce::XmlElement> xml(state.createXml());
-    copyXmlToBinary(*xml, destData);
-}
-
-void SwarmnesssAudioProcessor::setStateInformation(const void* data, int sizeInBytes) {
-    std::unique_ptr<juce::XmlElement> xmlState(getXmlFromBinary(data, sizeInBytes));
-    if (xmlState.get() != nullptr) {
-        if (xmlState->hasTagName(mAPVTS.state.getType())) {
-            mAPVTS.replaceState(juce::ValueTree::fromXml(*xmlState));
-        }
-    }
-}
-
-juce::AudioProcessorValueTreeState::ParameterLayout SwarmnesssAudioProcessor::createParameterLayout() {
-    std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
-
-    // === VOLTAGE Section (Pitch + Randomizer) ===
-    params.push_back(std::make_unique<juce::AudioParameterChoice>(
-        "octaveMode", "VOLTAGE Octave", juce::StringArray{"-2 OCT", "-1 OCT", "0", "+1 OCT", "+2 OCT"}, 3));
-    params.push_back(std::make_unique<juce::AudioParameterBool>(
-        "engage", "VOLTAGE On", true));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "rise", "VOLTAGE Rise", 0.0f, 1.0f, 0.05f));
-
-    // Pitch Randomizer (RANGE and SPEED knobs)
-    params.push_back(std::make_unique<juce::AudioParameterInt>(
-        "randomRange", "VOLTAGE Range", 0, 24, 0));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "randomRate", "VOLTAGE Speed", 0.0f, 1.0f, 0.1f));
-
-    // === MODULATION Section ===
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "panic", "MOD Rush", 0.0f, 1.0f, 0.0f));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "chaos", "MOD Anger", 0.0f, 1.0f, 0.0f));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "speed", "MOD Rate", 0.0f, 1.0f, 0.0f));
-
-    // === TONE Section ===
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "lowCut", "TONE Low Cut", 0.0f, 1.0f, 0.0f));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "highCut", "TONE High Cut", 0.0f, 1.0f, 1.0f));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "saturation", "TONE Mid Boost", 0.0f, 1.0f, 0.0f));
-
-    // === SWARM Section (Chorus) ===
-    params.push_back(std::make_unique<juce::AudioParameterBool>(
-        "chorusEngage", "SWARM On", true));
-    params.push_back(std::make_unique<juce::AudioParameterBool>(
-        "chorusMode", "SWARM Deep", false));  // false=Classic, true=Deep
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "chorusRate", "SWARM Rate", 0.0f, 1.0f, 0.2f));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "chorusDepth", "SWARM Depth", 0.0f, 1.0f, 0.5f));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "chorusMix", "SWARM Mix", 0.0f, 1.0f, 0.0f));
-
-    // === OUTPUT Section ===
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "mix", "OUT Mix", 0.0f, 1.0f, 1.0f));  // Default 100% wet
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "drive", "OUT Drive", 0.0f, 1.0f, 0.0f));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "outputGain", "OUT Level", 0.0f, 1.0f, 0.8f));
-
-    // === FLOW Section (stutter/gate) ===
-    params.push_back(std::make_unique<juce::AudioParameterBool>(
-        "flowEngage", "FLOW On", true));
-    params.push_back(std::make_unique<juce::AudioParameterBool>(
-        "flowMode", "FLOW Hard", true));  // false=Smooth, true=Hard
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "flowAmount", "FLOW Amount", 0.0f, 1.0f, 0.0f));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        "flowSpeed", "FLOW Speed", 0.0f, 1.0f, 0.3f));
-
-    // === GLOBAL ===
-    params.push_back(std::make_unique<juce::AudioParameterBool>(
-        "globalBypass", "Bypass", false));
-    params.push_back(std::make_unique<juce::AudioParameterBool>(
-        "globalEngage", "Engage", true));  // Inverted bypass for momentary MIDI
-
-    return {params.begin(), params.end()};
-}
-
-juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() {
-    return new SwarmnesssAudioProcessor();
+//==============================================================================
+juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
+{
+    return new SwarmnessAudioProcessor();
 }

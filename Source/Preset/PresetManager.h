@@ -1,63 +1,64 @@
 #pragma once
+
 #include <JuceHeader.h>
+#include <map>
 
-class PresetManager : public juce::AudioProcessorValueTreeState::Listener {
+/**
+ * Factory + user preset handling.
+ *
+ * Presets are JSON files (.swpreset) that store parameter values in real units, keyed by
+ * parameter ID. Unknown IDs are ignored and missing IDs fall back to defaults, so presets
+ * remain compatible across versions. Loading/saving happens on the message thread;
+ * the name/snapshot accessors are thread-safe.
+ */
+class PresetManager
+{
 public:
-    PresetManager(juce::AudioProcessorValueTreeState& apvts);
-    ~PresetManager() override;
+    explicit PresetManager (juce::AudioProcessorValueTreeState& apvts);
 
-    void savePreset(const juce::String& name);
-    void saveCurrentPreset();  // v1.2.7: Save current preset (overwrite if user preset)
-    void savePresetAs(const juce::String& name);  // v1.2.7: Save as new preset
-    void loadPreset(const juce::String& name);
-    void loadPresetFromFile(const juce::File& file);
-    bool exportPreset(const juce::File& file);
-    bool importPreset(const juce::File& file);
-    void deletePreset(const juce::String& name);
-    
-    // v1.2.7: Navigation methods
-    void loadPreviousPreset();
-    void loadNextPreset();
-    int getCurrentPresetIndex() const;
-    
-    juce::StringArray getPresetList() const;
-    juce::String getCurrentPresetName() const { return mCurrentPresetName; }
-    juce::String getDisplayName() const;  // v1.2.7: Returns name with * prefix if dirty
-    void setCurrentPresetName(const juce::String& name) { mCurrentPresetName = name; }
+    static const juce::String extension;
 
-    juce::File getPresetsDirectory() const;
     juce::StringArray getFactoryPresetNames() const;
-    void loadFactoryPreset(const juce::String& name);
-    bool isFactoryPreset(const juce::String& name) const;
-    
-    // Dirty state management
-    bool isDirty() const { return mIsDirty; }
-    void markDirty();
-    void markClean();
-    void saveSnapshot();
-    bool hasChangedFromSnapshot() const;
-    void initializeDirtyTracking();  // Call after processor is fully constructed
-    
-    // Listener callback
-    void parameterChanged(const juce::String& parameterID, float newValue) override;
-    
-    static const juce::String kPresetExtension;
-    static const juce::String kPresetVersion;
+    juce::StringArray getUserPresetNames() const;
+    juce::StringArray getAllPresetNames() const;   // factory first, then user
+
+    bool isFactoryPreset (const juce::String& name) const;
+    bool isUserPreset (const juce::String& name) const;
+
+    bool loadPreset (const juce::String& name);
+    void loadNextPreset();
+    void loadPreviousPreset();
+
+    bool saveUserPreset (const juce::String& name);
+    bool deleteUserPreset (const juce::String& name);
+
+    bool importPreset (const juce::File& file);
+    bool exportPreset (const juce::File& file) const;
+
+    juce::String getCurrentPresetName() const;
+    bool isDirty() const;
+
+    /** Called after the host restores plug-in state. */
+    void restoreFromState (const juce::String& presetName);
+
+    static juce::File getPresetsDirectory();
 
 private:
-    juce::var createPresetObject(const juce::String& name) const;
-    void applyPresetFromVar(const juce::var& presetData);
-    void initializeFactoryPresets();
-    void registerParameterListeners();
-    void unregisterParameterListeners();
-    
-    juce::AudioProcessorValueTreeState& mAPVTS;
-    juce::String mCurrentPresetName{"Init"};
-    
-    std::map<juce::String, juce::var> mFactoryPresets;
-    
-    // Dirty state tracking
-    bool mIsDirty = false;
-    bool mListenersRegistered = false;
-    std::map<juce::String, float> mSnapshot;
+    using ValueMap = std::map<juce::String, float>;
+
+    void initialiseFactoryPresets();
+    void applyValues (const ValueMap& values, bool resetOthersToDefault);
+    ValueMap captureValues() const;
+    void takeSnapshot();
+    void setCurrentName (const juce::String&);
+
+    static juce::var toJson (const juce::String& name, const ValueMap& values);
+    static bool fromJson (const juce::var& json, juce::String& name, ValueMap& values);
+
+    juce::AudioProcessorValueTreeState& apvts;
+    std::vector<std::pair<juce::String, ValueMap>> factoryPresets;
+    // Guarded by 'lock': the host may restore state from a non-message thread.
+    mutable juce::CriticalSection lock;
+    juce::String currentName { "Init" };
+    std::map<juce::String, float> snapshot;   // normalised values at last load/save
 };

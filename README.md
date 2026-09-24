@@ -1,347 +1,120 @@
-# Swarmness v2.1.0 "Tone Shaping Edition"
+# Swarmness 2.0
 
-**Granular Pitch Shifter VST3 Plugin for Metalcore/Djent**
+**Питч-процессор для гитары и не только: октавы, интервалы, «рой» гармоник, модуляция, ансамбль и ритмический гейт.**
+VST3 / AU / Standalone · Windows, macOS (Universal: Apple Silicon + Intel), Linux.
 
-![Version](https://img.shields.io/badge/version-2.1.0-orange)
-![JUCE](https://img.shields.io/badge/JUCE-8.0-blue)
-![C++](https://img.shields.io/badge/C++-17-green)
-![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
-
-## Overview
-
-Swarmness is a professional-grade granular pitch shifter plugin designed for metalcore, djent, ambient, and experimental music production. It adds a "swarm" of harmonics on top of your original signal with extensive modulation and tone shaping capabilities.
-
-## Features
-
-### 🎸 VOLTAGE Section (Pitch Control)
-- **Octave Mode**: +1 OCT, +2 OCT, -1 OCT
-- **Engage**: Enable/disable pitch shifting
-- **Rise**: Attack time for pitch effect (0-2000ms)
-
-#### Slide (Digitech Ricochet-style)
-- **Range**: -24 to +24 semitones
-- **Time**: 50-5000ms glide time
-- **Direction**: Up, Down, Both
-- **Auto Slide**: Continuous oscillation mode
-- **Position**: Manual slide control
-- **Return**: Return to original pitch
-
-#### Random Pitch
-- **Range**: 0-24 semitones
-- **Rate**: 0.1-10 Hz
-- **Smooth**: Transition smoothing
-- **Mode**: Jump or Glide
-
-### 🌀 MODULATION Section
-- **Panic**: Rapid pitch fluctuation intensity
-- **Chaos**: Random modulation amount
-- **Speed**: LFO rate (0.5-50 Hz exponential)
-
-### 🎛️ TONE SHAPING Section
-- **Low Cut**: Analog HPF (20-500 Hz)
-- **High Cut**: Analog LPF (1k-20k Hz) with tape saturation
-- **Saturation**: Tube-style soft clipping
-
-#### Chorus
-- **Rate**: 0.1-5 Hz
-- **Depth**: Modulation depth
-- **Mix**: Wet/dry chorus mix
-
-### 📤 OUTPUT Section
-- **Mix**: Overall wet/dry (0-100%)
-- **Output Gain**: -24 to +6 dB
-
-### 🔄 FLOW Section (Bypass Control)
-- **Mode**: Static or Pulse
-- **Rate**: Pulse LFO rate (0.1-10 Hz)
-- **Probability**: Random trigger probability
-- **Footswitch**: Manual on/off with LED indicator
-
-## Factory Presets
-
-1. **Init** - Default initialization
-2. **Djent Classic** - Tight octave for djent
-3. **Metalcore Mayhem** - Wide stereo aggressive
-4. **Ricochet Up** - Auto slide up effect
-5. **Glitch Apocalypse** - Maximum chaos
-
-## Preset System
-
-- Format: `.swpreset` (JSON)
-- Save/Load/Export/Import functionality
-- Presets stored in:
-  - macOS: `~/Library/Audio/Presets/Swarmness/`
-  - Linux: `~/.swarmness/presets/`
-  - Windows: `Documents\Swarmness\Presets\`
+![Version](https://img.shields.io/badge/version-2.0.0-orange)
+![JUCE](https://img.shields.io/badge/JUCE-8.0.15-blue)
+![Formats](https://img.shields.io/badge/formats-VST3%20%7C%20AU%20%7C%20Standalone-lightgrey)
 
 ---
 
-## Building
+## Что нового в 2.0
 
-### Requirements (All Platforms)
+Версия 2.0 — полная переработка плагина: весь DSP, интерфейс, пресеты и сборка написаны заново.
 
-| Requirement | Version |
-|------------|---------|
-| CMake | 3.22+ |
-| C++ Compiler | C++17 support |
-| JUCE | 8.0 |
+| | 1.x | 2.0 |
+|---|---|---|
+| Питч-шифтер | гранулярный, с «зернистостью» | **два движка**: STUDIO (спектральный, точность < 1 цента, паразиты ≈ −85 дБ) и LIVE (задержка 1,3 мс) |
+| Модуляция питча | обновлялась раз за блок | обновляется каждые 32 сэмпла, плавная |
+| Фильтры | SVF с перерасчётом коэффициентов каждый блок | Cytomic SVF, НЧ-срез 24 дБ/окт, ВЧ-срез 12 дБ/окт, без «молнии» при автоматизации |
+| Дисторшн | `tanh` без оверсэмплинга + жёсткий `tanh` на выходе | ламповая асимметрия, **4× оверсэмплинг**, автокомпенсация громкости, на 0 % — бит-в-бит прозрачно |
+| Хорус | 3 голоса | 4/8 голосов, стерео-панорама, дрейф LFO, срез НЧ у «мокрого» сигнала |
+| Гейт | только свободная частота | свободная частота **или синхронизация с темпом DAW** (1/1…1/32, триоли, пунктир) |
+| Задержка | не сообщалась хосту | сообщается хосту; Mix и Bypass выровнены по задержке |
+| Интерфейс | растровые PNG, 800×560 | векторный, масштаб **70–200 %**, подсказки, индикаторы уровня, график питча |
 
----
+## Разделы и регуляторы
 
-### 🪟 Windows Build Instructions
+**VOLTAGE** — питч
+- **OCTAVE** −2 … +2 октавы, **SEMI** — дополнительный интервал ±12 полутонов (например, +7 = квинта).
+- **RISE** — время «въезда» в интервал (также срабатывает при включении секции — эффект «вилки»).
+- **RANGE / SPEED** — плавное случайное блуждание высоты тона.
+- **ENGINE**: **LIVE** — без задержки, для игры и мониторинга; **STUDIO** — максимальное качество (≈ 87 мс задержки при 48 кГц, компенсируется DAW).
 
-#### Prerequisites
+**MODULATION** — **RUSH** (органичный дрейф питча), **ANGER** (ритмичные скачки на полутоны), **RATE** (скорость). Экран показывает текущую транспозицию в реальном времени.
 
-1. **Visual Studio 2022** (recommended) or Visual Studio 2019
-   - Download: https://visualstudio.microsoft.com/
-   - During installation, select:
-     - "Desktop development with C++"
-     - Windows 10/11 SDK (latest version)
+**TONE** (только эффект) — **LOW CUT**, **HIGH CUT** (в крайних положениях полностью выключены), **MID** — подъём середины около 850 Гц.
 
-2. **CMake 3.22+**
-   - Download: https://cmake.org/download/
-   - Or install via winget: `winget install Kitware.CMake`
+**SWARM** — стерео-ансамбль: **DEPTH**, **RATE**, **MIX**, режим **DEEP** (8 голосов с обратной связью).
 
-3. **JUCE 8.0**
-   - Download: https://juce.com/download/
-   - Extract to a known location, e.g., `C:\JUCE`
+**FLOW** — ритмический гейт: **AMOUNT**, **SPEED** (Гц) или **DIV** (при **SYNC**), **HARD** — жёсткий статтер, выключено — мягкое тремоло.
 
-#### Build with Visual Studio (GUI)
+**OUTPUT** — **MIX** (сухой/эффект, равномощностный), **DRIVE**, **VOLUME**. Футсвич внизу — байпас (синхронизирован с байпасом хоста).
 
-```powershell
-# Open PowerShell or CMD in the swarmness_plugin folder
+Приёмы: двойной клик — сброс регулятора, **Shift** + перетаскивание — точная настройка, уголок справа внизу — изменение размера окна, **?** — справка.
 
-# Generate Visual Studio solution
-cmake -B build -G "Visual Studio 17 2022" -A x64 -DJUCE_PATH="C:\JUCE"
+## Пресеты
 
-# Open in Visual Studio
-start build\Swarmness.sln
+15 заводских пресетов (Octave Up Classic, Sub Octave Djent, Whammy Rise, Dive Bomb, Fifth Harmony, Swarm Cloud, Glitch Anger, Stutter 1/16 и др.) плюс пользовательские: сохранение, «Сохранить как», удаление, импорт/экспорт `.swpreset` (JSON).
+
+Папка пользовательских пресетов:
+- macOS: `~/Library/Audio/Presets/Swarmness/`
+- Windows: `Документы\Swarmness\Presets\`
+- Linux: `~/.swarmness/presets/`
+
+## Установка
+
+Готовые сборки создаются GitHub Actions для каждого коммита (вкладка **Actions** → последний запуск → **Artifacts**), а для тегов `v*` публикуются в **Releases**.
+
+**Windows** — запустите `Swarmness-2.0.0-Windows-x64-Setup.exe` (VST3 ставится в `C:\Program Files\Common Files\VST3`), либо распакуйте zip вручную.
+
+**macOS** — откройте `Swarmness-2.0.0-macOS-Universal.pkg` (VST3, AU и приложение — выбираются в установщике). Сборки подписаны ad-hoc, но не нотаризованы, поэтому при первом запуске установщика: правый клик → **Открыть**. Если DAW не видит плагин после ручного копирования:
+```bash
+xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/Swarmness.vst3
+xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/Components/Swarmness.component
 ```
 
-Then in Visual Studio:
-1. Set build configuration to **Release**
-2. Right-click on "Swarmness_VST3" → Build
+> Сессии и пресеты версии 1.x не переносятся: в 2.0 новые параметры (реальные единицы: Гц, дБ, мс, полутоны).
 
-#### Build with CMake (Command Line)
+## Сборка из исходников
 
-```powershell
-cd swarmness_plugin
+Требуется CMake ≥ 3.22 и компилятор C++17 (Visual Studio 2022 / Xcode 15+ / GCC 11+). JUCE скачивается автоматически (или укажите `-DJUCE_PATH=/путь/к/JUCE`).
 
-# Configure
-cmake -B build -G "Visual Studio 17 2022" -A x64 -DJUCE_PATH="C:\JUCE"
+```bash
+# macOS (universal)
+cmake -B build -G Xcode
+cmake --build build --config Release --target Swarmness_VST3 Swarmness_AU Swarmness_Standalone
 
-# Build Release
-cmake --build build --config Release --target Swarmness_VST3
-
-# Build Debug (for development)
-cmake --build build --config Debug --target Swarmness_VST3
-```
-
-#### Using Environment Variable (Alternative)
-
-```powershell
-# Set JUCE_PATH environment variable
-$env:JUCE_PATH = "C:\JUCE"
-
-# Then build without -DJUCE_PATH
+# Windows
 cmake -B build -G "Visual Studio 17 2022" -A x64
-cmake --build build --config Release
+cmake --build build --config Release --target Swarmness_VST3 Swarmness_Standalone
+
+# Linux
+cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build --target Swarmness_VST3 Swarmness_Standalone
 ```
 
-#### Output Location
+Результат: `build/Swarmness_artefacts/Release/{VST3,AU,Standalone}/`.
 
-After successful build, the VST3 plugin will be at:
-```
-build\Swarmness_artefacts\Release\VST3\Swarmness.vst3\
-```
+### Тесты
 
-#### Installation on Windows
-
-Copy the `Swarmness.vst3` folder to one of:
-- User: `C:\Users\<YourName>\AppData\Local\Programs\Common Files\VST3\`
-- System: `C:\Program Files\Common Files\VST3\`
-
-Or use CMake install:
-```powershell
-cmake --install build --config Release
-```
-
-#### Troubleshooting Windows Build
-
-| Issue | Solution |
-|-------|----------|
-| "JUCE_PATH not defined" | Add `-DJUCE_PATH="C:\path\to\JUCE"` |
-| Generator not found | Ensure Visual Studio is installed with C++ workload |
-| Access denied | Run PowerShell as Administrator for system install |
-| Plugin not loading in DAW | Ensure x64 build matches 64-bit DAW |
-
----
-
-### 🍎 macOS Build Instructions
-
-#### Prerequisites
-- Xcode 14+ with Command Line Tools
-- CMake 3.22+
-- JUCE 8.0
-
-#### Build
+`SwarmnessTests` — офлайн-проверка DSP без DAW: стабильность всех пресетов на 44,1/48/96 кГц, байпас и Mix с точностью до сэмпла (нуль-тест), точность питча обоих движков, прозрачность чистого тракта, компенсация громкости драйва, сохранение состояния, нагрузка на CPU.
 
 ```bash
-cd swarmness_plugin
-mkdir build && cd build
-
-cmake .. -DJUCE_PATH=/path/to/JUCE \
-    -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
-    -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
-
-make -j$(sysctl -n hw.ncpu)
+cmake --build build --target SwarmnessTests
+./build/SwarmnessTests_artefacts/Release/SwarmnessTests               # все тесты
+./build/SwarmnessTests_artefacts/Release/SwarmnessTests --render out  # WAV-рендеры заводских пресетов
+./build/SwarmnessTests_artefacts/Release/SwarmnessTests --screenshot ui.png "Swarm Cloud" 1.5
 ```
 
-#### Output Location
-```
-build/Swarmness_artefacts/VST3/Swarmness.vst3
-```
+В CI дополнительно запускается [pluginval](https://github.com/Tracktion/pluginval) (строгость 10) для VST3/AU и `auval` на macOS.
 
-#### Installation
-```bash
-cp -R build/Swarmness_artefacts/VST3/Swarmness.vst3 ~/Library/Audio/Plug-Ins/VST3/
-```
-
----
-
-### 🐧 Linux Build Instructions
-
-#### Prerequisites
-```bash
-# Ubuntu/Debian
-sudo apt install build-essential cmake git libasound2-dev libfreetype6-dev \
-    libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxcomposite-dev \
-    mesa-common-dev libfreeglut3-dev libcurl4-openssl-dev
-
-# Fedora
-sudo dnf install gcc-c++ cmake git alsa-lib-devel freetype-devel \
-    libX11-devel libXrandr-devel libXinerama-devel libXcursor-devel \
-    libXcomposite-devel mesa-libGL-devel freeglut-devel libcurl-devel
-```
-
-#### Build
-```bash
-cd swarmness_plugin
-mkdir build && cd build
-cmake .. -DJUCE_PATH=/path/to/JUCE
-make -j$(nproc)
-```
-
-#### Output Location
-```
-build/Swarmness_artefacts/VST3/Swarmness.vst3
-```
-
-#### Installation
-```bash
-cp -R build/Swarmness_artefacts/VST3/Swarmness.vst3 ~/.vst3/
-```
-
----
-
-## DSP Signal Chain
+## Структура
 
 ```
-Input → Dry Copy
-      ↓
-1. GranularPitchShifter (with modulation)
-      ↓
-2. AnalogFilterEngine (HPF + LPF)
-      ↓
-3. Saturation
-      ↓
-4. ChorusEngine
-      ↓
-5. DCBlocker
-      ↓
-6. Wet/Dry Mix
-      ↓
-7. FlowEngine Gate
-      ↓
-8. Output Gain
-      ↓
-Output
+Source/
+  Parameters.*            параметры (ID, диапазоны, форматирование значений)
+  PluginProcessor.*       цепочка обработки, задержка, байпас, состояние
+  PluginEditor.*          главное окно (масштабируемое)
+  DSP/                    StudioPitchShifter, LivePitchShifter, PitchModulator,
+                          ToneStage, DriveStage, SwarmChorus, FlowGate, DSPUtils
+  GUI/                    тема, LookAndFeel, элементы управления
+  Preset/PresetManager.*  заводские и пользовательские пресеты
+Tests/                    офлайн-тесты DSP
+packaging/                установщики Windows (Inno Setup) и macOS (.pkg)
 ```
 
-## Project Structure
+## Лицензии
 
-```
-swarmness_plugin/
-├── CMakeLists.txt
-├── README.md
-└── Source/
-    ├── PluginProcessor.cpp/h
-    ├── PluginEditor.cpp/h
-    ├── DSP/
-    │   ├── GranularPitchShifter.cpp/h
-    │   ├── PitchSlideEngine.cpp/h
-    │   ├── PitchRandomizer.cpp/h
-    │   ├── Modulation.cpp/h
-    │   ├── AnalogFilterEngine.h
-    │   ├── ChorusEngine.cpp/h
-    │   ├── FlowEngine.cpp/h
-    │   ├── DCBlocker.cpp/h
-    │   └── Saturation.cpp/h
-    ├── GUI/
-    │   ├── MetalLookAndFeel.cpp/h
-    │   ├── RotaryKnob.cpp/h
-    │   ├── FootswitchButton.cpp/h
-    │   └── PresetPanel.cpp/h
-    └── Preset/
-        └── PresetManager.cpp/h
-```
-
-## Technical Specifications
-
-| Parameter | Value |
-|-----------|-------|
-| Plugin Format | VST3 |
-| Sample Rates | 44.1k, 48k, 88.2k, 96k, 176.4k, 192k |
-| Bit Depth | 32-bit float |
-| Latency | ~46ms (granular buffer) |
-| Bundle ID | com.OpenAudio.Swarmness |
-| Manufacturer Code | OpAu |
-| Plugin Code | SwMs |
-
-## System Requirements
-
-### Windows
-- Windows 10 or later (64-bit)
-- VST3-compatible DAW (Reaper, Cubase, FL Studio, etc.)
-
-### macOS
-- macOS 11.0 (Big Sur) or later
-- Apple Silicon (M1/M2) or Intel x86_64
-- VST3-compatible DAW
-
-### Linux
-- 64-bit Linux distribution
-- ALSA or JACK audio
-- VST3-compatible DAW (Reaper, Bitwig, Ardour)
-
-## License
-
-MIT License - © 2026 OpenAudio
-
-## Changelog
-
-### v2.1.0 (2026-02-05)
-- New TONE SHAPING section
-- AnalogFilterEngine with HPF/LPF
-- ChorusEngine (Classic mode)
-- Saturation effect
-- Dark metal GUI theme
-- 950x750px window size
-- **Improved Windows compatibility**
-- **Cross-platform CMake configuration**
-
-### v2.0.0 (2026-01-15)
-- Renamed to Swarmness
-- Complete GUI redesign
-- Rotary knob controls
-- Footswitch with LED
+Шрифт Rajdhani — SIL Open Font License 1.1 (`Source/Assets/Fonts/OFL.txt`). Фреймворк JUCE — согласно лицензии JUCE.
