@@ -154,8 +154,10 @@ public:
         }
     }
 
-    void setParams (float riseMilliseconds, float fallMilliseconds, float panic01, float chaos01, float speed01) noexcept
+    void setParams (float riseMilliseconds, float fallMilliseconds, float panic01, float chaos01, float speed01,
+                    float mix01 = 1.0f) noexcept
     {
+        mix    = mix01;
         riseMs = riseMilliseconds;
         fallMs = fallMilliseconds;
         panic  = panic01;
@@ -244,16 +246,18 @@ public:
             if (active || wet > 0.0001f)
                 speedStage.process (sub, numChannels, n);
 
-            // Wet envelope: fully shifted while engaged, dry once released and home.
+            // Wet envelope: MIX amount of shifted signal while engaged, dry once released and home.
+            // Equal-power law: the shifted voice is not phase-coherent with the dry signal.
             for (int i = 0; i < n; ++i)
             {
-                wet += 0.004f * (engage - wet);
-                if (wet < 1.0f)
+                wet += 0.004f * (engage * mix - wet);
+                if (wet < 0.9999f)
+                {
+                    float dryG, wetG;
+                    swarm::equalPowerGains (wet, dryG, wetG);
                     for (int ch = 0; ch < numChannels; ++ch)
-                    {
-                        const float dry = dryBuffer.getSample (ch, start + i);
-                        sub[ch][i] = dry + wet * (sub[ch][i] - dry);
-                    }
+                        sub[ch][i] = dryG * dryBuffer.getSample (ch, start + i) + wetG * sub[ch][i];
+                }
             }
         }
     }
@@ -266,7 +270,7 @@ private:
     swarm::FastRandom rng { 0xBADC0DEu };
     swarm::OnePole chaosSmoother;
 
-    float riseMs = 30.0f, fallMs = 30.0f, panic = 0.0f, chaos = 0.0f, speed = 0.0f;
+    float riseMs = 30.0f, fallMs = 30.0f, mix = 1.0f, panic = 0.0f, chaos = 0.0f, speed = 0.0f;
     float currentSemis = 0.0f, targetSemis = 0.0f, rampStep = 0.0f, displaySemis = 0.0f;
     float wet = 0.0f, panicLevel = 0.0f;
     float chaosPhase = 0.0f, chaosTarget = 0.0f, wobblePhase = 0.0f;

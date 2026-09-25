@@ -9,7 +9,7 @@
 class MainPanel : public juce::Component
 {
 public:
-    static constexpr int baseWidth  = 1000;
+    static constexpr int baseWidth  = 1100;
     static constexpr int baseHeight = 680;
 
     explicit MainPanel (SwarmnessAudioProcessor&);
@@ -48,6 +48,7 @@ private:
     // STING (internally "noise")
     PillToggle downToggle { "DIVE" };
     Knob riseKnob { "RISE" }, fallKnob { "FALL" }, panicKnob { "ANGER" }, chaosKnob { "FRENZY" }, speedKnob { "BUZZ" };
+    Knob stingMixKnob { "MIX" };
     PitchScope pitchScope;
 
     // HIVE (internally "rainbow")
@@ -64,7 +65,9 @@ private:
     // SMOKE (fuzz)
     PowerButton fuzzPower;
     PillToggle postToggle { "POST" };
-    Knob fuzzKnob { "FUZZ" }, fuzzToneKnob { "TONE" }, fuzzGateKnob { "GATE" };
+    SegmentedChoice fuzzVoiceSelector;
+    Knob fuzzKnob { "FUZZ" }, fuzzToneKnob { "TONE" }, fuzzScoopKnob { "SCOOP" };
+    Knob fuzzGlareKnob { "GLARE" }, fuzzGateKnob { "GATE" }, fuzzBlendKnob { "BLEND" };
 
     // WINGS (gate)
     PowerButton flowPower;
@@ -72,7 +75,7 @@ private:
     Knob flowAmountKnob { "AMOUNT" }, flowSpeedKnob { "SPEED" }, flowDivKnob { "DIV" };
 
     // OUTPUT
-    Knob mixKnob { "MIX" }, volumeKnob { "VOLUME", true };
+    Knob volumeKnob { "VOLUME", true };
 
     // Footswitches
     Footswitch oct1Switch, oct2Switch, magicSwitch, bypassSwitch;

@@ -41,12 +41,14 @@ void PresetManager::initialiseFactoryPresets()
         { "Init", basics, "Everything off: the plug-in is transparent. Start here.", {} },
         { "Clean Sting", basics, "Pure octave shifter. Hold +1 OCT / +2 OCT for a clean, instant jump.",
           { { rise, 0 }, { fall, 0 } } },
+        { "Sting Doubler", basics, "STING MIX at 50%: hold a footswitch and the octave is added on top of your dry note instead of replacing it.",
+          { { rise, 0 }, { fall, 0 }, { stingMix, 50 } } },
         { "Slow Rise", basics, "RISE and FALL: hold a footswitch and the pitch sweeps up over ~1 s; release and it slides back down over ~1.5 s.",
           { { rise, 950 }, { fall, 1500 } } },
 
         // ----------------------------------------------------------------- STING
         { "Killer Bee", stingCat, "The all-rounder: a bit of ANGER, FRENZY and BUZZ plus SMOKE in front. Hold +2 OCT for the full shriek.",
-          { { rise, 30 }, { panic, 45 }, { chaos, 30 }, { speed, 25 }, { fuzzOn, 1 }, { fuzz, 55 }, { fuzzTone, 55 } } },
+          { { rise, 30 }, { panic, 45 }, { chaos, 30 }, { speed, 25 }, { fuzzOn, 1 }, { fuzz, 60 }, { fuzzTone, 55 }, { fuzzScoop, 50 } } },
         { "Angry Hive", stingCat, "ANGER only: the octave is torn into two detuned voices - sour, beating dissonance.",
           { { rise, 15 }, { panic, 85 } } },
         { "Frenzy", stingCat, "FRENZY only: the pitch jumps randomly around the octave, faster than your picking.",
@@ -56,7 +58,7 @@ void PresetManager::initialiseFactoryPresets()
         { "Hornet Buzz", stingCat, "High BUZZ: all-pass feedback and AM turn the octave into metallic ring-mod noise.",
           { { rise, 0 }, { fall, 0 }, { speed, 92 } } },
         { "Dive Bomb", stingCat, "DIVE with a long RISE and a snappy FALL: hold for a slow sub-octave dive, release to snap back. SMOKE after.",
-          { { noiseDown, 1 }, { rise, 450 }, { fall, 60 }, { panic, 15 }, { fuzzOn, 1 }, { fuzzPost, 1 }, { fuzz, 55 }, { fuzzTone, 35 } } },
+          { { noiseDown, 1 }, { rise, 450 }, { fall, 60 }, { panic, 15 }, { fuzzOn, 1 }, { fuzzPost, 1 }, { fuzzVoice, 0 }, { fuzz, 70 }, { fuzzTone, 35 }, { fuzzScoop, 30 } } },
 
         // ------------------------------------------------------------------ HIVE
         { "Harmony Fifth", hiveCat, "Tight, clean harmony: a fifth above (DRONE) plus its octave (QUEEN). No VENOM.",
@@ -78,25 +80,34 @@ void PresetManager::initialiseFactoryPresets()
         // ------------------------------------------------------------- textures
         { "Swarm Cloud", texture, "DEEP SWARM over a barely-detuned double: wide, seasick, huge.",
           { { rbOn, 1 }, { rbSnap, 0 }, { rbPitch, 0.2f }, { rbPrimary, 40 }, { rbTracking, 90 },
-            { swarmOn, 1 }, { swarmDeep, 1 }, { swarmDepth, 75 }, { swarmRate, 0.35f }, { swarmMix, 60 } } },
+            { swarmOn, 1 }, { swarmDeep, 1 }, { swarmDepth, 75 }, { swarmRate, 0.35f }, { swarmMix, 55 } } },
+        { "Seasick Swarm", texture, "Classic SWARM pushed hard over SMOKE: deep, fast, warbling chorus - wobbly and unsettling.",
+          { { swarmOn, 1 }, { swarmDepth, 90 }, { swarmRate, 2.2f }, { swarmMix, 50 },
+            { fuzzOn, 1 }, { fuzz, 70 }, { fuzzTone, 50 }, { fuzzScoop, 45 } } },
+        { "Swollen Smoke", texture, "Jumbo fuzz: MID voice, huge sustain and a deep SCOOP - the wall-of-fuzz starting point.",
+          { { fuzzOn, 1 }, { fuzzVoice, 1 }, { fuzz, 90 }, { fuzzTone, 45 }, { fuzzScoop, 75 } } },
+        { "Doom Cathedral", texture, "DOWN voice: crushing low-mids and the full bottom end, flat mids, a little clean BLEND for the pick.",
+          { { fuzzOn, 1 }, { fuzzVoice, 0 }, { fuzz, 85 }, { fuzzTone, 35 }, { fuzzScoop, 15 }, { fuzzBlend, 20 } } },
+        { "Glare Scream", texture, "UP voice with GLARE: tight, screaming upper mids and a gated octave-up that rips on hard picking.",
+          { { fuzzOn, 1 }, { fuzzVoice, 2 }, { fuzz, 75 }, { fuzzTone, 60 }, { fuzzScoop, 30 }, { fuzzGlare, 70 } } },
         { "Smoked Out", texture, "SMOKE with GATE: the notes sputter and tear apart as they decay.",
-          { { fuzzOn, 1 }, { fuzz, 85 }, { fuzzGate, 75 }, { fuzzTone, 45 } } },
+          { { fuzzOn, 1 }, { fuzz, 85 }, { fuzzGate, 75 }, { fuzzTone, 45 }, { fuzzScoop, 50 } } },
         { "Wing Beat Breakdown", texture, "Tempo-synced 1/16 hard WINGS gate on SMOKE. Hold +1 OCT for angry stabs.",
-          { { rise, 0 }, { fall, 0 }, { panic, 30 }, { fuzzOn, 1 }, { fuzz, 65 }, { flowOn, 1 }, { flowSync, 1 }, { flowDiv, 4 }, { flowHard, 1 } } },
+          { { rise, 0 }, { fall, 0 }, { panic, 30 }, { fuzzOn, 1 }, { fuzzVoice, 0 }, { fuzz, 80 }, { fuzzScoop, 60 }, { fuzzBlend, 15 }, { flowOn, 1 }, { flowSync, 1 }, { flowDiv, 4 }, { flowHard, 1 } } },
         { "Ghost Swarm", texture, "Smooth WINGS tremolo, a quiet octave-up DRONE with trails and SWARM - eerie clean parts.",
           { { rbOn, 1 }, { rbPitch, 12 }, { rbPrimary, 30 }, { rbMagic, 25 }, { rbTracking, 85 }, { rbTone, 45 },
             { swarmOn, 1 }, { swarmMix, 35 }, { flowOn, 1 }, { flowHard, 0 }, { flowSpeed, 5.5f }, { flowAmount, 70 } } },
 
         // ---------------------------------------------------------- swarm attack
         { "Queen Scream", attack, "Hot SMOKE into an angry, frenzied octave. Hold +2 OCT for the scream.",
-          { { rise, 15 }, { panic, 50 }, { chaos, 15 }, { speed, 20 }, { fuzzOn, 1 }, { fuzz, 80 }, { fuzzTone, 65 } } },
+          { { rise, 15 }, { panic, 50 }, { chaos, 15 }, { speed, 20 }, { fuzzOn, 1 }, { fuzzVoice, 2 }, { fuzz, 85 }, { fuzzTone, 60 }, { fuzzGlare, 35 } } },
         { "Broken Radio", attack, "Atonal loose HIVE, dark SMOKE after it and WINGS tremolo: a dying transmission.",
           { { rbOn, 1 }, { rbSnap, 0 }, { rbPitch, -2.6f }, { rbPrimary, 80 }, { rbTracking, 15 }, { rbTone, 30 },
             { fuzzOn, 1 }, { fuzzPost, 1 }, { fuzz, 45 }, { fuzzTone, 20 },
             { flowOn, 1 }, { flowHard, 0 }, { flowSpeed, 6.0f }, { flowAmount, 60 } } },
         { "Hive Collapse", attack, "Everything at once. One stomp on VENOM: +2 OCT (LINK), max regeneration and gated SMOKE.",
           { { panic, 40 }, { chaos, 40 }, { rbOn, 1 }, { rbPitch, 12 }, { rbPrimary, 60 }, { rbMagic, 100 }, { rbTracking, 55 },
-            { fuzzOn, 1 }, { fuzzPost, 1 }, { fuzz, 90 }, { fuzzGate, 30 }, { linkOct2, 1 } } },
+            { fuzzOn, 1 }, { fuzzPost, 1 }, { fuzz, 90 }, { fuzzScoop, 60 }, { fuzzGlare, 40 }, { fuzzGate, 30 }, { linkOct2, 1 } } },
     };
 }
 

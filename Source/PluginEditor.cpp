@@ -18,6 +18,7 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
       state (p.getAPVTS()),
       presetBar (p.getPresetManager()),
       switchModeSelector (param (state, ParamIDs::switchMode), { "MOMENTARY", "LATCH" }),
+      fuzzVoiceSelector (param (state, ParamIDs::fuzzVoice), { "DOWN", "MID", "UP" }),
       oct1Switch   (param (state, ParamIDs::oct1),      "+1 OCT", Colours::accent,  false, [this] { return footswitchesMomentary(); }),
       oct2Switch   (param (state, ParamIDs::oct2),      "+2 OCT", Colours::accent,  false, [this] { return footswitchesMomentary(); }),
       magicSwitch  (param (state, ParamIDs::magicHold), "VENOM",  juce::Colour (0xffb46bff), false, [this] { return footswitchesMomentary(); }),
@@ -47,7 +48,8 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     panicKnob.attach (state, panic, "ANGER: detunes the shifted signal against a second voice - dissonance, beating, sour clusters");
     chaosKnob.attach (state, chaos, "FRENZY: random pitch jumps around the octave - wider and faster as you turn it up");
     speedKnob.attach (state, speed, "BUZZ: all-pass feedback + amplitude modulation - slow phasing up to metallic ring-mod shrieks");
-    for (auto* c : std::initializer_list<juce::Component*> { &riseKnob, &fallKnob, &panicKnob, &chaosKnob, &speedKnob, &pitchScope })
+    stingMixKnob.attach (state, stingMix, "MIX: dry / shifted blend while a footswitch is down (100% = only the octave, like the pedal)");
+    for (auto* c : std::initializer_list<juce::Component*> { &riseKnob, &fallKnob, &panicKnob, &chaosKnob, &speedKnob, &stingMixKnob, &pitchScope })
         addAndMakeVisible (c);
 
     // RAINBOW
@@ -67,17 +69,22 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     attachButton (deepToggle, swarmDeep, "Deep mode: 8 voices with feedback");
     swarmDepthKnob.attach (state, swarmDepth, "Modulation depth");
     swarmRateKnob .attach (state, swarmRate,  "Modulation rate");
-    swarmMixKnob  .attach (state, swarmMix,   "Chorus mix");
+    swarmMixKnob  .attach (state, swarmMix,   "Chorus mix: 50% = dry and chorus both at full level, 100% = pure vibrato");
     for (auto* c : std::initializer_list<juce::Component*> { &swarmDepthKnob, &swarmRateKnob, &swarmMixKnob })
         addAndMakeVisible (c);
 
     // FUZZ
     attachButton (fuzzPower, fuzzOn,   "SMOKE fuzz on/off");
     attachButton (postToggle, fuzzPost, "POST: fuzz after the pitch effects. Off: fuzz before them (glitchier tracking)");
-    fuzzKnob    .attach (state, fuzz,     "Fuzz gain");
-    fuzzToneKnob.attach (state, fuzzTone, "Dark <-> scooped <-> bright");
-    fuzzGateKnob.attach (state, fuzzGate, "Starve the fuzz: sputtering, gated velcro decay");
-    for (auto* c : std::initializer_list<juce::Component*> { &fuzzKnob, &fuzzToneKnob, &fuzzGateKnob })
+    fuzzVoiceSelector.setTooltip ("VOICE: DOWN = doom low-mids and full bottom, MID = jumbo fuzz, UP = tight, screaming upper mids");
+    fuzzKnob     .attach (state, fuzz,      "FUZZ: from dirty crunch to wall-of-fuzz sustain");
+    fuzzToneKnob .attach (state, fuzzTone,  "TONE: dark <-> bright (also opens the fizz)");
+    fuzzScoopKnob.attach (state, fuzzScoop, "SCOOP: mid cut depth - flat mids at 0, deep jumbo-fuzz scoop at max");
+    fuzzGlareKnob.attach (state, fuzzGlare, "GLARE: gated octave-up that rips through on hard picking");
+    fuzzGateKnob .attach (state, fuzzGate,  "GATE: starve the fuzz - sputtering, gated velcro decay");
+    fuzzBlendKnob.attach (state, fuzzBlend, "BLEND: clean signal under the fuzz (pick attack and low end)");
+    for (auto* c : std::initializer_list<juce::Component*> { &fuzzVoiceSelector, &fuzzKnob, &fuzzToneKnob, &fuzzScoopKnob,
+                                                             &fuzzGlareKnob, &fuzzGateKnob, &fuzzBlendKnob })
         addAndMakeVisible (c);
 
     // FLOW
@@ -92,9 +99,7 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     addChildComponent (flowDivKnob);
 
     // OUTPUT
-    mixKnob   .attach (state, mix,    "Dry / effect blend (latency aligned)");
     volumeKnob.attach (state, output, "Output level");
-    addAndMakeVisible (mixKnob);
     addAndMakeVisible (volumeKnob);
 
     // Footswitches
@@ -140,18 +145,18 @@ void MainPanel::setSectionDimmed (std::initializer_list<juce::Component*> comps,
 void MainPanel::resized()
 {
     // Header
-    presetBar.setBounds (222, 16, 510, 32);
-    switchModeSelector.setBounds (746, 18, 188, 28);
+    presetBar.setBounds (222, 16, 580, 32);
+    switchModeSelector.setBounds (822, 18, 196, 28);
     infoButton.setBounds (baseWidth - 16 - 32, 16, 32, 32);
 
     // Section areas
-    noiseArea   = { 16.0f,  76.0f, 476.0f, 262.0f };
-    rainbowArea = { 504.0f, 76.0f, 480.0f, 262.0f };
-    const float rowY = 350.0f, rowH = 190.0f, w = 233.0f;
-    swarmArea  = { 16.0f,  rowY, w, rowH };
-    fuzzArea   = { 261.0f, rowY, w, rowH };
-    flowArea   = { 506.0f, rowY, w, rowH };
-    outputArea = { 751.0f, rowY, w, rowH };
+    noiseArea   = { 16.0f,  76.0f, 536.0f, 262.0f };
+    rainbowArea = { 564.0f, 76.0f, 520.0f, 262.0f };
+    const float rowY = 350.0f, rowH = 190.0f;
+    swarmArea  = { 16.0f,  rowY, 226.0f, rowH };
+    fuzzArea   = { 254.0f, rowY, 456.0f, rowH };
+    flowArea   = { 722.0f, rowY, 236.0f, rowH };
+    outputArea = { 970.0f, rowY, 114.0f, rowH };
 
     auto powerFor = [] (juce::Rectangle<float> a) { return juce::Rectangle<int> ((int) a.getRight() - 40, (int) a.getY() + 8, 26, 26); };
     auto pillFor  = [] (juce::Rectangle<float> a, int slot) { return juce::Rectangle<int> ((int) a.getRight() - 40 - 66 * (slot + 1), (int) a.getY() + 9, 60, 24); };
@@ -160,11 +165,11 @@ void MainPanel::resized()
     downToggle.setBounds ((int) noiseArea.getRight() - 16 - 70, (int) noiseArea.getY() + 9, 70, 24);
     {
         const int y = (int) noiseArea.getY() + 44;
-        int x = (int) noiseArea.getX() + 14;
-        for (auto* k : { &riseKnob, &fallKnob, &panicKnob, &chaosKnob, &speedKnob })
+        int x = (int) noiseArea.getX() + 12;
+        for (auto* k : { &riseKnob, &fallKnob, &panicKnob, &chaosKnob, &speedKnob, &stingMixKnob })
         {
-            k->setBounds (x, y, 88, 106);
-            x += 90;
+            k->setBounds (x, y, 84, 106);
+            x += 85;
         }
         pitchScope.setBounds ((int) noiseArea.getX() + 16, (int) noiseArea.getY() + 160, (int) noiseArea.getWidth() - 32, 88);
     }
@@ -173,19 +178,19 @@ void MainPanel::resized()
     rainbowPower.setBounds (powerFor (rainbowArea));
     snapToggle.setBounds (pillFor (rainbowArea, 0));
     {
-        const int x0 = (int) rainbowArea.getX() + 45;
+        const int x0 = (int) rainbowArea.getX() + 55;
         const int y1 = (int) rainbowArea.getY() + 40, y2 = (int) rainbowArea.getY() + 148;
         int i = 0;
         for (auto* k : { &pitchKnob, &primaryKnob, &secondaryKnob })
-            k->setBounds (x0 + 145 * i++, y1, 100, 106);
+            k->setBounds (x0 + 155 * i++, y1, 100, 106);
         i = 0;
         for (auto* k : { &toneKnob, &trackingKnob, &magicKnob })
-            k->setBounds (x0 + 145 * i++, y2, 100, 106);
+            k->setBounds (x0 + 155 * i++, y2, 100, 106);
     }
 
     auto threeKnobs = [] (juce::Rectangle<float> a, std::initializer_list<Knob*> knobs)
     {
-        const int kw = 72, y = (int) a.getY() + 58;
+        const int kw = knobs.size() > 3 ? 70 : 72, y = (int) a.getY() + 58;
         const int gap = ((int) a.getWidth() - kw * (int) knobs.size()) / ((int) knobs.size() + 1);
         int x = (int) a.getX() + gap;
         for (auto* k : knobs)
@@ -203,7 +208,8 @@ void MainPanel::resized()
     // FUZZ
     fuzzPower.setBounds (powerFor (fuzzArea));
     postToggle.setBounds (pillFor (fuzzArea, 0));
-    threeKnobs (fuzzArea, { &fuzzKnob, &fuzzToneKnob, &fuzzGateKnob });
+    fuzzVoiceSelector.setBounds (postToggle.getX() - 8 - 150, (int) fuzzArea.getY() + 10, 150, 22);
+    threeKnobs (fuzzArea, { &fuzzKnob, &fuzzToneKnob, &fuzzScoopKnob, &fuzzGlareKnob, &fuzzGateKnob, &fuzzBlendKnob });
 
     // FLOW
     flowPower.setBounds (powerFor (flowArea));
@@ -213,7 +219,7 @@ void MainPanel::resized()
     flowDivKnob.setBounds (flowSpeedKnob.getBounds());
 
     // OUTPUT
-    threeKnobs (outputArea, { &mixKnob, &volumeKnob });
+    threeKnobs (outputArea, { &volumeKnob });
 
     // Footer: footswitches centred (LINK mini switches beside the octaves), meters at the sides
     {
@@ -320,7 +326,8 @@ void MainPanel::tick()
 
     setSectionDimmed ({ &snapToggle, &pitchKnob, &primaryKnob, &secondaryKnob, &toneKnob, &trackingKnob, &magicKnob }, ! states[1]);
     setSectionDimmed ({ &deepToggle, &swarmDepthKnob, &swarmRateKnob, &swarmMixKnob }, ! states[2]);
-    setSectionDimmed ({ &postToggle, &fuzzKnob, &fuzzToneKnob, &fuzzGateKnob }, ! states[3]);
+    setSectionDimmed ({ &postToggle, &fuzzVoiceSelector, &fuzzKnob, &fuzzToneKnob, &fuzzScoopKnob,
+                        &fuzzGlareKnob, &fuzzGateKnob, &fuzzBlendKnob }, ! states[3]);
     setSectionDimmed ({ &hardToggle, &syncToggle, &flowAmountKnob, &flowSpeedKnob, &flowDivKnob }, ! states[4]);
 
     if (states != lastSectionStates)

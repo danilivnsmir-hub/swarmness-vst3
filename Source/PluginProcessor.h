@@ -74,7 +74,7 @@ private:
     {
         std::atomic<float>* oct1 {};       std::atomic<float>* oct2 {};        std::atomic<float>* noiseDown {};
         std::atomic<float>* rise {};       std::atomic<float>* panic {};       std::atomic<float>* chaos {};
-        std::atomic<float>* speed {};      std::atomic<float>* fall {};
+        std::atomic<float>* speed {};      std::atomic<float>* fall {};        std::atomic<float>* stingMix {};
         std::atomic<float>* rbOn {};       std::atomic<float>* rbPitch {};     std::atomic<float>* rbSnap {};
         std::atomic<float>* rbPrimary {};  std::atomic<float>* rbSecondary {}; std::atomic<float>* rbTone {};
         std::atomic<float>* rbTracking {}; std::atomic<float>* rbMagic {};     std::atomic<float>* magicHold {};
@@ -82,15 +82,16 @@ private:
         std::atomic<float>* swarmOn {};    std::atomic<float>* swarmDeep {};   std::atomic<float>* swarmRate {};
         std::atomic<float>* swarmDepth {}; std::atomic<float>* swarmMix {};
         std::atomic<float>* fuzzOn {};     std::atomic<float>* fuzzPost {};    std::atomic<float>* fuzz {};
-        std::atomic<float>* fuzzTone {};   std::atomic<float>* fuzzGate {};
+        std::atomic<float>* fuzzTone {};   std::atomic<float>* fuzzGate {};    std::atomic<float>* fuzzVoice {};
+        std::atomic<float>* fuzzScoop {};  std::atomic<float>* fuzzGlare {};   std::atomic<float>* fuzzBlend {};
         std::atomic<float>* flowOn {};     std::atomic<float>* flowHard {};    std::atomic<float>* flowSync {};
         std::atomic<float>* flowAmount {}; std::atomic<float>* flowSpeed {};   std::atomic<float>* flowDiv {};
-        std::atomic<float>* mix {};        std::atomic<float>* output {};      std::atomic<float>* bypass {};
+        std::atomic<float>* output {};      std::atomic<float>* bypass {};
     } p;
 
     juce::AudioParameterBool* bypassParam = nullptr;
 
-    // DSP chain: [fuzz pre] -> noise -> rainbow -> swarm -> [fuzz post] -> mix -> flow
+    // DSP chain: [fuzz pre] -> noise -> rainbow -> swarm -> [fuzz post] -> flow (each stage has its own blend)
     FuzzStage    fuzzPre, fuzzPost;
     NoiseStage   noise;
     RainbowStage rainbow;
@@ -99,7 +100,7 @@ private:
 
     juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::None> dryDelay { 1 };
     juce::AudioBuffer<float> dryBuffer;
-    juce::SmoothedValue<float> mixSmoothed, outputGainSmoothed, bypassSmoothed;
+    juce::SmoothedValue<float> outputGainSmoothed, bypassSmoothed;
 
     double currentSampleRate = 44100.0;
     int maxBlockSize = 512;

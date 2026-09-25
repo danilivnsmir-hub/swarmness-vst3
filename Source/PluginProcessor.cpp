@@ -30,7 +30,7 @@ SwarmnessAudioProcessor::SwarmnessAudioProcessor()
     namespace id = ParamIDs;
     p.oct1 = get (id::oct1);             p.oct2 = get (id::oct2);               p.noiseDown = get (id::noiseDown);
     p.rise = get (id::rise);             p.panic = get (id::panic);             p.chaos = get (id::chaos);
-    p.speed = get (id::speed);           p.fall = get (id::fall);
+    p.speed = get (id::speed);           p.fall = get (id::fall);               p.stingMix = get (id::stingMix);
     p.rbOn = get (id::rbOn);             p.rbPitch = get (id::rbPitch);         p.rbSnap = get (id::rbSnap);
     p.rbPrimary = get (id::rbPrimary);   p.rbSecondary = get (id::rbSecondary); p.rbTone = get (id::rbTone);
     p.rbTracking = get (id::rbTracking); p.rbMagic = get (id::rbMagic);         p.magicHold = get (id::magicHold);
@@ -38,10 +38,11 @@ SwarmnessAudioProcessor::SwarmnessAudioProcessor()
     p.swarmOn = get (id::swarmOn);       p.swarmDeep = get (id::swarmDeep);     p.swarmRate = get (id::swarmRate);
     p.swarmDepth = get (id::swarmDepth); p.swarmMix = get (id::swarmMix);
     p.fuzzOn = get (id::fuzzOn);         p.fuzzPost = get (id::fuzzPost);       p.fuzz = get (id::fuzz);
-    p.fuzzTone = get (id::fuzzTone);     p.fuzzGate = get (id::fuzzGate);
+    p.fuzzTone = get (id::fuzzTone);     p.fuzzGate = get (id::fuzzGate);       p.fuzzVoice = get (id::fuzzVoice);
+    p.fuzzScoop = get (id::fuzzScoop);   p.fuzzGlare = get (id::fuzzGlare);     p.fuzzBlend = get (id::fuzzBlend);
     p.flowOn = get (id::flowOn);         p.flowHard = get (id::flowHard);       p.flowSync = get (id::flowSync);
     p.flowAmount = get (id::flowAmount); p.flowSpeed = get (id::flowSpeed);     p.flowDiv = get (id::flowDiv);
-    p.mix = get (id::mix);               p.output = get (id::output);           p.bypass = get (id::bypass);
+    p.output = get (id::output);           p.bypass = get (id::bypass);
 
     bypassParam = dynamic_cast<juce::AudioParameterBool*> (apvts.getParameter (id::bypass));
     jassert (bypassParam != nullptr);
@@ -81,7 +82,6 @@ void SwarmnessAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBl
         s.reset (sampleRate, seconds);
         s.setCurrentAndTargetValue (value);
     };
-    init (mixSmoothed,        0.03, pct (p.mix));
     init (outputGainSmoothed, 0.03, juce::Decibels::decibelsToGain (p.output->load()));
     init (bypassSmoothed,     0.02, on (p.bypass) ? 1.0f : 0.0f);
 
@@ -155,14 +155,22 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     const bool anySwitchHeld = oct1Held || oct2Held || magicHeld;
 
     const bool fuzzOn = on (p.fuzzOn), fuzzIsPost = on (p.fuzzPost);
-    fuzzPre.setParams (fuzzOn && ! fuzzIsPost, pct (p.fuzz), pct (p.fuzzTone), pct (p.fuzzGate));
+    FuzzStage::Settings fuzzSettings;
+    fuzzSettings.fuzz  = pct (p.fuzz);
+    fuzzSettings.tone  = pct (p.fuzzTone);
+    fuzzSettings.scoop = pct (p.fuzzScoop);
+    fuzzSettings.glare = pct (p.fuzzGlare);
+    fuzzSettings.gate  = pct (p.fuzzGate);
+    fuzzSettings.blend = pct (p.fuzzBlend);
+    fuzzSettings.voice = (int) p.fuzzVoice->load();
+    fuzzPre.setParams (fuzzOn && ! fuzzIsPost, fuzzSettings);
     fuzzPre.process (audio, numChannels, numSamples);
 
     // ---- NOISE (footswitch octaves)
     {
         const float dir = on (p.noiseDown) ? -1.0f : 1.0f;
         const float interval = oct2Held ? 24.0f : (oct1Held ? 12.0f : 0.0f);
-        noise.setParams (p.rise->load(), p.fall->load(), pct (p.panic), pct (p.chaos), pct (p.speed));
+        noise.setParams (p.rise->load(), p.fall->load(), pct (p.panic), pct (p.chaos), pct (p.speed), pct (p.stingMix));
         noise.setInterval (dir * interval);
         noise.process (audio, numChannels, numSamples);
         meters.pitchSemitones.store (noise.getCurrentSemitones(), std::memory_order_relaxed);
@@ -184,20 +192,8 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     swarmChorus.process (audio, numChannels, numSamples);
 
     // ---- FUZZ (post)
-    fuzzPost.setParams (fuzzOn && fuzzIsPost, pct (p.fuzz), pct (p.fuzzTone), pct (p.fuzzGate));
+    fuzzPost.setParams (fuzzOn && fuzzIsPost, fuzzSettings);
     fuzzPost.process (audio, numChannels, numSamples);
-
-    // ---- MIX (linear: the chain output is often correlated with the dry signal)
-    mixSmoothed.setTargetValue (pct (p.mix));
-    for (int i = 0; i < numSamples; ++i)
-    {
-        const float m = mixSmoothed.getNextValue();
-        for (int ch = 0; ch < numChannels; ++ch)
-        {
-            const float dry = dryBuffer.getSample (ch, i);
-            audio[ch][i] = dry + m * (audio[ch][i] - dry);
-        }
-    }
 
     // ---- FLOW (gate over the whole signal)
     const bool flowOn = on (p.flowOn);

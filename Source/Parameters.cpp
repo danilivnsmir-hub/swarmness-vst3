@@ -71,6 +71,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     noise->addChild (percent (panic, "Anger", 0.0f));
     noise->addChild (percent (chaos, "Frenzy", 0.0f));
     noise->addChild (percent (speed, "Buzz", 0.0f));
+    noise->addChild (percent (stingMix, "Sting Mix", 100.0f));
 
     // ---------------------------------------------------------------- RAINBOW
     auto rainbow = std::make_unique<Group> ("rainbow", "Hive", "|");
@@ -104,9 +105,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     auto fz = std::make_unique<Group> ("fuzz", "Smoke", "|");
     fz->addChild (toggle (fuzzOn, "Smoke On", false));
     fz->addChild (toggle (fuzzPost, "Smoke Post", false));
-    fz->addChild (percent (fuzz, "Smoke Fuzz", 60.0f));
+    fz->addChild (percent (fuzz, "Smoke Fuzz", 70.0f));
     fz->addChild (percent (fuzzTone, "Smoke Tone", 50.0f));
+    fz->addChild (std::make_unique<juce::AudioParameterChoice> (pid (fuzzVoice), "Smoke Voice", ParamChoices::fuzzVoices, 1));
+    fz->addChild (percent (fuzzScoop, "Smoke Scoop", 40.0f));
+    fz->addChild (percent (fuzzGlare, "Smoke Glare", 0.0f));
     fz->addChild (percent (fuzzGate, "Smoke Gate", 0.0f));
+    fz->addChild (percent (fuzzBlend, "Smoke Blend", 0.0f));
 
     // ------------------------------------------------------------------- FLOW
     auto flow = std::make_unique<Group> ("flow", "Wings", "|");
@@ -120,7 +125,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
 
     // ----------------------------------------------------------------- OUTPUT
     auto out = std::make_unique<Group> ("output", "Output", "|");
-    out->addChild (percent (mix, "Mix", 100.0f));
     out->addChild (std::make_unique<juce::AudioParameterFloat> (
         pid (output), "Output", juce::NormalisableRange<float> (ParamRanges::outputMinDb, ParamRanges::outputMaxDb, 0.1f), 0.0f,
         Attr().withLabel ("dB").withStringFromValueFunction ([] (float v, int)

@@ -19,6 +19,7 @@ namespace ParamIDs
     inline constexpr const char* panic       = "panic";
     inline constexpr const char* chaos       = "chaos";
     inline constexpr const char* speed       = "speed";
+    inline constexpr const char* stingMix    = "stingMix";     // dry / shifted blend while a footswitch is down
 
     // HIVE: harmony voices with regeneration (DRONE = primary, QUEEN = secondary, VENOM = magic)
     inline constexpr const char* rbOn        = "rbOn";
@@ -46,6 +47,10 @@ namespace ParamIDs
     inline constexpr const char* fuzz        = "fuzz";
     inline constexpr const char* fuzzTone    = "fuzzTone";
     inline constexpr const char* fuzzGate    = "fuzzGate";
+    inline constexpr const char* fuzzVoice   = "fuzzVoice";    // DOWN (doom low-mids) / MID / UP (screaming upper mids)
+    inline constexpr const char* fuzzScoop   = "fuzzScoop";    // mid scoop depth
+    inline constexpr const char* fuzzGlare   = "fuzzGlare";    // gated octave-up
+    inline constexpr const char* fuzzBlend   = "fuzzBlend";    // clean signal under the fuzz
 
     // WINGS (rhythmic gate)
     inline constexpr const char* flowOn      = "flowOn";
@@ -56,7 +61,6 @@ namespace ParamIDs
     inline constexpr const char* flowDiv     = "flowDiv";
 
     // OUTPUT / GLOBAL
-    inline constexpr const char* mix         = "mix";
     inline constexpr const char* output      = "output";
     inline constexpr const char* switchMode  = "switchMode";   // footswitch behaviour: momentary / latch
     inline constexpr const char* bypass      = "bypass";
@@ -71,6 +75,7 @@ namespace ParamRanges
 namespace ParamChoices
 {
     inline const juce::StringArray switchModes { "Momentary", "Latch" };
+    inline const juce::StringArray fuzzVoices  { "Down", "Mid", "Up" };
     inline const juce::StringArray divisions   { "1/1", "1/2", "1/4", "1/8", "1/16", "1/32",
                                                  "1/4T", "1/8T", "1/16T", "1/8D", "1/16D" };
 

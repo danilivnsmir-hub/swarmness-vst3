@@ -247,10 +247,12 @@ namespace
 
     void testDryAlignment()
     {
-        std::printf ("\nMix 0%% returns the dry signal aligned with the reported latency\n");
+        std::printf ("\nSTING MIX 0%% with +1 OCT held returns the dry signal aligned with the reported latency\n");
         SwarmnessAudioProcessor p;
-        p.getPresetManager().loadPreset ("Drowning Hive");
-        setParam (p, ParamIDs::mix, 0.0f);
+        p.getPresetManager().loadPreset ("Killer Bee");
+        setParam (p, ParamIDs::fuzzOn, 0.0f);
+        setParam (p, ParamIDs::stingMix, 0.0f);
+        setParam (p, ParamIDs::oct1, 1.0f);
         const double sr = 44100.0;
         auto input = makeGuitar (sr, 44100);
         auto out = render (p, input, sr, 512);
@@ -394,15 +396,90 @@ namespace
         const double sr = 48000.0;
         auto input = makeGuitar (sr, 96000);
         const double inRms = juce::Decibels::gainToDecibels ((double) input.getRMSLevel (0, 24000, 72000));
-        for (float fz : { 0.0f, 50.0f, 100.0f })
+        const char* voices[] = { "DOWN", "MID", "UP" };
+        for (int voice = 0; voice < 3; ++voice)
+            for (float fz : { 0.0f, 50.0f, 100.0f })
+            {
+                SwarmnessAudioProcessor p;
+                resetToInit (p);
+                setParam (p, ParamIDs::fuzzOn, 1.0f);
+                setParam (p, ParamIDs::fuzzVoice, (float) voice);
+                setParam (p, ParamIDs::fuzz, fz);
+                auto out = render (p, input, sr, 256);
+                const double rms = juce::Decibels::gainToDecibels ((double) out.getRMSLevel (0, 24000, 72000));
+                check (rms - inRms > -3.0 && rms - inRms < 14.0,
+                       juce::String::formatted ("%-4s fuzz %3.0f%%: %+.1f dB vs input", voices[voice], fz, rms - inRms));
+            }
+
+        for (auto [id, name] : { std::pair { ParamIDs::fuzzGlare, "GLARE" }, std::pair { ParamIDs::fuzzBlend, "BLEND" },
+                                 std::pair { ParamIDs::fuzzScoop, "SCOOP" } })
         {
             SwarmnessAudioProcessor p;
             resetToInit (p);
             setParam (p, ParamIDs::fuzzOn, 1.0f);
-            setParam (p, ParamIDs::fuzz, fz);
+            setParam (p, ParamIDs::fuzz, 100.0f);
+            setParam (p, ParamIDs::fuzzTone, 100.0f);
+            setParam (p, id, 100.0f);
             auto out = render (p, input, sr, 256);
+            const float peak = out.getMagnitude (0, out.getNumSamples());
             const double rms = juce::Decibels::gainToDecibels ((double) out.getRMSLevel (0, 24000, 72000));
-            check (rms - inRms > -6.0 && rms - inRms < 14.0, juce::String::formatted ("fuzz %3.0f%%: %+.1f dB vs input", fz, rms - inRms));
+            check (peak < 2.0f && rms - inRms < 16.0, juce::String::formatted ("%s max: %+.1f dB vs input, peak %.2f", name, rms - inRms, peak));
+        }
+    }
+
+    static double goertzelDb (const juce::AudioBuffer<float>& b, double sr, double freq, int start, int n)
+    {
+        const double w = juce::MathConstants<double>::twoPi * freq / sr, c = 2.0 * std::cos (w);
+        double s1 = 0.0, s2 = 0.0;
+        for (int i = start; i < start + n; ++i)
+        {
+            const double s0 = b.getSample (0, i) + c * s1 - s2;
+            s2 = s1;
+            s1 = s0;
+        }
+        return juce::Decibels::gainToDecibels (std::sqrt (s1 * s1 + s2 * s2 - c * s1 * s2) / n + 1.0e-12);
+    }
+
+    void testGlareOctave()
+    {
+        std::printf ("\nSMOKE GLARE adds an octave-up\n");
+        const double sr = 48000.0;
+        auto input = makeSine (sr, 48000, 110.0, 0.3f);
+        double second[2] {};
+        for (int g = 0; g < 2; ++g)
+        {
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            setParam (p, ParamIDs::fuzzOn, 1.0f);
+            setParam (p, ParamIDs::fuzz, 60.0f);
+            setParam (p, ParamIDs::fuzzGlare, g == 0 ? 0.0f : 100.0f);
+            auto out = render (p, input, sr, 256);
+            second[g] = goertzelDb (out, sr, 220.0, 12000, 24000) - goertzelDb (out, sr, 110.0, 12000, 24000);
+        }
+        check (second[1] > second[0] + 6.0,
+               juce::String::formatted ("2nd harmonic vs fundamental: %.1f dB -> %.1f dB with GLARE", second[0], second[1]));
+    }
+
+    void testSwarmBounded()
+    {
+        std::printf ("\nSWARM: extreme settings stay bounded\n");
+        const double sr = 48000.0;
+        auto input = makeGuitar (sr, 96000);
+        const double inRms = juce::Decibels::gainToDecibels ((double) input.getRMSLevel (0, 24000, 72000));
+        for (bool deep : { false, true })
+        {
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            setParam (p, ParamIDs::swarmOn, 1.0f);
+            setParam (p, ParamIDs::swarmDeep, deep ? 1.0f : 0.0f);
+            setParam (p, ParamIDs::swarmDepth, 100.0f);
+            setParam (p, ParamIDs::swarmRate, 8.0f);
+            setParam (p, ParamIDs::swarmMix, 50.0f);
+            auto out = render (p, input, sr, 256);
+            const float peak = out.getMagnitude (0, out.getNumSamples());
+            const double rms = juce::Decibels::gainToDecibels ((double) out.getRMSLevel (0, 24000, 72000));
+            check (peak < 1.5f && std::abs (rms - inRms) < 9.0,
+                   juce::String::formatted ("%s depth 100%%, mix 50%%: %+.1f dB vs input, peak %.2f", deep ? "deep   " : "classic", rms - inRms, peak));
         }
     }
 
@@ -432,7 +509,7 @@ namespace
         auto& pm = p.getPresetManager();
         pm.loadPreset ("Frenzy");
         check (! pm.isDirty(), "clean after load");
-        setParam (p, ParamIDs::mix, 12.0f);
+        setParam (p, ParamIDs::fuzzBlend, 12.0f);
         check (pm.isDirty(), "dirty after edit");
         pm.loadPreset ("Frenzy");
         setParam (p, ParamIDs::oct2, 1.0f);
@@ -579,6 +656,8 @@ int main (int argc, char** argv)
     testRainbowInterval();
     testMagicBounded();
     testFuzzLevel();
+    testGlareOctave();
+    testSwarmBounded();
     testStateRoundTrip();
     testPresetDirtyTracking();
     testPresetBanks();

@@ -7,12 +7,14 @@
 /**
  * SWARM: multi-voice stereo ensemble.
  *
- *  Classic : 4 voices, ~8 ms base delay, gentle depth - a lush studio chorus.
- *  Deep    : 8 voices, ~15 ms base delay, wider depth, light feedback and slow random
- *            rate drift per voice - a dense, detuned "swarm".
+ *  Classic : 4 voices, ~7 ms base delay, up to ~9 ms of sweep - from lush to seasick.
+ *  Deep    : 8 voices, ~12 ms base delay, up to ~16 ms of sweep, strong filtered feedback
+ *            and random rate drift per voice - a dense, detuned, metallic "swarm".
  *
- * Voices are spread across the stereo field, read with Hermite interpolation and
- * high-passed at 150 Hz so the low end stays tight and mono-compatible.
+ * The wet path is coloured like a bucket-brigade chorus (dark low-pass, soft saturation),
+ * voices are spread across the stereo field and high-passed at 90 Hz so the low end stays
+ * tight and mono-compatible. MIX follows a pedal-style law: at 50% both dry and wet are at
+ * full level, above that the dry fades out towards pure vibrato.
  */
 class SwarmChorus
 {
@@ -38,8 +40,11 @@ public:
         for (auto& f : lowCut)
         {
             f.setType (swarm::SVF::Type::highPass);
-            f.setParams (sr, 150.0f, 0.7071f);
+            f.setParams (sr, 90.0f, 0.7071f);
         }
+        for (auto& f : bbdLp)
+            f.setType (swarm::SVF::Type::lowPass);
+        lastBbdHz = -1.0f;
 
         reset();
     }
@@ -49,6 +54,8 @@ public:
         for (auto& b : buffers)
             std::fill (b.begin(), b.end(), 0.0f);
         for (auto& f : lowCut)
+            f.reset();
+        for (auto& f : bbdLp)
             f.reset();
         writePos = 0;
         feedbackL = feedbackR = 0.0f;
@@ -99,6 +106,15 @@ public:
                 t = 1.0f + 0.12f * rng.nextBipolar();
         }
 
+        // BBD darkness: brighter in classic mode, darker in deep mode
+        const float bbdHz = 7000.0f - 2500.0f * modeBlend.getCurrentValue();
+        if (std::abs (bbdHz - lastBbdHz) > 20.0f)
+        {
+            lastBbdHz = bbdHz;
+            for (auto& f : bbdLp)
+                f.setParams (sampleRate, bbdHz, 0.6f);
+        }
+
         for (int i = 0; i < numSamples; ++i)
         {
             const float inL = audio[0][i];
@@ -108,12 +124,12 @@ public:
             const float depth = depthSmoothed.getNextValue();
             const float mix   = mixSmoothed.getNextValue();
 
-            const float fb = 0.22f * blend;
+            const float fb = 0.1f + 0.3f * blend;
             buffers[0][(size_t) writePos] = inL + fb * feedbackL;
             buffers[1][(size_t) writePos] = inR + fb * feedbackR;
 
-            const float baseMs  = 8.0f + 7.0f * blend;
-            const float depthMs = (2.5f + 4.5f * blend) * depth;
+            const float baseMs  = 7.0f + 5.0f * blend;
+            const float depthMs = (9.0f + 7.0f * blend) * depth * (0.3f + 0.7f * depth);
             const float baseSamples  = baseMs  * 0.001f * (float) sampleRate;
             const float depthSamples = depthMs * 0.001f * (float) sampleRate;
 
@@ -154,15 +170,19 @@ public:
             wetL *= norm * 1.414f;
             wetR *= norm * 1.414f;
 
-            feedbackL = wetL;
-            feedbackR = wetR;
+            // Bucket-brigade colour: dark and slightly saturated (also inside the feedback loop)
+            wetL = std::tanh (1.4f * bbdLp[0].process (wetL)) * (1.0f / 1.4f);
+            wetR = std::tanh (1.4f * bbdLp[1].process (wetR)) * (1.0f / 1.4f);
 
-            // Keep lows centred and clean: high-pass only the wet voices.
+            // Keep lows centred and clean: high-pass only the wet voices (feedback is taken
+            // after the high-pass so the coherent low end can never run away).
             const float hpL = lowCut[0].process (wetL);
             const float hpR = lowCut[1].process (wetR);
+            feedbackL = hpL;
+            feedbackR = hpR;
 
-            float dryG, wetG;
-            swarm::equalPowerGains (mix, dryG, wetG);
+            const float dryG = juce::jmin (1.0f, 2.0f * (1.0f - mix));
+            const float wetG = juce::jmin (1.0f, 2.0f * mix) * 1.15f;
 
             audio[0][i] = dryG * inL + wetG * hpL;
             if (numChannels > 1)
@@ -192,7 +212,8 @@ private:
     int driftCounter = 0;
     swarm::FastRandom rng { 0xC0FFEEu };
 
-    std::array<swarm::SVF, 2> lowCut;
+    std::array<swarm::SVF, 2> lowCut, bbdLp;
+    float lastBbdHz = -1.0f;
     float feedbackL = 0.0f, feedbackR = 0.0f;
 
     float rate = 0.6f, targetDepth = 0.5f, targetMix = 0.0f;
