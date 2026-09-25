@@ -764,7 +764,7 @@ void InfoOverlay::paint (juce::Graphics& g)
         { "RAW",      "STING and HIVE: lo-fi pedal character on top of the in-tune shifter - cheap converters and a slow pitch warble "
                       "(deeper at low TRACKING in HIVE). Off = clean. HIVE runs in parallel: it harmonises the note you play, not the octave." },
         { "HIVE",     "Harmony voices: PITCH (-12..+12 st, SNAP = semitones), DRONE = main voice, QUEEN = its octave, TONE. TRACKING low = lag "
-                      "and tone clusters. TRAILS = repeats that climb / fall by PITCH each time, TIME = their spacing (SYNC = tempo)." },
+                      "and tone clusters. TRAILS = repeats climbing / falling by PITCH, TIME = their spacing (SYNC = tempo). MIX 100% = HIVE only." },
         { "VENOM",    "The VENOM footswitch pushes the TRAILS into self-oscillation - even with HIVE or the plug-in off. "
                       "LINK mini switches next to the octaves make VENOM engage +1 / +2 OCT too." },
         { "SWARM",    "Stereo chorus with bucket-brigade colour. DEEP = 8 voices with feedback. MIX 50% = dry and chorus both full, 100% = vibrato." },

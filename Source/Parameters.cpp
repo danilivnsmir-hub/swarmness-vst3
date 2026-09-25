@@ -89,6 +89,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     rainbow->addChild (percent (rbSecondary, "Queen", 0.0f));
     rainbow->addChild (percent (rbTone, "Hive Tone", 60.0f));
     rainbow->addChild (percent (rbTracking, "Hive Tracking", 80.0f));
+    rainbow->addChild (percent (rbMix, "Hive Mix", 50.0f));
     rainbow->addChild (percent (rbMagic, "Hive Trails", 0.0f));
     rainbow->addChild (std::make_unique<juce::AudioParameterFloat> (
         pid (rbTime), "Hive Time", skewedRange (40.0f, 1200.0f, 250.0f, 1.0f), 180.0f,

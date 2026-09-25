@@ -31,6 +31,7 @@ namespace ParamIDs
     inline constexpr const char* rbSecondary = "rbSecondary";
     inline constexpr const char* rbTone      = "rbTone";
     inline constexpr const char* rbTracking  = "rbTracking";
+    inline constexpr const char* rbMix       = "rbMix";        // dry / HIVE voices (50% = both full, 100% = voices only)
     inline constexpr const char* rbMagic     = "rbMagic";      // TRAILS: regeneration (repeats climb / fall by PITCH)
     inline constexpr const char* rbTime      = "rbTime";       // time between repeats (free)
     inline constexpr const char* rbSync      = "rbSync";       // repeats locked to the host tempo

@@ -79,7 +79,7 @@ private:
         std::atomic<float>* rbPrimary {};  std::atomic<float>* rbSecondary {}; std::atomic<float>* rbTone {};
         std::atomic<float>* rbTracking {}; std::atomic<float>* rbMagic {};     std::atomic<float>* magicHold {};
         std::atomic<float>* linkOct1 {};   std::atomic<float>* linkOct2 {};
-        std::atomic<float>* rbTime {};     std::atomic<float>* rbSync {};      std::atomic<float>* rbDiv {};
+        std::atomic<float>* rbMix {};      std::atomic<float>* rbTime {};     std::atomic<float>* rbSync {};      std::atomic<float>* rbDiv {};
         std::atomic<float>* swarmOn {};    std::atomic<float>* swarmDeep {};   std::atomic<float>* swarmRate {};
         std::atomic<float>* swarmDepth {}; std::atomic<float>* swarmMix {};
         std::atomic<float>* fuzzOn {};     std::atomic<float>* fuzzPost {};    std::atomic<float>* fuzz {};
@@ -102,7 +102,7 @@ private:
     juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::None> dryDelay { 1 };
     juce::AudioBuffer<float> dryBuffer, hiveBuffer;
     std::vector<float> inputGainTrack;     // per-sample INPUT gain of the current block
-    juce::SmoothedValue<float> inputGainSmoothed, outputGainSmoothed, bypassSmoothed;
+    juce::SmoothedValue<float> inputGainSmoothed, outputGainSmoothed, hiveVoiceGain, bypassSmoothed;
 
     double currentSampleRate = 44100.0;
     int maxBlockSize = 512;

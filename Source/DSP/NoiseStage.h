@@ -129,6 +129,7 @@ public:
         panicBuffer.setSize (2, juce::jmax (maxBlockSize, kControlBlock), false, false, true);
         dryBuffer  .setSize (2, juce::jmax (maxBlockSize, kControlBlock), false, false, true);
         chaosSmoother.setTime (sr / kControlBlock, 0.012);
+        dryLevelCoeff = (float) (1.0 - std::exp (-1.0 / (0.02 * sr)));
         envAttack  = (float) (1.0 - std::exp (-1.0 / (0.0005 * sr)));
         envRelease = (float) (1.0 - std::exp (-1.0 / (0.025 * sr)));
         gainUp     = (float) (1.0 - std::exp (-1.0 / (0.001 * sr)));
@@ -182,6 +183,9 @@ public:
         chaos  = chaos01;
         speed  = speed01;
     }
+
+    /** Level of the unshifted (dry) part of the output - HIVE MIX turns it down to leave only the effects. */
+    void setDryLevel (float level01) noexcept { dryLevelTarget = level01; }
 
     bool isEngaged() const noexcept { return std::abs (targetSemis) > 0.001f || std::abs (currentSemis) > 0.001f; }
 
@@ -307,10 +311,15 @@ public:
             for (int i = 0; i < n; ++i)
             {
                 wet += 0.004f * (engage * mix - wet);
+                dryLevel += dryLevelCoeff * (dryLevelTarget - dryLevel);
+                if (std::abs (dryLevel - dryLevelTarget) < 1.0e-6f)
+                    dryLevel = dryLevelTarget;
+
                 if (wet < 0.9999f)
                 {
                     float dryG, wetG;
                     swarm::equalPowerGains (wet, dryG, wetG);
+                    dryG *= dryLevel;
                     for (int ch = 0; ch < numChannels; ++ch)
                         sub[ch][i] = dryG * dryBuffer.getSample (ch, start + i) + wetG * sub[ch][i];
                 }
@@ -335,6 +344,7 @@ private:
 
     // attack restoration / anti-chipmunk
     float dryEnv = 0.0f, wetEnv = 0.0f, restoreGain = 1.0f;
+    float dryLevel = 1.0f, dryLevelTarget = 1.0f, dryLevelCoeff = 0.001f;
     float envAttack = 0.05f, envRelease = 0.001f, gainUp = 0.02f, gainDown = 0.003f;
     std::array<float, 2> chipmunkLp {};
 };

@@ -63,10 +63,11 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     trackingKnob .attach (state, rbTracking,  "TRACKING: high = tight harmonies, low = lag, long repeating grains and tone clusters");
     magicKnob    .attach (state, rbMagic,     "TRAILS: repeats of the DRONE, each shifted by PITCH again - even ladders that fade out (the VENOM footswitch pushes it into self-oscillation)");
     rbTimeKnob   .attach (state, rbTime,      "TIME: time between the TRAILS repeats");
+    rbMixKnob    .attach (state, rbMix,       "MIX: dry / HIVE voices. 50% = both at full level, 100% = only the HIVE voices and trails (the STING octave still sounds)");
     rbDivKnob    .attach (state, rbDiv,       "TIME as a tempo division (SYNC on)");
     attachButton (rbSyncToggle, rbSync, "SYNC: lock the TRAILS repeats to the host tempo");
     attachButton (rbRawToggle, rbRaw, "RAW: vintage FV-1-style shifter - warbly, dark, gritty voices; TRACKING sets its window. Off = clean modern engine");
-    for (auto* c : std::initializer_list<juce::Component*> { &pitchKnob, &primaryKnob, &secondaryKnob, &toneKnob, &trackingKnob, &magicKnob, &rbTimeKnob })
+    for (auto* c : std::initializer_list<juce::Component*> { &pitchKnob, &primaryKnob, &secondaryKnob, &toneKnob, &trackingKnob, &magicKnob, &rbTimeKnob, &rbMixKnob })
         addAndMakeVisible (c);
     addChildComponent (rbDivKnob);
 
@@ -191,10 +192,9 @@ void MainPanel::resized()
     rbRawToggle.setBounds (pillFor (rainbowArea, 2));
     {
         const int y1 = (int) rainbowArea.getY() + 40, y2 = (int) rainbowArea.getY() + 148;
-        int x0 = (int) rainbowArea.getX() + 55, i = 0;
-        for (auto* k : { &pitchKnob, &primaryKnob, &secondaryKnob })
-            k->setBounds (x0 + 155 * i++, y1, 100, 106);
-        x0 = (int) rainbowArea.getX() + 20;
+        int x0 = (int) rainbowArea.getX() + 20, i = 0;
+        for (auto* k : { &pitchKnob, &primaryKnob, &secondaryKnob, &rbMixKnob })
+            k->setBounds (x0 + 122 * i++, y1, 100, 106);
         i = 0;
         for (auto* k : { &toneKnob, &trackingKnob, &magicKnob, &rbTimeKnob })
             k->setBounds (x0 + 122 * i++, y2, 100, 106);
@@ -340,7 +340,7 @@ void MainPanel::tick()
                                        paramOn (ParamIDs::fuzzOn), paramOn (ParamIDs::flowOn) };
 
     setSectionDimmed ({ &snapToggle, &rbSyncToggle, &rbRawToggle, &pitchKnob, &primaryKnob, &secondaryKnob, &toneKnob, &trackingKnob,
-                        &magicKnob, &rbTimeKnob, &rbDivKnob }, ! states[1]);
+                        &magicKnob, &rbTimeKnob, &rbDivKnob, &rbMixKnob }, ! states[1]);
     setSectionDimmed ({ &deepToggle, &swarmDepthKnob, &swarmRateKnob, &swarmMixKnob }, ! states[2]);
     setSectionDimmed ({ &postToggle, &fuzzVoiceSelector, &fuzzKnob, &fuzzToneKnob, &fuzzScoopKnob,
                         &fuzzGlareKnob, &fuzzGateKnob, &fuzzBlendKnob }, ! states[3]);

@@ -54,7 +54,7 @@ private:
     // HIVE (internally "rainbow")
     PowerButton rainbowPower;
     PillToggle snapToggle { "SNAP" }, rbSyncToggle { "SYNC" }, rbRawToggle { "RAW" };
-    Knob pitchKnob { "PITCH", true }, primaryKnob { "DRONE" }, secondaryKnob { "QUEEN" };
+    Knob pitchKnob { "PITCH", true }, primaryKnob { "DRONE" }, secondaryKnob { "QUEEN" }, rbMixKnob { "MIX" };
     Knob toneKnob { "TONE" }, trackingKnob { "TRACKING" }, magicKnob { "TRAILS" };
     Knob rbTimeKnob { "TIME" }, rbDivKnob { "DIV" };
 

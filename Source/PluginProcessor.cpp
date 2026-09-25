@@ -36,7 +36,7 @@ SwarmnessAudioProcessor::SwarmnessAudioProcessor()
     p.rbPrimary = get (id::rbPrimary);   p.rbSecondary = get (id::rbSecondary); p.rbTone = get (id::rbTone);
     p.rbTracking = get (id::rbTracking); p.rbMagic = get (id::rbMagic);         p.magicHold = get (id::magicHold);
     p.linkOct1 = get (id::linkOct1);     p.linkOct2 = get (id::linkOct2);
-    p.rbTime = get (id::rbTime);         p.rbSync = get (id::rbSync);           p.rbDiv = get (id::rbDiv);
+    p.rbMix = get (id::rbMix);           p.rbTime = get (id::rbTime);         p.rbSync = get (id::rbSync);           p.rbDiv = get (id::rbDiv);
     p.swarmOn = get (id::swarmOn);       p.swarmDeep = get (id::swarmDeep);     p.swarmRate = get (id::swarmRate);
     p.swarmDepth = get (id::swarmDepth); p.swarmMix = get (id::swarmMix);
     p.fuzzOn = get (id::fuzzOn);         p.fuzzPost = get (id::fuzzPost);       p.fuzz = get (id::fuzz);
@@ -88,6 +88,7 @@ void SwarmnessAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBl
     };
     init (outputGainSmoothed, 0.03, juce::Decibels::decibelsToGain (p.output->load()));
     init (inputGainSmoothed,  0.03, juce::Decibels::decibelsToGain (p.input->load()));
+    init (hiveVoiceGain,      0.02, 1.0f);
     init (bypassSmoothed,     0.02, on (p.bypass) ? 1.0f : 0.0f);
 
     setLatencySamples (latency);
@@ -197,6 +198,13 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     for (int ch = 0; ch < numChannels; ++ch)
         hiveBuffer.copyFrom (ch, 0, audio[ch], numSamples);
 
+    // HIVE MIX (pedal law): 50% = dry and voices both full, 100% = voices only. It only turns down
+    // the dry part, so the STING octave still sounds on top when a footswitch is held.
+    const bool hiveOn = on (p.rbOn) || magicHeld;
+    const float hiveMix = pct (p.rbMix);
+    noise.setDryLevel (hiveOn ? juce::jmin (1.0f, 2.0f * (1.0f - hiveMix)) : 1.0f);
+    hiveVoiceGain.setTargetValue (hiveOn ? juce::jmin (1.0f, 2.0f * hiveMix) : 1.0f);
+
     // ---- NOISE (footswitch octaves)
     {
         const float dir = on (p.noiseDown) ? -1.0f : 1.0f;
@@ -220,8 +228,12 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
                            pct (p.rbTracking), pct (p.rbMagic), (float) repeatSeconds, magicHeld, on (p.rbRaw));
         float* hive[2] = { hiveBuffer.getWritePointer (0), hiveBuffer.getWritePointer (1) };
         rainbow.process (hive, numChannels, numSamples);
-        for (int ch = 0; ch < numChannels; ++ch)
-            juce::FloatVectorOperations::add (audio[ch], hive[ch], numSamples);
+        for (int i = 0; i < numSamples; ++i)
+        {
+            const float g = hiveVoiceGain.getNextValue();
+            for (int ch = 0; ch < numChannels; ++ch)
+                audio[ch][i] += g * hive[ch][i];
+        }
     }
 
     // ---- SWARM

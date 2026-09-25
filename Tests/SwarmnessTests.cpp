@@ -545,6 +545,38 @@ namespace
                juce::String::formatted ("2nd harmonic vs fundamental: %.1f dB -> %.1f dB with GLARE", second[0], second[1]));
     }
 
+    void testHiveMix()
+    {
+        std::printf ("\nHIVE MIX: 100%% leaves only the HIVE voices, the STING octave still sounds\n");
+        const double sr = 48000.0;
+        auto input = makeSine (sr, 48000 * 2, 220.0, 0.3f);
+        for (bool octave : { false, true })
+        {
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            setParam (p, ParamIDs::rbRaw, 0.0f);
+            setParam (p, ParamIDs::stingRaw, 0.0f);
+            setParam (p, ParamIDs::rise, 0.0f);
+            setParam (p, ParamIDs::rbOn, 1.0f);
+            setParam (p, ParamIDs::rbPitch, 7.0f);
+            setParam (p, ParamIDs::rbPrimary, 100.0f);
+            setParam (p, ParamIDs::rbMix, 100.0f);
+            if (octave)
+                setParam (p, ParamIDs::oct1, 1.0f);
+            auto out = render (p, input, sr, 256);
+            const double dry   = goertzelDb (out, sr, 220.0, 48000, 24000);
+            const double voice = goertzelDb (out, sr, 330.0, 48000, 24000);
+            if (! octave)
+                check (voice - dry > 30.0, juce::String::formatted ("MIX 100%%: voice %.1f dB above the dry note", voice - dry));
+            else
+            {
+                const double oct = goertzelDb (out, sr, 440.0, 48000, 24000);
+                check (oct > voice - 12.0 && oct - dry > 30.0,
+                       juce::String::formatted ("MIX 100%% + hold +1 OCT: octave %.1f dB vs voice, dry %.1f dB below", oct - voice, oct - dry));
+            }
+        }
+    }
+
     void testTrails()
     {
         std::printf ("\nHIVE TRAILS: repeats at TIME, decay on their own, no self-oscillation without VENOM\n");
@@ -872,6 +904,7 @@ int main (int argc, char** argv)
     testMagicBounded();
     testFuzzLevel();
     testGlareOctave();
+    testHiveMix();
     testTrails();
     reportLag();
     testFuzzIdleNoise();
