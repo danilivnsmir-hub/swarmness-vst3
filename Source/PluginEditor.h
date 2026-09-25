@@ -46,14 +46,14 @@ private:
     juce::TextButton infoButton { "?" };
 
     // STING (internally "noise")
-    PillToggle downToggle { "DIVE" };
+    PillToggle downToggle { "DIVE" }, stingRawToggle { "RAW" };
     Knob riseKnob { "RISE" }, fallKnob { "FALL" }, panicKnob { "ANGER" }, chaosKnob { "FRENZY" }, speedKnob { "BUZZ" };
     Knob stingMixKnob { "MIX" };
     PitchScope pitchScope;
 
     // HIVE (internally "rainbow")
     PowerButton rainbowPower;
-    PillToggle snapToggle { "SNAP" }, rbSyncToggle { "SYNC" };
+    PillToggle snapToggle { "SNAP" }, rbSyncToggle { "SYNC" }, rbRawToggle { "RAW" };
     Knob pitchKnob { "PITCH", true }, primaryKnob { "DRONE" }, secondaryKnob { "QUEEN" };
     Knob toneKnob { "TONE" }, trackingKnob { "TRACKING" }, magicKnob { "TRAILS" };
     Knob rbTimeKnob { "TIME" }, rbDivKnob { "DIV" };

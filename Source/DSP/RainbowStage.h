@@ -1,7 +1,7 @@
 #pragma once
 
 #include "DSPUtils.h"
-#include "LivePitchShifter.h"
+#include "VintageShifter.h"
 #include <array>
 #include <vector>
 
@@ -24,6 +24,10 @@
  * Spiral ceiling: the loop is band-limited (steep low-pass / high-pass), so a trail that
  * climbs or falls past the useful range fades out instead of turning into a squeal or rumble.
  *
+ * RAW (default): the voices run on a vintage crossfading shifter with FV-1-class converter
+ * emulation (32 kHz, dark, slightly gritty); TRACKING then sets the crossfade window, like the
+ * original. Off: the clean, splice-aligned modern engine.
+ *
  * Naturalness: each voice drifts a few cents on its own slow random walk, DRONE sits slightly
  * left and QUEEN slightly right, and up-shifted voices are darkened in proportion to the
  * shift ("anti-chipmunk").
@@ -37,8 +41,11 @@ public:
     void prepare (double sr, int maxBlockSize)
     {
         sampleRate = sr;
-        primary  .prepare (sr, 2);
-        secondary.prepare (sr, 2);
+        for (auto* v : { &primary, &secondary })
+        {
+            v->prepare (sr, 2);
+            v->setLoFi (32000.0f, 14.0f, 11000.0f);   // FV-1-class converters: 32 kHz, dark
+        }
 
         const int maxLag = (int) std::ceil (sr * 0.2) + 8;
         lagLine.setMaximumDelayInSamples (maxLag);
@@ -97,8 +104,15 @@ public:
     }
 
     void setParams (bool on, float pitchSemis, float primary01, float secondary01, float tone01,
-                    float tracking01, float trails01, float repeatSeconds, bool magicHeld) noexcept
+                    float tracking01, float trails01, float repeatSeconds, bool magicHeld, bool rawEngine = true) noexcept
     {
+        primary  .setRaw (rawEngine);
+        secondary.setRaw (rawEngine);
+        // RAW: TRACKING sets the crossfade rate like the original pedal's window
+        // (high = tight and chorusy, low = slow, laggy, audible repeats)
+        const float rate = 2.0f + 6.0f * tracking01;
+        primary  .setVintageModulationRate (rate);
+        secondary.setVintageModulationRate (rate * 1.15f);
         onSmoothed.setTargetValue (on ? 1.0f : 0.0f);
         pitch = pitchSemis;
         primLevel.setTargetValue (primary01);
@@ -157,8 +171,9 @@ public:
                 const float hz = 16000.0f / std::pow (juce::jmax (1.0f, ratio), 0.9f);
                 return std::exp (-swarm::kTwoPi * hz / (float) sampleRate);
             };
-            const float primLpCoeff = voiceLpCoeff (primRatio);
-            const float secLpCoeff  = voiceLpCoeff (secRatio);
+            const bool raw = primary.isRaw();   // RAW keeps the converters' own darkness instead
+            const float primLpCoeff = raw ? 0.0f : voiceLpCoeff (primRatio);
+            const float secLpCoeff  = raw ? 0.0f : voiceLpCoeff (secRatio);
 
             // Shifter input = (lagged) input + the regeneration loop, so every repeat is shifted again.
             for (int i = 0; i < n; ++i)
@@ -245,7 +260,7 @@ private:
     }
 
     double sampleRate = 44100.0;
-    LivePitchShifter primary, secondary;
+    PitchVoice primary, secondary;
     juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::Linear> lagLine { 1 };
     juce::AudioBuffer<float> primBuf, secBuf, inBuf;
     juce::SmoothedValue<float> onSmoothed, primLevel, secLevel, loopGain, resonanceSmoothed, lagSmoothed;

@@ -43,6 +43,7 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
 
     // NOISE
     attachButton (downToggle, noiseDown, "DIVE: the octave footswitches shift DOWN (drop-tune) instead of up");
+    attachButton (stingRawToggle, stingRaw, "RAW: vintage lo-fi shifter like the pedal - grainy, buzzy octaves. Off = clean modern engine");
     riseKnob .attach (state, rise,  "RISE: time to glide into the octave when a footswitch goes down");
     fallKnob .attach (state, fall,  "FALL: time to glide back home when the footswitch is released");
     panicKnob.attach (state, panic, "ANGER: detunes the shifted signal against a second voice - dissonance, beating, sour clusters");
@@ -64,6 +65,7 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     rbTimeKnob   .attach (state, rbTime,      "TIME: time between the TRAILS repeats");
     rbDivKnob    .attach (state, rbDiv,       "TIME as a tempo division (SYNC on)");
     attachButton (rbSyncToggle, rbSync, "SYNC: lock the TRAILS repeats to the host tempo");
+    attachButton (rbRawToggle, rbRaw, "RAW: vintage FV-1-style shifter - warbly, dark, gritty voices; TRACKING sets its window. Off = clean modern engine");
     for (auto* c : std::initializer_list<juce::Component*> { &pitchKnob, &primaryKnob, &secondaryKnob, &toneKnob, &trackingKnob, &magicKnob, &rbTimeKnob })
         addAndMakeVisible (c);
     addChildComponent (rbDivKnob);
@@ -170,6 +172,7 @@ void MainPanel::resized()
 
     // NOISE
     downToggle.setBounds ((int) noiseArea.getRight() - 16 - 70, (int) noiseArea.getY() + 9, 70, 24);
+    stingRawToggle.setBounds (downToggle.getX() - 6 - 64, (int) noiseArea.getY() + 9, 64, 24);
     {
         const int y = (int) noiseArea.getY() + 44;
         int x = (int) noiseArea.getX() + 12;
@@ -185,6 +188,7 @@ void MainPanel::resized()
     rainbowPower.setBounds (powerFor (rainbowArea));
     snapToggle.setBounds (pillFor (rainbowArea, 0));
     rbSyncToggle.setBounds (pillFor (rainbowArea, 1));
+    rbRawToggle.setBounds (pillFor (rainbowArea, 2));
     {
         const int y1 = (int) rainbowArea.getY() + 40, y2 = (int) rainbowArea.getY() + 148;
         int x0 = (int) rainbowArea.getX() + 55, i = 0;
@@ -335,7 +339,7 @@ void MainPanel::tick()
     const std::array<bool, 5> states { noiseOn, paramOn (ParamIDs::rbOn), paramOn (ParamIDs::swarmOn),
                                        paramOn (ParamIDs::fuzzOn), paramOn (ParamIDs::flowOn) };
 
-    setSectionDimmed ({ &snapToggle, &rbSyncToggle, &pitchKnob, &primaryKnob, &secondaryKnob, &toneKnob, &trackingKnob,
+    setSectionDimmed ({ &snapToggle, &rbSyncToggle, &rbRawToggle, &pitchKnob, &primaryKnob, &secondaryKnob, &toneKnob, &trackingKnob,
                         &magicKnob, &rbTimeKnob, &rbDivKnob }, ! states[1]);
     setSectionDimmed ({ &deepToggle, &swarmDepthKnob, &swarmRateKnob, &swarmMixKnob }, ! states[2]);
     setSectionDimmed ({ &postToggle, &fuzzVoiceSelector, &fuzzKnob, &fuzzToneKnob, &fuzzScoopKnob,

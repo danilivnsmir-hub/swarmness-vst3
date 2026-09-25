@@ -761,6 +761,8 @@ void InfoOverlay::paint (juce::Graphics& g)
     {
         { "STING",    "Hold +1 OCT / +2 OCT (or latch them) for a violent octave. RISE = glide in, FALL = glide back on release. ANGER = detuned dissonance, "
                       "FRENZY = random pitch jumps, BUZZ = all-pass feedback + ring-mod-like AM, MIX = dry / octave blend. DIVE = shift down." },
+        { "RAW",      "STING and HIVE: vintage lo-fi pitch engine like the original pedals - crossfading taps, cheap converters: warbly, "
+                      "grainy, dark. Off = clean modern engine. In HIVE, TRACKING sets how slow and laggy the RAW engine is." },
         { "HIVE",     "Harmony voices: PITCH (-12..+12 st, SNAP = semitones), DRONE = main voice, QUEEN = its octave, TONE. TRACKING low = lag "
                       "and tone clusters. TRAILS = repeats that climb / fall by PITCH each time, TIME = their spacing (SYNC = tempo)." },
         { "VENOM",    "The VENOM footswitch pushes the TRAILS into self-oscillation - even with HIVE or the plug-in off. "
@@ -778,7 +780,7 @@ void InfoOverlay::paint (juce::Graphics& g)
 
     for (const auto& item : items)
     {
-        auto row = r.removeFromTop (juce::jmin (54.0f, r.getHeight()));
+        auto row = r.removeFromTop (juce::jmin (50.0f, r.getHeight()));
         g.setFont (font (16.0f, true));
         g.setColour (Colours::accentBright);
         g.drawText (item.title, row.removeFromLeft (120.0f), juce::Justification::topLeft, false);

@@ -206,6 +206,7 @@ namespace
         {
             SwarmnessAudioProcessor p;
             resetToInit (p);
+            setParam (p, ParamIDs::stingRaw, 0.0f);   // exact pitch check: modern engine
             setParam (p, ParamIDs::rise, 0.0f);
             setParam (p, ParamIDs::bypass, 1.0f);
             setParam (p, ParamIDs::oct1, 1.0f);
@@ -233,6 +234,7 @@ namespace
         std::printf ("\nLINK: the VENOM footswitch drags the linked octave in\n");
         SwarmnessAudioProcessor p;
         resetToInit (p);
+        setParam (p, ParamIDs::stingRaw, 0.0f);
         setParam (p, ParamIDs::rise, 0.0f);
         setParam (p, ParamIDs::rbPrimary, 0.0f);     // hear only the STING octave
         setParam (p, ParamIDs::linkOct1, 1.0f);
@@ -272,16 +274,39 @@ namespace
         check (db < -100.0, juce::String::formatted ("idle residual %.1f dB", db));
     }
 
+    /** Power-weighted mean frequency within +-1/2 octave of 'around' (sidebands of a warbly shifter average out). */
+    static double spectralCentroid (const juce::AudioBuffer<float>& b, double sr, double around, int start, int n)
+    {
+        double num = 0.0, den = 0.0;
+        for (double f = around / 1.41; f <= around * 1.41; f += 1.0)
+        {
+            const double w = juce::MathConstants<double>::twoPi * f / sr, c = 2.0 * std::cos (w);
+            double s1 = 0.0, s2 = 0.0;
+            for (int i = start; i < start + n; ++i)
+            {
+                const double s0 = b.getSample (0, i) + c * s1 - s2;
+                s2 = s1;
+                s1 = s0;
+            }
+            const double power = s1 * s1 + s2 * s2 - c * s1 * s2;
+            num += power * f;
+            den += power;
+        }
+        return den > 0.0 ? num / den : 0.0;
+    }
+
     void testNoiseOctaves()
     {
         std::printf ("\nNOISE footswitches: pitch accuracy (220 Hz sine, no Panic/Chaos/Speed)\n");
         struct Case { const char* sw; bool down; double expected; };
         const Case cases[] = { { ParamIDs::oct1, false, 440.0 }, { ParamIDs::oct2, false, 880.0 },
                                { ParamIDs::oct1, true, 110.0 },  { ParamIDs::oct2, true, 55.0 } };
+        for (bool raw : { false, true })
         for (const auto& c : cases)
         {
             SwarmnessAudioProcessor p;
             resetToInit (p);
+            setParam (p, ParamIDs::stingRaw, raw ? 1.0f : 0.0f);
             setParam (p, ParamIDs::rise, 0.0f);
             setParam (p, ParamIDs::noiseDown, c.down ? 1.0f : 0.0f);
             setParam (p, c.sw, 1.0f);
@@ -289,10 +314,10 @@ namespace
             auto input = makeSine (sr, 48000 * 2, 220.0);
             auto out = render (p, input, sr, 256);
             double purity = 0.0;
-            const double f = dominantFrequency (out, sr, 48000, purity);
+            const double f = raw ? spectralCentroid (out, sr, c.expected, 48000, 48000) : dominantFrequency (out, sr, 48000, purity);
             const double cents = 1200.0 * std::log2 (f / c.expected);
-            check (std::abs (cents) < 5.0, juce::String::formatted ("%s %s: %.2f Hz (%+.1f cents), spurious %.1f dB",
-                                                                    c.sw, c.down ? "down" : "up  ", f, cents, purity));
+            check (std::abs (cents) < (raw ? 25.0 : 5.0), juce::String::formatted ("%s %s %s: %.2f Hz (%+.1f cents), spurious %.1f dB",
+                                                                    raw ? "RAW   " : "modern", c.sw, c.down ? "down" : "up  ", f, cents, purity));
         }
     }
 
@@ -348,10 +373,12 @@ namespace
     void testRainbowInterval()
     {
         std::printf ("\nRAINBOW primary voice interval (220 Hz sine, dry removed)\n");
+        for (bool raw : { false, true })
         for (float pitch : { 7.0f, -5.0f, 12.0f })
         {
             SwarmnessAudioProcessor p;
             resetToInit (p);
+            setParam (p, ParamIDs::rbRaw, raw ? 1.0f : 0.0f);
             setParam (p, ParamIDs::rbOn, 1.0f);
             setParam (p, ParamIDs::rbPitch, pitch);
             setParam (p, ParamIDs::rbPrimary, 100.0f);
@@ -366,10 +393,11 @@ namespace
                 for (int i = lat; i < voices.getNumSamples(); ++i)
                     voices.setSample (ch, i, out.getSample (ch, i) - input.getSample (ch, i - lat));
             double purity = 0.0;
-            const double f = dominantFrequency (voices, sr, 48000, purity);
             const double expected = 220.0 * std::pow (2.0, pitch / 12.0);
+            const double f = raw ? spectralCentroid (voices, sr, expected, 48000, 48000) : dominantFrequency (voices, sr, 48000, purity);
             const double cents = 1200.0 * std::log2 (f / expected);
-            check (std::abs (cents) < 5.0, juce::String::formatted ("pitch %+.0f st: %.2f Hz (%+.1f cents)", pitch, f, cents));
+            check (std::abs (cents) < (raw ? 25.0 : 5.0),
+                   juce::String::formatted ("%s pitch %+.0f st: %.2f Hz (%+.1f cents)", raw ? "RAW   " : "modern", pitch, f, cents));
         }
     }
 

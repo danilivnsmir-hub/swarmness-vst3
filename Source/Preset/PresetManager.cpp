@@ -39,8 +39,8 @@ void PresetManager::initialiseFactoryPresets()
     factoryPresets = {
         // ---------------------------------------------------------------- basics
         { "Init", basics, "Everything off: the plug-in is transparent. Start here.", {} },
-        { "Clean Sting", basics, "Pure octave shifter. Hold +1 OCT / +2 OCT for a clean, instant jump.",
-          { { rise, 0 }, { fall, 0 } } },
+        { "Clean Sting", basics, "Pure octave shifter on the clean modern engine (RAW off). Hold +1 OCT / +2 OCT for a clean, instant jump.",
+          { { rise, 0 }, { fall, 0 }, { stingRaw, 0 } } },
         { "Sting Doubler", basics, "STING MIX at 50%: hold a footswitch and the octave is added on top of your dry note instead of replacing it.",
           { { rise, 0 }, { fall, 0 }, { stingMix, 50 } } },
         { "Slow Rise", basics, "RISE and FALL: hold a footswitch and the pitch sweeps up over ~1 s; release and it slides back down over ~1.5 s.",
@@ -61,8 +61,8 @@ void PresetManager::initialiseFactoryPresets()
           { { noiseDown, 1 }, { rise, 450 }, { fall, 60 }, { panic, 15 }, { fuzzOn, 1 }, { fuzzPost, 1 }, { fuzzVoice, 0 }, { fuzz, 70 }, { fuzzTone, 35 }, { fuzzScoop, 30 } } },
 
         // ------------------------------------------------------------------ HIVE
-        { "Harmony Fifth", hiveCat, "Tight, clean harmony: a fifth above (DRONE) plus its octave (QUEEN). No VENOM.",
-          { { rbOn, 1 }, { rbPitch, 7 }, { rbPrimary, 60 }, { rbSecondary, 25 }, { rbTracking, 95 }, { rbTone, 70 } } },
+        { "Harmony Fifth", hiveCat, "Tight, clean harmony on the modern engine (RAW off): a fifth above (DRONE) plus its octave (QUEEN).",
+          { { rbOn, 1 }, { rbRaw, 0 }, { rbPitch, 7 }, { rbPrimary, 60 }, { rbSecondary, 25 }, { rbTracking, 95 }, { rbTone, 70 } } },
         { "Atonal Detune", hiveCat, "SNAP off: a quarter-tone-flat double. Instantly wrong in the best way.",
           { { rbOn, 1 }, { rbSnap, 0 }, { rbPitch, -0.4f }, { rbPrimary, 85 }, { rbTracking, 100 }, { rbTone, 65 } } },
         { "Tone Clusters", hiveCat, "Low TRACKING: the harmony lags and repeats grains, smearing into rhythmic clusters.",

@@ -60,6 +60,18 @@ public:
         unityBlend = 0.0f;
     }
 
+    /** Writes the input without producing output (keeps the delay line current while unused). */
+    void pushOnly (const float* const* channels, int numChannels, int numSamples) noexcept
+    {
+        numChannels = juce::jmin (numChannels, (int) buffers.size());
+        for (int i = 0; i < numSamples; ++i)
+        {
+            for (int ch = 0; ch < numChannels; ++ch)
+                buffers[(size_t) ch][(size_t) writePos] = channels[ch][i];
+            writePos = (writePos + 1) & mask;
+        }
+    }
+
     void process (float* const* channels, int numChannels, int numSamples, float ratioStart, float ratioEnd) noexcept
     {
         numChannels = juce::jmin (numChannels, (int) buffers.size());

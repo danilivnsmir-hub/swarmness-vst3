@@ -72,6 +72,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     noise->addChild (percent (chaos, "Frenzy", 0.0f));
     noise->addChild (percent (speed, "Buzz", 0.0f));
     noise->addChild (percent (stingMix, "Sting Mix", 100.0f));
+    noise->addChild (toggle (stingRaw, "Sting Raw", true));
 
     // ---------------------------------------------------------------- RAINBOW
     auto rainbow = std::make_unique<Group> ("rainbow", "Hive", "|");
@@ -83,6 +84,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
             return (v > 0.005f ? "+" : "") + juce::String (v, 2) + " st";
         })));
     rainbow->addChild (toggle (rbSnap, "Hive Snap", true));
+    rainbow->addChild (toggle (rbRaw, "Hive Raw", true));
     rainbow->addChild (percent (rbPrimary, "Drone", 60.0f));
     rainbow->addChild (percent (rbSecondary, "Queen", 0.0f));
     rainbow->addChild (percent (rbTone, "Hive Tone", 60.0f));

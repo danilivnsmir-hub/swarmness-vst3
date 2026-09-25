@@ -1,7 +1,7 @@
 #pragma once
 
 #include "DSPUtils.h"
-#include "LivePitchShifter.h"
+#include "VintageShifter.h"
 #include <array>
 
 /**
@@ -105,7 +105,11 @@ private:
  *  SPEED : all-pass feedback + amplitude modulation on the shifted signal
  *
  * While no footswitch is held (and the pitch has returned home) the stage passes the input.
- * When engaged the output is 100% shifted, like the pedal.
+ * When engaged the output is MIX shifted (100% = like the pedal).
+ *
+ * RAW (default): a vintage crossfading shifter with cheap-converter emulation - grainy, buzzy,
+ * warbly octaves like the pedal. Off: the clean, splice-aligned modern engine with attack
+ * restoration and anti-chipmunk filtering.
  */
 class NoiseStage
 {
@@ -115,8 +119,12 @@ public:
     void prepare (double sr, int maxBlockSize)
     {
         sampleRate = sr;
-        mainVoice .prepare (sr, 2);
-        panicVoice.prepare (sr, 2);
+        for (auto* v : { &mainVoice, &panicVoice })
+        {
+            v->prepare (sr, 2);
+            v->setVintageModulationRate (11.0f);     // fairly fast crossfading: buzzy, grainy octaves
+            v->setLoFi (22050.0f, 12.0f, 8500.0f);   // cheap converters
+        }
         speedStage.prepare (sr);
         panicBuffer.setSize (2, juce::jmax (maxBlockSize, kControlBlock), false, false, true);
         dryBuffer  .setSize (2, juce::jmax (maxBlockSize, kControlBlock), false, false, true);
@@ -162,8 +170,11 @@ public:
     }
 
     void setParams (float riseMilliseconds, float fallMilliseconds, float panic01, float chaos01, float speed01,
-                    float mix01 = 1.0f) noexcept
+                    float mix01 = 1.0f, bool rawEngine = true) noexcept
     {
+        raw = rawEngine;
+        mainVoice.setRaw (raw);
+        panicVoice.setRaw (raw);
         mix    = mix01;
         riseMs = riseMilliseconds;
         fallMs = fallMilliseconds;
@@ -249,8 +260,9 @@ public:
                 }
             }
 
-            if (active)
+            if (active && ! mainVoice.isRaw())
             {
+                // (modern engine only - RAW keeps the pedal's own artefacts)
                 // Anti-chipmunk: darken up-shifts in proportion to the shift
                 const float ratio = std::pow (2.0f, juce::jmax (0.0f, mainSemis) / 12.0f);
                 const float lpHz = 16000.0f / std::pow (ratio, 0.9f);
@@ -308,7 +320,8 @@ public:
 
 private:
     double sampleRate = 44100.0;
-    LivePitchShifter mainVoice, panicVoice;
+    PitchVoice mainVoice, panicVoice;
+    bool raw = true;
     SpeedStage speedStage;
     juce::AudioBuffer<float> panicBuffer, dryBuffer;
     swarm::FastRandom rng { 0xBADC0DEu };

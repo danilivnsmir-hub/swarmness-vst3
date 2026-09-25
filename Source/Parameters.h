@@ -19,12 +19,14 @@ namespace ParamIDs
     inline constexpr const char* panic       = "panic";
     inline constexpr const char* chaos       = "chaos";
     inline constexpr const char* speed       = "speed";
-    inline constexpr const char* stingMix    = "stingMix";     // dry / shifted blend while a footswitch is down
+    inline constexpr const char* stingMix    = "stingMix";
+    inline constexpr const char* stingRaw    = "stingRaw";     // vintage lo-fi shifter engine     // dry / shifted blend while a footswitch is down
 
     // HIVE: harmony voices with regeneration (DRONE = primary, QUEEN = secondary, TRAILS = magic; the VENOM footswitch = magicHold)
     inline constexpr const char* rbOn        = "rbOn";
     inline constexpr const char* rbPitch     = "rbPitch";
     inline constexpr const char* rbSnap      = "rbSnap";
+    inline constexpr const char* rbRaw       = "rbRaw";        // vintage lo-fi shifter engine
     inline constexpr const char* rbPrimary   = "rbPrimary";
     inline constexpr const char* rbSecondary = "rbSecondary";
     inline constexpr const char* rbTone      = "rbTone";
