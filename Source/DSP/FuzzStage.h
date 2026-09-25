@@ -18,6 +18,11 @@
  *  GATE  : starves the fuzz - bias shift plus an envelope gate that makes decays sputter
  *  BLEND : clean (latency-aligned) signal added under the fuzz for pick attack and low end
  *
+ * Built-in noise gate (always on, like the gate every high-gain rig needs): a soft
+ * downward expander on the fuzz input. Around 50 dB of fuzz gain would otherwise turn
+ * interface hiss and pickup hum into a roar between notes. It opens instantly on a pick,
+ * holds briefly and fades smoothly, so note decays are not chopped.
+ *
  * The oversampler always runs and the stage crossfades to a latency-matched clean path when
  * off, so the reported latency never changes and "off" is bit-transparent.
  */
@@ -26,6 +31,7 @@ class FuzzStage
 public:
     static constexpr int kMaxChannels = 2;
     static constexpr int kControlBlock = 32;
+    static constexpr float kGateThresholdDb = -58.0f;   // input peak level (after INPUT) where the gate is fully open
 
     struct Settings
     {
@@ -59,6 +65,10 @@ public:
 
         const double osRate = sr * 4.0;
         osSampleRate = osRate;
+        gateEnvRelease  = (float) (1.0 - std::exp (-1.0 / (0.03 * sr)));
+        gateOpen        = (float) (1.0 - std::exp (-1.0 / (0.0005 * sr)));
+        gateClose       = (float) (1.0 - std::exp (-1.0 / (0.08 * sr)));
+        gateHoldSamples = (int) (0.04 * sr);
         envAttack  = (float) (1.0 - std::exp (-1.0 / (0.0007 * osRate)));
         envRelease = (float) (1.0 - std::exp (-1.0 / (0.04 * osRate)));
         lp1Coeff   = (float) std::exp (-swarm::kTwoPi * 5500.0 / osRate);
@@ -87,6 +97,9 @@ public:
         for (auto* bank : { &preHp, &preBoost, &scoopBell, &thump, &fizzLp })
             for (auto& f : *bank) f.reset();
         env = lp1 = lp2 = octHpState = octHpIn = tiltLp = { 0.0f, 0.0f };
+        gateEnv = 0.0f;
+        gateGain = 0.0f;
+        gateHoldCounter = 0;
     }
 
     int getLatencySamples() const { return (int) std::round (oversampler.getLatencyInSamples()); }
@@ -124,11 +137,36 @@ public:
             return;
         }
 
-        // ---- pre-clip EQ (base rate), per control block so VOICE changes glide
+        // ---- noise gate + pre-clip EQ (base rate), per control block so VOICE changes glide
         for (int start = 0; start < numSamples; start += kControlBlock)
         {
             const int n = juce::jmin (kControlBlock, numSamples - start);
             advanceControls();
+
+            for (int i = start; i < start + n; ++i)
+            {
+                float a = 0.0f;
+                for (int c = 0; c < numChannels; ++c)
+                    a = juce::jmax (a, std::abs (audio[c][i]));
+                gateEnv = a > gateEnv ? a : gateEnv + gateEnvRelease * (a - gateEnv);
+
+                // Expander: fully open above the threshold, closed 8 dB below it (squared, in dB)
+                const float db = juce::Decibels::gainToDecibels (gateEnv, -120.0f);
+                float target = juce::jlimit (0.0f, 1.0f, (db - (kGateThresholdDb - 8.0f)) / 8.0f);
+                target *= target;
+                if (target >= 1.0f)
+                    gateHoldCounter = gateHoldSamples;
+                else if (gateHoldCounter > 0)
+                {
+                    --gateHoldCounter;
+                    target = 1.0f;
+                }
+                gateGain += (target > gateGain ? gateOpen : gateClose) * (target - gateGain);
+
+                for (int c = 0; c < numChannels; ++c)
+                    audio[c][i] *= gateGain;
+            }
+
             for (int c = 0; c < numChannels; ++c)
             {
                 preHp[(size_t) c].setParams (sampleRate, sHpFreq.get(), 0.7071f);
@@ -291,5 +329,7 @@ private:
     double sampleRate = 44100.0, osSampleRate = 176400.0;
     bool isOn = false;
     Settings target;
+    float gateEnv = 0.0f, gateGain = 0.0f, gateEnvRelease = 0.001f, gateOpen = 0.04f, gateClose = 0.0003f;
+    int gateHoldSamples = 2000, gateHoldCounter = 0;
     float envAttack = 0.1f, envRelease = 0.001f, lp1Coeff = 0.9f, lp2Coeff = 0.9f, octHpCoeff = 0.99f, tiltCoeff = 0.9f;
 };

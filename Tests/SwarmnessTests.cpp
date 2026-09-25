@@ -514,6 +514,32 @@ namespace
         check (rms[0] > rms[1] * 1.5, "SMOKE at low INPUT cleans up relative to high INPUT (output compensated)");
     }
 
+    void testFuzzIdleNoise()
+    {
+        std::printf ("\nSMOKE with nothing played: no self-oscillation, interface hiss not blown up\n");
+        const double sr = 48000.0;
+        for (float noiseDb : { -200.0f, -90.0f, -75.0f, -68.0f })
+        {
+            juce::AudioBuffer<float> input (2, 48000 * 2);
+            juce::Random rng (7);
+            const float amp = juce::Decibels::decibelsToGain (noiseDb, -200.0f);
+            for (int ch = 0; ch < 2; ++ch)
+                for (int i = 0; i < input.getNumSamples(); ++i)
+                    input.setSample (ch, i, amp * (rng.nextFloat() * 2.0f - 1.0f));
+
+            for (const char* preset : { "Swollen Smoke", "Glare Scream", "Doom Cathedral", "Smoked Out", "Hive Collapse", "Queen Scream" })
+            {
+                SwarmnessAudioProcessor p;
+                p.getPresetManager().loadPreset (preset);
+                auto out = render (p, input, sr, 256);
+                const float rms = out.getRMSLevel (0, 48000, 48000);
+                const float db = juce::Decibels::gainToDecibels (rms, -200.0f);
+                check (db < noiseDb - 3.0f || db < -100.0f,
+                       juce::String::formatted ("%-16s input noise %4.0f dBFS -> output %6.1f dBFS", preset, noiseDb, db));
+            }
+        }
+    }
+
     void testSwarmBounded()
     {
         std::printf ("\nSWARM: extreme settings stay bounded\n");
@@ -712,6 +738,7 @@ int main (int argc, char** argv)
     testFuzzLevel();
     testGlareOctave();
     testTrails();
+    testFuzzIdleNoise();
     testInputSensitivity();
     testSwarmBounded();
     testStateRoundTrip();
