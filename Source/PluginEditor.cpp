@@ -59,10 +59,14 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     primaryKnob  .attach (state, rbPrimary,   "DRONE: level of the main harmony voice");
     secondaryKnob.attach (state, rbSecondary, "QUEEN: a voice one octave from the DRONE (above for up-shifts, below for down)");
     toneKnob     .attach (state, rbTone,      "Brightness of the voices and of the regeneration loop");
-    trackingKnob .attach (state, rbTracking,  "High = tight harmonies. Low = lag, long repeating grains and tone clusters");
-    magicKnob    .attach (state, rbMagic,     "VENOM: regeneration - trails, resonance, cascading pitch spirals and self-oscillation");
-    for (auto* c : std::initializer_list<juce::Component*> { &pitchKnob, &primaryKnob, &secondaryKnob, &toneKnob, &trackingKnob, &magicKnob })
+    trackingKnob .attach (state, rbTracking,  "TRACKING: high = tight harmonies, low = lag, long repeating grains and tone clusters");
+    magicKnob    .attach (state, rbMagic,     "TRAILS: repeats of the DRONE, each shifted by PITCH again - even ladders that fade out (the VENOM footswitch pushes it into self-oscillation)");
+    rbTimeKnob   .attach (state, rbTime,      "TIME: time between the TRAILS repeats");
+    rbDivKnob    .attach (state, rbDiv,       "TIME as a tempo division (SYNC on)");
+    attachButton (rbSyncToggle, rbSync, "SYNC: lock the TRAILS repeats to the host tempo");
+    for (auto* c : std::initializer_list<juce::Component*> { &pitchKnob, &primaryKnob, &secondaryKnob, &toneKnob, &trackingKnob, &magicKnob, &rbTimeKnob })
         addAndMakeVisible (c);
+    addChildComponent (rbDivKnob);
 
     // SWARM
     attachButton (swarmPower, swarmOn,   "Swarm chorus on/off");
@@ -99,6 +103,10 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     addChildComponent (flowDivKnob);
 
     // OUTPUT
+    inputKnob .attach (state, input,  "INPUT sensitivity: how hard the effects are hit (SMOKE, tracking). Aim for peaks in the green zone of the IN meter; the output level is compensated");
+    addAndMakeVisible (inputKnob);
+    inMeter.setTargetZone (-18.0f, -6.0f);
+    inMeter.setTooltip ("Input level after INPUT - aim for peaks in the green zone");
     volumeKnob.attach (state, output, "Output level");
     addAndMakeVisible (volumeKnob);
 
@@ -153,10 +161,9 @@ void MainPanel::resized()
     noiseArea   = { 16.0f,  76.0f, 536.0f, 262.0f };
     rainbowArea = { 564.0f, 76.0f, 520.0f, 262.0f };
     const float rowY = 350.0f, rowH = 190.0f;
-    swarmArea  = { 16.0f,  rowY, 226.0f, rowH };
-    fuzzArea   = { 254.0f, rowY, 456.0f, rowH };
-    flowArea   = { 722.0f, rowY, 236.0f, rowH };
-    outputArea = { 970.0f, rowY, 114.0f, rowH };
+    swarmArea  = { 16.0f,  rowY, 250.0f, rowH };
+    fuzzArea   = { 278.0f, rowY, 500.0f, rowH };
+    flowArea   = { 790.0f, rowY, 294.0f, rowH };
 
     auto powerFor = [] (juce::Rectangle<float> a) { return juce::Rectangle<int> ((int) a.getRight() - 40, (int) a.getY() + 8, 26, 26); };
     auto pillFor  = [] (juce::Rectangle<float> a, int slot) { return juce::Rectangle<int> ((int) a.getRight() - 40 - 66 * (slot + 1), (int) a.getY() + 9, 60, 24); };
@@ -177,15 +184,17 @@ void MainPanel::resized()
     // RAINBOW
     rainbowPower.setBounds (powerFor (rainbowArea));
     snapToggle.setBounds (pillFor (rainbowArea, 0));
+    rbSyncToggle.setBounds (pillFor (rainbowArea, 1));
     {
-        const int x0 = (int) rainbowArea.getX() + 55;
         const int y1 = (int) rainbowArea.getY() + 40, y2 = (int) rainbowArea.getY() + 148;
-        int i = 0;
+        int x0 = (int) rainbowArea.getX() + 55, i = 0;
         for (auto* k : { &pitchKnob, &primaryKnob, &secondaryKnob })
             k->setBounds (x0 + 155 * i++, y1, 100, 106);
+        x0 = (int) rainbowArea.getX() + 20;
         i = 0;
-        for (auto* k : { &toneKnob, &trackingKnob, &magicKnob })
-            k->setBounds (x0 + 155 * i++, y2, 100, 106);
+        for (auto* k : { &toneKnob, &trackingKnob, &magicKnob, &rbTimeKnob })
+            k->setBounds (x0 + 122 * i++, y2, 100, 106);
+        rbDivKnob.setBounds (rbTimeKnob.getBounds());
     }
 
     auto threeKnobs = [] (juce::Rectangle<float> a, std::initializer_list<Knob*> knobs)
@@ -218,8 +227,6 @@ void MainPanel::resized()
     threeKnobs (flowArea, { &flowAmountKnob, &flowSpeedKnob });
     flowDivKnob.setBounds (flowSpeedKnob.getBounds());
 
-    // OUTPUT
-    threeKnobs (outputArea, { &volumeKnob });
 
     // Footer: footswitches centred (LINK mini switches beside the octaves), meters at the sides
     {
@@ -233,8 +240,10 @@ void MainPanel::resized()
         }
         link1Switch.setBounds (oct1Switch.getRight() + 2, fy + 34, 38, 50);
         link2Switch.setBounds (oct2Switch.getRight() + 2, fy + 34, 38, 50);
-        inMeter .setBounds (16, 600, 200, 26);
-        outMeter.setBounds (baseWidth - 16 - 200, 600, 200, 26);
+        inputKnob .setBounds (16, fy - 8, 72, 104);
+        inMeter   .setBounds (96, 600, 190, 26);
+        volumeKnob.setBounds (baseWidth - 16 - 72, fy - 8, 72, 104);
+        outMeter  .setBounds (baseWidth - 16 - 72 - 8 - 190, 600, 190, 26);
     }
 
     infoOverlay.setBounds (getLocalBounds());
@@ -278,7 +287,7 @@ void MainPanel::paintBackdrop (juce::Graphics& g)
         }
     }
 
-    for (auto a : { noiseArea, rainbowArea, swarmArea, fuzzArea, flowArea, outputArea })
+    for (auto a : { noiseArea, rainbowArea, swarmArea, fuzzArea, flowArea })
         drawPanel (g, a);
 
     auto titleRow = [] (juce::Rectangle<float> a) { return a.reduced (16.0f, 0.0f).withTrimmedTop (8.0f).withHeight (26.0f); };
@@ -288,7 +297,6 @@ void MainPanel::paintBackdrop (juce::Graphics& g)
     drawSectionTitle (g, titleRow (swarmArea),   "SWARM",   lastSectionStates[2]);
     drawSectionTitle (g, titleRow (fuzzArea),    "SMOKE",   lastSectionStates[3]);
     drawSectionTitle (g, titleRow (flowArea),    "WINGS",   lastSectionStates[4]);
-    drawSectionTitle (g, titleRow (outputArea),  "OUTPUT",  true);
 
     g.setFont (font (12.5f, true));
     g.setColour (Colours::textFaint);
@@ -296,7 +304,7 @@ void MainPanel::paintBackdrop (juce::Graphics& g)
                 juce::Justification::centredLeft, false);
 
     g.setFont (font (13.0f));
-    g.drawText ("v" + juce::String (JucePlugin_VersionString), juce::Rectangle<float> (16.0f, (float) baseHeight - 30.0f, 120.0f, 20.0f),
+    g.drawText ("v" + juce::String (JucePlugin_VersionString), juce::Rectangle<float> (16.0f, (float) baseHeight - 22.0f, 120.0f, 16.0f),
                 juce::Justification::centredLeft, false);
 }
 
@@ -320,11 +328,15 @@ void MainPanel::tick()
     const bool synced = paramOn (ParamIDs::flowSync);
     flowSpeedKnob.setVisible (! synced);
     flowDivKnob.setVisible (synced);
+    const bool hiveSynced = paramOn (ParamIDs::rbSync);
+    rbTimeKnob.setVisible (! hiveSynced);
+    rbDivKnob.setVisible (hiveSynced);
 
     const std::array<bool, 5> states { noiseOn, paramOn (ParamIDs::rbOn), paramOn (ParamIDs::swarmOn),
                                        paramOn (ParamIDs::fuzzOn), paramOn (ParamIDs::flowOn) };
 
-    setSectionDimmed ({ &snapToggle, &pitchKnob, &primaryKnob, &secondaryKnob, &toneKnob, &trackingKnob, &magicKnob }, ! states[1]);
+    setSectionDimmed ({ &snapToggle, &rbSyncToggle, &pitchKnob, &primaryKnob, &secondaryKnob, &toneKnob, &trackingKnob,
+                        &magicKnob, &rbTimeKnob, &rbDivKnob }, ! states[1]);
     setSectionDimmed ({ &deepToggle, &swarmDepthKnob, &swarmRateKnob, &swarmMixKnob }, ! states[2]);
     setSectionDimmed ({ &postToggle, &fuzzVoiceSelector, &fuzzKnob, &fuzzToneKnob, &fuzzScoopKnob,
                         &fuzzGlareKnob, &fuzzGateKnob, &fuzzBlendKnob }, ! states[3]);

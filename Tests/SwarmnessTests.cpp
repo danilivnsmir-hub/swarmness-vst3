@@ -460,6 +460,60 @@ namespace
                juce::String::formatted ("2nd harmonic vs fundamental: %.1f dB -> %.1f dB with GLARE", second[0], second[1]));
     }
 
+    void testTrails()
+    {
+        std::printf ("\nHIVE TRAILS: repeats at TIME, decay on their own, no self-oscillation without VENOM\n");
+        const double sr = 48000.0;
+        auto input = makeSine (sr, 48000 * 5, 220.0, 0.3f);
+        for (int ch = 0; ch < 2; ++ch)
+            input.clear (ch, 4800, input.getNumSamples() - 4800);    // 100 ms burst, then silence
+
+        SwarmnessAudioProcessor p;
+        resetToInit (p);
+        setParam (p, ParamIDs::rbOn, 1.0f);
+        setParam (p, ParamIDs::rbPitch, 7.0f);
+        setParam (p, ParamIDs::rbPrimary, 100.0f);
+        setParam (p, ParamIDs::rbTracking, 100.0f);
+        setParam (p, ParamIDs::rbMagic, 100.0f);
+        setParam (p, ParamIDs::rbTime, 300.0f);
+        auto out = render (p, input, sr, 256);
+
+        // Energy between repeats vs. at the first repeat (~300 ms after the burst)
+        const float atRepeat  = out.getRMSLevel (0, (int) (0.30 * sr), (int) (0.08 * sr));
+        const float between   = out.getRMSLevel (0, (int) (0.19 * sr), (int) (0.06 * sr));
+        const float tail      = out.getRMSLevel (0, (int) (4.0 * sr), (int) (0.8 * sr));
+        check (atRepeat > 3.0f * between, juce::String::formatted ("first repeat at TIME: %.1f dB above the gap",
+                                                                   juce::Decibels::gainToDecibels (atRepeat / (between + 1.0e-9f))));
+        check (tail < 0.003f, juce::String::formatted ("TRAILS 100%% has faded after 4 s: tail %.1f dBFS", juce::Decibels::gainToDecibels (tail + 1.0e-9f)));
+    }
+
+    void testInputSensitivity()
+    {
+        std::printf ("\nINPUT: changes how hard the effects are hit, transparent otherwise\n");
+        const double sr = 48000.0;
+        auto input = makeGuitar (sr, 48000);
+        {
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            setParam (p, ParamIDs::input, 12.0f);
+            auto out = render (p, input, sr, 256);
+            const double db = nullDb (out, input, p.getLatencySamples(), 4096, input.getNumSamples());
+            check (db < -100.0, juce::String::formatted ("INPUT +12 dB, nothing engaged: residual %.1f dB", db));
+        }
+        double rms[2] {};
+        for (int k = 0; k < 2; ++k)
+        {
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            setParam (p, ParamIDs::fuzzOn, 1.0f);
+            setParam (p, ParamIDs::fuzz, 20.0f);
+            setParam (p, ParamIDs::input, k == 0 ? -18.0f : 12.0f);
+            auto out = render (p, input, sr, 256);
+            rms[k] = out.getRMSLevel (0, 12000, 24000);
+        }
+        check (rms[0] > rms[1] * 1.5, "SMOKE at low INPUT cleans up relative to high INPUT (output compensated)");
+    }
+
     void testSwarmBounded()
     {
         std::printf ("\nSWARM: extreme settings stay bounded\n");
@@ -496,7 +550,7 @@ namespace
         SwarmnessAudioProcessor b;
         b.setStateInformation (mb.getData(), (int) mb.getSize());
         auto value = [&b] (const char* id) { return b.getAPVTS().getRawParameterValue (id)->load(); };
-        check (std::abs (value (ParamIDs::fuzz) - 42.0f) < 0.05f && std::abs (value (ParamIDs::rbMagic) - 45.0f) < 0.05f,
+        check (std::abs (value (ParamIDs::fuzz) - 42.0f) < 0.05f && std::abs (value (ParamIDs::rbMagic) - 55.0f) < 0.05f,
                "parameters restored");
         check (value (ParamIDs::oct1) < 0.5f, "momentary footswitch not restored as held");
         check (b.getPresetManager().getCurrentPresetName() == "Honey Trails", "preset name restored");
@@ -657,6 +711,8 @@ int main (int argc, char** argv)
     testMagicBounded();
     testFuzzLevel();
     testGlareOctave();
+    testTrails();
+    testInputSensitivity();
     testSwarmBounded();
     testStateRoundTrip();
     testPresetDirtyTracking();

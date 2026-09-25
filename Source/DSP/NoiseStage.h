@@ -121,6 +121,10 @@ public:
         panicBuffer.setSize (2, juce::jmax (maxBlockSize, kControlBlock), false, false, true);
         dryBuffer  .setSize (2, juce::jmax (maxBlockSize, kControlBlock), false, false, true);
         chaosSmoother.setTime (sr / kControlBlock, 0.012);
+        envAttack  = (float) (1.0 - std::exp (-1.0 / (0.0005 * sr)));
+        envRelease = (float) (1.0 - std::exp (-1.0 / (0.025 * sr)));
+        gainUp     = (float) (1.0 - std::exp (-1.0 / (0.001 * sr)));
+        gainDown   = (float) (1.0 - std::exp (-1.0 / (0.008 * sr)));
         reset();
     }
 
@@ -137,6 +141,9 @@ public:
         chaosSmoother.reset (0.0f);
         wobblePhase = 0.0f;
         lastMainRatio = lastPanicRatio = 1.0f;
+        restoreGain = 1.0f;
+        dryEnv = wetEnv = 0.0f;
+        chipmunkLp = { 0.0f, 0.0f };
     }
 
     /** interval in semitones selected by the footswitches (0 = released). */
@@ -242,6 +249,43 @@ public:
                 }
             }
 
+            if (active)
+            {
+                // Anti-chipmunk: darken up-shifts in proportion to the shift
+                const float ratio = std::pow (2.0f, juce::jmax (0.0f, mainSemis) / 12.0f);
+                const float lpHz = 16000.0f / std::pow (ratio, 0.9f);
+                const float lpCoeff = std::exp (-swarm::kTwoPi * lpHz / (float) sampleRate);
+
+                for (int i = 0; i < n; ++i)
+                {
+                    // Attack restoration: the splicing shifter smears transients, so the shifted
+                    // signal follows the dry signal's envelope (bounded correction, fast attack).
+                    float dryA = 0.0f, wetA = 0.0f;
+                    for (int ch = 0; ch < numChannels; ++ch)
+                    {
+                        dryA = juce::jmax (dryA, std::abs (dryBuffer.getSample (ch, start + i)));
+                        wetA = juce::jmax (wetA, std::abs (sub[ch][i]));
+                    }
+                    dryEnv += (dryA > dryEnv ? envAttack : envRelease) * (dryA - dryEnv);
+                    wetEnv += (wetA > wetEnv ? envAttack : envRelease) * (wetA - wetEnv);
+                    const float target = juce::jlimit (0.6f, 2.0f, (dryEnv + 1.0e-4f) / (wetEnv + 1.0e-4f));
+                    restoreGain += (target > restoreGain ? gainUp : gainDown) * (target - restoreGain);
+
+                    for (int ch = 0; ch < numChannels; ++ch)
+                    {
+                        auto& z = chipmunkLp[(size_t) ch];
+                        z = sub[ch][i] + lpCoeff * (z - sub[ch][i]);
+                        sub[ch][i] = z * restoreGain;
+                    }
+                }
+            }
+            else
+            {
+                restoreGain = 1.0f;
+                dryEnv = wetEnv = 0.0f;
+                chipmunkLp = { 0.0f, 0.0f };
+            }
+
             // Speed only colours the shifted signal.
             if (active || wet > 0.0001f)
                 speedStage.process (sub, numChannels, n);
@@ -275,4 +319,9 @@ private:
     float wet = 0.0f, panicLevel = 0.0f;
     float chaosPhase = 0.0f, chaosTarget = 0.0f, wobblePhase = 0.0f;
     float lastMainRatio = 1.0f, lastPanicRatio = 1.0f;
+
+    // attack restoration / anti-chipmunk
+    float dryEnv = 0.0f, wetEnv = 0.0f, restoreGain = 1.0f;
+    float envAttack = 0.05f, envRelease = 0.001f, gainUp = 0.02f, gainDown = 0.003f;
+    std::array<float, 2> chipmunkLp {};
 };

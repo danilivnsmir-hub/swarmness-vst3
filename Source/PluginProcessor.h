@@ -79,6 +79,7 @@ private:
         std::atomic<float>* rbPrimary {};  std::atomic<float>* rbSecondary {}; std::atomic<float>* rbTone {};
         std::atomic<float>* rbTracking {}; std::atomic<float>* rbMagic {};     std::atomic<float>* magicHold {};
         std::atomic<float>* linkOct1 {};   std::atomic<float>* linkOct2 {};
+        std::atomic<float>* rbTime {};     std::atomic<float>* rbSync {};      std::atomic<float>* rbDiv {};
         std::atomic<float>* swarmOn {};    std::atomic<float>* swarmDeep {};   std::atomic<float>* swarmRate {};
         std::atomic<float>* swarmDepth {}; std::atomic<float>* swarmMix {};
         std::atomic<float>* fuzzOn {};     std::atomic<float>* fuzzPost {};    std::atomic<float>* fuzz {};
@@ -86,7 +87,7 @@ private:
         std::atomic<float>* fuzzScoop {};  std::atomic<float>* fuzzGlare {};   std::atomic<float>* fuzzBlend {};
         std::atomic<float>* flowOn {};     std::atomic<float>* flowHard {};    std::atomic<float>* flowSync {};
         std::atomic<float>* flowAmount {}; std::atomic<float>* flowSpeed {};   std::atomic<float>* flowDiv {};
-        std::atomic<float>* output {};      std::atomic<float>* bypass {};
+        std::atomic<float>* output {};      std::atomic<float>* input {};      std::atomic<float>* bypass {};
     } p;
 
     juce::AudioParameterBool* bypassParam = nullptr;
@@ -100,7 +101,8 @@ private:
 
     juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::None> dryDelay { 1 };
     juce::AudioBuffer<float> dryBuffer;
-    juce::SmoothedValue<float> outputGainSmoothed, bypassSmoothed;
+    std::vector<float> inputGainTrack;     // per-sample INPUT gain of the current block
+    juce::SmoothedValue<float> inputGainSmoothed, outputGainSmoothed, bypassSmoothed;
 
     double currentSampleRate = 44100.0;
     int maxBlockSize = 512;

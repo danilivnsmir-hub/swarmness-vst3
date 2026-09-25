@@ -35,6 +35,7 @@ SwarmnessAudioProcessor::SwarmnessAudioProcessor()
     p.rbPrimary = get (id::rbPrimary);   p.rbSecondary = get (id::rbSecondary); p.rbTone = get (id::rbTone);
     p.rbTracking = get (id::rbTracking); p.rbMagic = get (id::rbMagic);         p.magicHold = get (id::magicHold);
     p.linkOct1 = get (id::linkOct1);     p.linkOct2 = get (id::linkOct2);
+    p.rbTime = get (id::rbTime);         p.rbSync = get (id::rbSync);           p.rbDiv = get (id::rbDiv);
     p.swarmOn = get (id::swarmOn);       p.swarmDeep = get (id::swarmDeep);     p.swarmRate = get (id::swarmRate);
     p.swarmDepth = get (id::swarmDepth); p.swarmMix = get (id::swarmMix);
     p.fuzzOn = get (id::fuzzOn);         p.fuzzPost = get (id::fuzzPost);       p.fuzz = get (id::fuzz);
@@ -42,7 +43,7 @@ SwarmnessAudioProcessor::SwarmnessAudioProcessor()
     p.fuzzScoop = get (id::fuzzScoop);   p.fuzzGlare = get (id::fuzzGlare);     p.fuzzBlend = get (id::fuzzBlend);
     p.flowOn = get (id::flowOn);         p.flowHard = get (id::flowHard);       p.flowSync = get (id::flowSync);
     p.flowAmount = get (id::flowAmount); p.flowSpeed = get (id::flowSpeed);     p.flowDiv = get (id::flowDiv);
-    p.output = get (id::output);           p.bypass = get (id::bypass);
+    p.output = get (id::output);         p.input = get (id::input);           p.bypass = get (id::bypass);
 
     bypassParam = dynamic_cast<juce::AudioParameterBool*> (apvts.getParameter (id::bypass));
     jassert (bypassParam != nullptr);
@@ -76,6 +77,7 @@ void SwarmnessAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBl
     dryDelay.prepare ({ sampleRate, (juce::uint32) maxBlockSize, 2 });
     dryDelay.setDelay ((float) latency);
     dryBuffer.setSize (2, maxBlockSize, false, false, true);
+    inputGainTrack.assign ((size_t) maxBlockSize, 1.0f);
 
     auto init = [sampleRate] (juce::SmoothedValue<float>& s, double seconds, float value)
     {
@@ -83,6 +85,7 @@ void SwarmnessAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBl
         s.setCurrentAndTargetValue (value);
     };
     init (outputGainSmoothed, 0.03, juce::Decibels::decibelsToGain (p.output->load()));
+    init (inputGainSmoothed,  0.03, juce::Decibels::decibelsToGain (p.input->load()));
     init (bypassSmoothed,     0.02, on (p.bypass) ? 1.0f : 0.0f);
 
     setLatencySamples (latency);
@@ -130,9 +133,6 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
 
     auto* const* audio = buffer.getArrayOfWritePointers();
 
-    for (int ch = 0; ch < numChannels; ++ch)
-        updatePeak (meters.input[(size_t) ch], buffer.getMagnitude (ch, 0, numSamples));
-
     // Latency-aligned dry copy (for Mix and Bypass)
     for (int ch = 0; ch < numChannels; ++ch)
     {
@@ -144,6 +144,30 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
             dst[i] = dryDelay.popSample (ch);
         }
     }
+
+    // Host tempo / position (for the tempo-synced HIVE repeats and WINGS gate)
+    struct { double bpm = 120.0; std::optional<double> ppq; } transport;
+    if (auto* ph = getPlayHead())
+        if (auto pos = ph->getPosition())
+        {
+            transport.bpm = juce::jlimit (20.0, 400.0, pos->getBpm().orFallback (120.0));
+            if (pos->getIsPlaying())
+                if (auto q = pos->getPpqPosition())
+                    transport.ppq = *q;
+        }
+
+    // ---- INPUT sensitivity (undone at the output, so it only changes how hard the effects are hit)
+    inputGainSmoothed.setTargetValue (juce::Decibels::decibelsToGain (p.input->load()));
+    for (int i = 0; i < numSamples; ++i)
+    {
+        const float g = inputGainSmoothed.getNextValue();
+        inputGainTrack[(size_t) i] = g;
+        for (int ch = 0; ch < numChannels; ++ch)
+            audio[ch][i] *= g;
+    }
+
+    for (int ch = 0; ch < numChannels; ++ch)
+        updatePeak (meters.input[(size_t) ch], buffer.getMagnitude (ch, 0, numSamples));
 
     // ---- FUZZ (pre)
     // Footswitches behave like real momentary pedals: holding one always engages its effect,
@@ -182,8 +206,11 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
         float pitch = p.rbPitch->load();
         if (on (p.rbSnap))
             pitch = std::round (pitch);
+        double repeatSeconds = p.rbTime->load() * 0.001;
+        if (on (p.rbSync))
+            repeatSeconds = ParamChoices::divisionInBeats ((int) p.rbDiv->load()) * 60.0 / transport.bpm;
         rainbow.setParams (on (p.rbOn) || magicHeld, pitch, pct (p.rbPrimary), pct (p.rbSecondary), pct (p.rbTone),
-                           pct (p.rbTracking), pct (p.rbMagic), magicHeld);
+                           pct (p.rbTracking), pct (p.rbMagic), (float) repeatSeconds, magicHeld);
         rainbow.process (audio, numChannels, numSamples);
     }
 
@@ -201,17 +228,10 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
 
     if (on (p.flowSync))
     {
-        double bpm = 120.0;
         std::optional<double> ppq;
-        if (auto* ph = getPlayHead())
-            if (auto pos = ph->getPosition())
-            {
-                bpm = pos->getBpm().orFallback (120.0);
-                if (pos->getIsPlaying())
-                    if (auto q = pos->getPpqPosition())
-                        ppq = *q - (double) getLatencySamples() / currentSampleRate * bpm / 60.0; // align with PDC
-            }
-        flow.setSynced (ParamChoices::divisionInBeats ((int) p.flowDiv->load()), bpm, ppq);
+        if (transport.ppq.has_value())
+            ppq = *transport.ppq - (double) getLatencySamples() / currentSampleRate * transport.bpm / 60.0; // align with PDC
+        flow.setSynced (ParamChoices::divisionInBeats ((int) p.flowDiv->load()), transport.bpm, ppq);
     }
     else
     {
@@ -228,7 +248,8 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
 
     for (int i = 0; i < numSamples; ++i)
     {
-        const float g = outputGainSmoothed.getNextValue();
+        // Output gain, with the INPUT sensitivity undone
+        const float g = outputGainSmoothed.getNextValue() / inputGainTrack[(size_t) i];
         const float b = bypassSmoothed.getNextValue();
         for (int ch = 0; ch < numChannels; ++ch)
         {

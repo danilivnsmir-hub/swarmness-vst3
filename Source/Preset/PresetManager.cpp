@@ -31,7 +31,7 @@ void PresetManager::initialiseFactoryPresets()
 
     // Presets store the sound; the footswitches (+1 / +2 OCT, VENOM) are played live.
     // Internal IDs: noise* = STING, rb* = HIVE, fuzz* = SMOKE, flow* = WINGS, panic = ANGER,
-    // chaos = FRENZY, speed = BUZZ, noiseDown = DIVE, rbPrimary = DRONE, rbSecondary = QUEEN, rbMagic = VENOM.
+    // chaos = FRENZY, speed = BUZZ, noiseDown = DIVE, rbPrimary = DRONE, rbSecondary = QUEEN, rbMagic = TRAILS.
     // Wings division indices: 3 = 1/8, 4 = 1/16, 5 = 1/32
     const juce::String basics ("Basics"), stingCat ("Sting - hold +1/+2 OCT"), hiveCat ("Hive"),
                        texture ("Smoke, Swarm & Wings"), attack ("Swarm Attack");
@@ -66,15 +66,17 @@ void PresetManager::initialiseFactoryPresets()
         { "Atonal Detune", hiveCat, "SNAP off: a quarter-tone-flat double. Instantly wrong in the best way.",
           { { rbOn, 1 }, { rbSnap, 0 }, { rbPitch, -0.4f }, { rbPrimary, 85 }, { rbTracking, 100 }, { rbTone, 65 } } },
         { "Tone Clusters", hiveCat, "Low TRACKING: the harmony lags and repeats grains, smearing into rhythmic clusters.",
-          { { rbOn, 1 }, { rbPitch, 5 }, { rbPrimary, 70 }, { rbSecondary, 20 }, { rbTracking, 8 }, { rbMagic, 20 }, { rbTone, 55 } } },
-        { "Honey Trails", hiveCat, "VENOM mid-way: every repeat climbs another fifth - glittering ascending trails.",
-          { { rbOn, 1 }, { rbPitch, 7 }, { rbPrimary, 55 }, { rbTracking, 75 }, { rbMagic, 45 }, { rbTone, 55 } } },
-        { "Descending Spiral", hiveCat, "Negative PITCH with VENOM: notes fall away in a spiral of fourths.",
-          { { rbOn, 1 }, { rbPitch, -5 }, { rbPrimary, 65 }, { rbTracking, 70 }, { rbMagic, 60 }, { rbTone, 40 } } },
-        { "Drowning Hive", hiveCat, "Atonal down-shift, loose tracking and heavy VENOM through the deep SWARM: moaning, gurgling.",
+          { { rbOn, 1 }, { rbPitch, 5 }, { rbPrimary, 70 }, { rbSecondary, 20 }, { rbTracking, 8 }, { rbMagic, 20 }, { rbTime, 90 }, { rbTone, 55 } } },
+        { "Honey Trails", hiveCat, "TRAILS mid-way: every repeat climbs another fifth - glittering ascending ladders that fade out.",
+          { { rbOn, 1 }, { rbPitch, 7 }, { rbPrimary, 55 }, { rbTracking, 75 }, { rbMagic, 55 }, { rbTime, 160 }, { rbTone, 55 } } },
+        { "Honey Ladder", hiveCat, "TRAILS synced to 1/8 notes: an octave ladder that climbs in time with the song.",
+          { { rbOn, 1 }, { rbPitch, 12 }, { rbPrimary, 50 }, { rbTracking, 85 }, { rbMagic, 65 }, { rbSync, 1 }, { rbDiv, 3 }, { rbTone, 60 } } },
+        { "Descending Spiral", hiveCat, "Negative PITCH with TRAILS: notes fall away in a spiral of fourths.",
+          { { rbOn, 1 }, { rbPitch, -5 }, { rbPrimary, 65 }, { rbTracking, 70 }, { rbMagic, 70 }, { rbTime, 240 }, { rbTone, 40 } } },
+        { "Drowning Hive", hiveCat, "Atonal down-shift, loose tracking and long TRAILS through the deep SWARM: moaning, gurgling.",
           { { rbOn, 1 }, { rbSnap, 0 }, { rbPitch, -1.7f }, { rbPrimary, 70 }, { rbSecondary, 30 }, { rbTracking, 35 },
-            { rbMagic, 80 }, { rbTone, 30 }, { swarmOn, 1 }, { swarmDeep, 1 }, { swarmMix, 40 } } },
-        { "Venom Overload", hiveCat, "VENOM on the edge. Hold the VENOM footswitch: it takes off into squalls and drags +1 OCT in (LINK).",
+            { rbMagic, 85 }, { rbTime, 320 }, { rbTone, 30 }, { swarmOn, 1 }, { swarmDeep, 1 }, { swarmMix, 40 } } },
+        { "Venom Overload", hiveCat, "Long octave TRAILS. Hold the VENOM footswitch: it takes off into self-oscillating squalls and drags +1 OCT in (LINK).",
           { { rbOn, 1 }, { rbPitch, 12 }, { rbPrimary, 50 }, { rbTracking, 60 }, { rbMagic, 92 }, { rbTone, 60 }, { linkOct1, 1 } } },
 
         // ------------------------------------------------------------- textures
@@ -95,7 +97,7 @@ void PresetManager::initialiseFactoryPresets()
         { "Wing Beat Breakdown", texture, "Tempo-synced 1/16 hard WINGS gate on SMOKE. Hold +1 OCT for angry stabs.",
           { { rise, 0 }, { fall, 0 }, { panic, 30 }, { fuzzOn, 1 }, { fuzzVoice, 0 }, { fuzz, 80 }, { fuzzScoop, 60 }, { fuzzBlend, 15 }, { flowOn, 1 }, { flowSync, 1 }, { flowDiv, 4 }, { flowHard, 1 } } },
         { "Ghost Swarm", texture, "Smooth WINGS tremolo, a quiet octave-up DRONE with trails and SWARM - eerie clean parts.",
-          { { rbOn, 1 }, { rbPitch, 12 }, { rbPrimary, 30 }, { rbMagic, 25 }, { rbTracking, 85 }, { rbTone, 45 },
+          { { rbOn, 1 }, { rbPitch, 12 }, { rbPrimary, 30 }, { rbMagic, 35 }, { rbTime, 300 }, { rbTracking, 85 }, { rbTone, 45 },
             { swarmOn, 1 }, { swarmMix, 35 }, { flowOn, 1 }, { flowHard, 0 }, { flowSpeed, 5.5f }, { flowAmount, 70 } } },
 
         // ---------------------------------------------------------- swarm attack
@@ -105,7 +107,7 @@ void PresetManager::initialiseFactoryPresets()
           { { rbOn, 1 }, { rbSnap, 0 }, { rbPitch, -2.6f }, { rbPrimary, 80 }, { rbTracking, 15 }, { rbTone, 30 },
             { fuzzOn, 1 }, { fuzzPost, 1 }, { fuzz, 45 }, { fuzzTone, 20 },
             { flowOn, 1 }, { flowHard, 0 }, { flowSpeed, 6.0f }, { flowAmount, 60 } } },
-        { "Hive Collapse", attack, "Everything at once. One stomp on VENOM: +2 OCT (LINK), max regeneration and gated SMOKE.",
+        { "Hive Collapse", attack, "Everything at once. One stomp on VENOM: +2 OCT (LINK), self-oscillating HIVE and gated SMOKE.",
           { { panic, 40 }, { chaos, 40 }, { rbOn, 1 }, { rbPitch, 12 }, { rbPrimary, 60 }, { rbMagic, 100 }, { rbTracking, 55 },
             { fuzzOn, 1 }, { fuzzPost, 1 }, { fuzz, 90 }, { fuzzScoop, 60 }, { fuzzGlare, 40 }, { fuzzGate, 30 }, { linkOct2, 1 } } },
     };

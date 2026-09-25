@@ -21,7 +21,7 @@ namespace ParamIDs
     inline constexpr const char* speed       = "speed";
     inline constexpr const char* stingMix    = "stingMix";     // dry / shifted blend while a footswitch is down
 
-    // HIVE: harmony voices with regeneration (DRONE = primary, QUEEN = secondary, VENOM = magic)
+    // HIVE: harmony voices with regeneration (DRONE = primary, QUEEN = secondary, TRAILS = magic; the VENOM footswitch = magicHold)
     inline constexpr const char* rbOn        = "rbOn";
     inline constexpr const char* rbPitch     = "rbPitch";
     inline constexpr const char* rbSnap      = "rbSnap";
@@ -29,7 +29,10 @@ namespace ParamIDs
     inline constexpr const char* rbSecondary = "rbSecondary";
     inline constexpr const char* rbTone      = "rbTone";
     inline constexpr const char* rbTracking  = "rbTracking";
-    inline constexpr const char* rbMagic     = "rbMagic";
+    inline constexpr const char* rbMagic     = "rbMagic";      // TRAILS: regeneration (repeats climb / fall by PITCH)
+    inline constexpr const char* rbTime      = "rbTime";       // time between repeats (free)
+    inline constexpr const char* rbSync      = "rbSync";       // repeats locked to the host tempo
+    inline constexpr const char* rbDiv       = "rbDiv";        // repeat time (tempo division)
     inline constexpr const char* magicHold   = "magicHold";    // footswitch: magic to self-oscillation
     inline constexpr const char* linkOct1    = "linkOct1";     // mini switch: MAGIC footswitch also engages +1 OCT
     inline constexpr const char* linkOct2    = "linkOct2";     // mini switch: MAGIC footswitch also engages +2 OCT
@@ -61,6 +64,7 @@ namespace ParamIDs
     inline constexpr const char* flowDiv     = "flowDiv";
 
     // OUTPUT / GLOBAL
+    inline constexpr const char* input       = "input";        // input sensitivity (compensated at the output)
     inline constexpr const char* output      = "output";
     inline constexpr const char* switchMode  = "switchMode";   // footswitch behaviour: momentary / latch
     inline constexpr const char* bypass      = "bypass";
@@ -70,6 +74,8 @@ namespace ParamRanges
 {
     inline constexpr float outputMinDb = -24.0f;
     inline constexpr float outputMaxDb = 12.0f;
+    inline constexpr float inputMinDb  = -18.0f;
+    inline constexpr float inputMaxDb  = 18.0f;
 }
 
 namespace ParamChoices

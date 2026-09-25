@@ -134,7 +134,8 @@ public:
 
 //==============================================================================
 /** Stereo horizontal peak meter with hold. */
-class LevelMeter : public juce::Component
+class LevelMeter : public juce::Component,
+                   public juce::SettableTooltipClient
 {
 public:
     explicit LevelMeter (const juce::String& caption);
@@ -143,8 +144,12 @@ public:
     void update (float left, float right);
     void paint (juce::Graphics&) override;
 
+    /** Highlights a recommended level range (e.g. where the input should peak). */
+    void setTargetZone (float minDb, float maxDb) { zoneMin = minDb; zoneMax = maxDb; repaint(); }
+
 private:
     juce::String caption;
+    float zoneMin = 0.0f, zoneMax = 0.0f;
     std::array<float, 2> level {}, hold {};
     std::array<int, 2> holdTicks {};
 };

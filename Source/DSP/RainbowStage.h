@@ -6,20 +6,33 @@
 #include <vector>
 
 /**
- * RAINBOW: two harmony voices with regeneration, inspired by EarthQuaker's Rainbow Machine.
+ * HIVE (internally "rainbow"): two harmony voices with regeneration, inspired by
+ * EarthQuaker's Rainbow Machine - but with one job per control, so it behaves predictably.
  *
- *  PITCH     : interval of the primary voice, -12..+12 st, continuous (atonal) or snapped
- *  PRIMARY   : level of the primary voice (added to the input)
- *  SECONDARY : an octave of the primary (above when PITCH >= 0, below otherwise)
- *  TONE      : low-pass on the voices and inside the feedback loop
- *  TRACKING  : high = tight harmonies; low = lag and long, repeating grains (tone clusters)
- *  MAGIC     : feeds the voices back into the shifters: cascading "pixie trails", resonance,
- *              and past ~85% controllable self-oscillation (soft-limited, never explodes)
+ *  PITCH     : interval of the primary voice (DRONE), -12..+12 st, continuous or snapped
+ *  PRIMARY   : DRONE level (added to the input)
+ *  SECONDARY : QUEEN level - an octave of the DRONE (above for up-shifts, below for down)
+ *  TONE      : brightness of the voices and of the trails
+ *  TRACKING  : only the tracking character: high = tight, low = lag and repeating grains
+ *  TRAILS    : regeneration of the DRONE. Every repeat is shifted by PITCH again, so the
+ *              trail climbs / falls in even steps and fades out; it never self-oscillates
+ *  TIME      : time between repeats (free, or a tempo division when synced)
+ *
+ * The VENOM footswitch (magicHeld) is the only way into self-oscillation: loop gain above
+ * one plus an unshifted resonant path, tanh-limited so it never explodes.
+ *
+ * Spiral ceiling: the loop is band-limited (steep low-pass / high-pass), so a trail that
+ * climbs or falls past the useful range fades out instead of turning into a squeal or rumble.
+ *
+ * Naturalness: each voice drifts a few cents on its own slow random walk, DRONE sits slightly
+ * left and QUEEN slightly right, and up-shifted voices are darkened in proportion to the
+ * shift ("anti-chipmunk").
  */
 class RainbowStage
 {
 public:
     static constexpr int kControlBlock = 32;
+    static constexpr double kMaxRepeatSeconds = 2.0;
 
     void prepare (double sr, int maxBlockSize)
     {
@@ -34,20 +47,33 @@ public:
         const int size = juce::jmax (maxBlockSize, kControlBlock);
         primBuf.setSize (2, size, false, false, true);
         secBuf .setSize (2, size, false, false, true);
+        inBuf  .setSize (2, size, false, false, true);
 
         onSmoothed.reset (sr, 0.03);   primLevel.reset (sr, 0.03);
-        secLevel.reset (sr, 0.03);     magicGain.reset (sr, 0.05);
+        secLevel.reset (sr, 0.03);     loopGain.reset (sr, 0.05);
+        resonanceSmoothed.reset (sr, 0.05);
         lagSmoothed.reset (sr, 0.15);
         onSmoothed.setCurrentAndTargetValue (0.0f);
         lagSmoothed.setCurrentAndTargetValue (0.0f);
 
-        loopSize = juce::nextPowerOfTwo ((int) std::ceil (sr * 0.4) + 64);
+        loopSize = juce::nextPowerOfTwo ((int) std::ceil (sr * kMaxRepeatSeconds) + 64);
         loopMask = loopSize - 1;
         for (auto& b : loopBuf)
             b.assign ((size_t) loopSize, 0.0f);
-        inBuf.setSize (2, size, false, false, true);
-        loopDelay.setTime (sr / kControlBlock, 0.2);
+        loopDelay.setTime (sr / kControlBlock, 0.12);
         loopDelay.reset (loopDelayTarget);
+
+        for (int ch = 0; ch < 2; ++ch)
+        {
+            loopLp[(size_t) ch].setType (swarm::SVF::Type::lowPass);
+            loopLp[(size_t) ch].setParams (sr, 3500.0f, 0.7071f);
+            loopHp[(size_t) ch].setType (swarm::SVF::Type::highPass);
+            loopHp[(size_t) ch].setParams (sr, 45.0f, 0.7071f);
+        }
+
+        const double controlRate = sr / kControlBlock;
+        for (auto& d : driftCents)
+            d.setTime (controlRate, 0.35);
 
         for (auto& d : dc) d.prepare (sr);
         reset();
@@ -60,13 +86,18 @@ public:
         lagLine.reset();
         clearLoop();
         toneState = {};
-        loopTone = { 0.0f, 0.0f };
+        primLp = secLp = loopTone = { 0.0f, 0.0f };
+        for (auto& f : loopLp) f.reset();
+        for (auto& f : loopHp) f.reset();
         for (auto& d : dc) d.reset();
+        for (auto& d : driftCents) d.reset (0.0f);
+        driftTarget = { 0.0f, 0.0f };
+        driftCounter = 0;
         lastPrimRatio = lastSecRatio = 1.0f;
     }
 
     void setParams (bool on, float pitchSemis, float primary01, float secondary01, float tone01,
-                    float tracking01, float magic01, bool magicHeld) noexcept
+                    float tracking01, float trails01, float repeatSeconds, bool magicHeld) noexcept
     {
         onSmoothed.setTargetValue (on ? 1.0f : 0.0f);
         pitch = pitchSemis;
@@ -74,19 +105,16 @@ public:
         secLevel .setTargetValue (secondary01);
         toneCoeff = std::exp (-swarm::kTwoPi * (400.0f * std::pow (40.0f, tone01)) / (float) sampleRate);
 
-        tracking = tracking01;
         primary  .setTightness (tracking01);
         secondary.setTightness (tracking01);
         const float loose = 1.0f - tracking01;
         lagSmoothed.setTargetValue (loose * loose * 0.12f * (float) sampleRate);
-        loopDelayTarget = (0.025f + 0.15f * loose) * (float) sampleRate;
 
-        // Loop gain > 1 => self-oscillation (tanh-limited). The footswitch slams it past the knob's maximum.
-        magicGain.setTargetValue (magicHeld ? 1.45f : magic01 * 1.3f);
-        // The unshifted (resonant delay) part of the loop only comes in towards the top of the range:
-        // mid settings give climbing / falling trails, the top end tips into self-oscillation.
-        const float m = magicHeld ? 1.0f : magic01;
-        resonance = 0.75f * m * m;
+        loopDelayTarget = (float) (juce::jlimit (0.02, kMaxRepeatSeconds - 0.01, (double) repeatSeconds) * sampleRate);
+
+        // TRAILS: loop gain below one -> even, predictable decay. The footswitch goes past one.
+        loopGain.setTargetValue (magicHeld ? 1.45f : 0.9f * std::pow (juce::jlimit (0.0f, 1.0f, trails01), 0.8f));
+        resonanceSmoothed.setTargetValue (magicHeld ? 0.75f : 0.0f);
     }
 
     bool isActive() const noexcept { return onSmoothed.getCurrentValue() > 0.0f || onSmoothed.isSmoothing(); }
@@ -103,27 +131,47 @@ public:
 
         loopCleared = false;
         numChannels = juce::jmin (numChannels, 2);
-        const float primRatio = std::pow (2.0f, pitch / 12.0f);
-        const float secRatio  = pitch >= 0.0f ? primRatio * 2.0f : primRatio * 0.5f;
 
         for (int start = 0; start < numSamples; start += kControlBlock)
         {
             const int n = juce::jmin (kControlBlock, numSamples - start);
             const float loopD = juce::jmax ((float) (kControlBlock + 2), loopDelay.process (loopDelayTarget));
 
-            // Shifter input = (lagged) input + the regeneration loop (a resonant delay that also
-            // carries the shifted voices, so every repeat climbs / falls another interval).
+            // Humanise: slow random pitch drift, independent per voice
+            if (++driftCounter >= (int) (0.4 * sampleRate / kControlBlock))
+            {
+                driftCounter = 0;
+                driftTarget[0] = 3.0f * rng.nextBipolar();
+                driftTarget[1] = 6.0f * rng.nextBipolar();
+            }
+            const float primCents = driftCents[0].process (driftTarget[0]);
+            const float secCents  = driftCents[1].process (driftTarget[1]);
+
+            const float baseRatio = std::pow (2.0f, pitch / 12.0f);
+            const float primRatio = baseRatio * std::pow (2.0f, primCents / 1200.0f);
+            const float secRatio  = (pitch >= 0.0f ? baseRatio * 2.0f : baseRatio * 0.5f) * std::pow (2.0f, secCents / 1200.0f);
+
+            // Anti-chipmunk: darken up-shifted voices in proportion to the shift
+            const auto voiceLpCoeff = [this] (float ratio)
+            {
+                const float hz = 16000.0f / std::pow (juce::jmax (1.0f, ratio), 0.9f);
+                return std::exp (-swarm::kTwoPi * hz / (float) sampleRate);
+            };
+            const float primLpCoeff = voiceLpCoeff (primRatio);
+            const float secLpCoeff  = voiceLpCoeff (secRatio);
+
+            // Shifter input = (lagged) input + the regeneration loop, so every repeat is shifted again.
             for (int i = 0; i < n; ++i)
             {
                 const float lag = lagSmoothed.getNextValue();
-                const float g = magicGain.getNextValue();
+                const float g = loopGain.getNextValue();
                 lagLine.setDelay (lag);
                 for (int ch = 0; ch < numChannels; ++ch)
                 {
                     lagLine.pushSample (ch, audio[ch][start + i]);
                     const float x = lagLine.popSample (ch);
                     const float fb = readLoop (ch, (float) (loopWrite + i) - loopD);
-                    const float in = x + g * 0.5f * std::tanh (2.0f * fb);   // same small-signal gain, lower ceiling
+                    const float in = x + g * 0.5f * std::tanh (2.0f * fb);
                     inBuf  .setSample (ch, i, in);
                     primBuf.setSample (ch, i, in);
                     secBuf .setSample (ch, i, in);
@@ -142,25 +190,35 @@ public:
                 const float on = onSmoothed.getNextValue();
                 const float pl = primLevel.getNextValue();
                 const float sl = secLevel.getNextValue();
+                const float res = resonanceSmoothed.getNextValue();
 
                 for (int ch = 0; ch < numChannels; ++ch)
                 {
-                    const float pv = primBuf.getSample (ch, i);
-                    const float sv = secBuf .getSample (ch, i);
+                    auto& plp = primLp[(size_t) ch];
+                    auto& slp = secLp[(size_t) ch];
+                    const float pvRaw = primBuf.getSample (ch, i);
+                    plp = pvRaw + primLpCoeff * (plp - pvRaw);
+                    const float svRaw = secBuf.getSample (ch, i);
+                    slp = svRaw + secLpCoeff * (slp - svRaw);
 
-                    // Tone: one-pole low-pass on the audible voices
-                    const float voices = pv * pl + sv * sl;
+                    // Stereo placement: DRONE slightly left, QUEEN slightly right
+                    const bool right = numChannels > 1 && ch == 1;
+                    const float pPan = right ? 0.72f : 1.0f;
+                    const float sPan = numChannels > 1 && ! right ? 0.72f : 1.0f;
+
+                    const float voices = plp * pl * pPan + slp * sl * sPan;
                     auto& z = toneState[(size_t) ch];
                     z = voices + toneCoeff * (z - voices);
 
-                    // Loop: shifted voices (independent of output levels, so MAGIC always regenerates)
-                    // plus the unshifted input -> resonance; unity-plus gain gives self-oscillation.
-                    const float fbIn = 0.8f * (pv + 0.7f * sv * juce::jmin (1.0f, sl * 4.0f)) + resonance * inBuf.getSample (ch, i);
+                    // Loop: only the DRONE (so each repeat is one more PITCH step), TONE-filtered and
+                    // band-limited (spiral ceiling). The unshifted resonance only exists while VENOM is held.
+                    const float fbIn = plp + res * inBuf.getSample (ch, i);
                     auto& lt = loopTone[(size_t) ch];
                     lt = fbIn + toneCoeff * (lt - fbIn);
-                    loopBuf[(size_t) ch][(size_t) ((loopWrite + i) & loopMask)] = dc[(size_t) ch].process (lt);
+                    const float banded = loopHp[(size_t) ch].process (loopLp[(size_t) ch].process (lt));
+                    loopBuf[(size_t) ch][(size_t) ((loopWrite + i) & loopMask)] = dc[(size_t) ch].process (banded);
 
-                    audio[ch][start + i] += on * 0.6f * std::tanh (z * (1.0f / 0.6f));   // voices never overpower the mix
+                    audio[ch][start + i] += on * 0.9f * std::tanh (z * (1.0f / 0.9f));
                 }
             }
 
@@ -189,18 +247,23 @@ private:
     double sampleRate = 44100.0;
     LivePitchShifter primary, secondary;
     juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::Linear> lagLine { 1 };
-    juce::AudioBuffer<float> primBuf, secBuf;
-    juce::SmoothedValue<float> onSmoothed, primLevel, secLevel, magicGain, lagSmoothed;
+    juce::AudioBuffer<float> primBuf, secBuf, inBuf;
+    juce::SmoothedValue<float> onSmoothed, primLevel, secLevel, loopGain, resonanceSmoothed, lagSmoothed;
 
     std::array<std::vector<float>, 2> loopBuf;
-    juce::AudioBuffer<float> inBuf;
     int loopSize = 0, loopMask = 0, loopWrite = 0;
     bool loopCleared = false;
-    float loopDelayTarget = 2000.0f, resonance = 0.0f;
+    float loopDelayTarget = 8000.0f;
     swarm::OnePole loopDelay;
-    std::array<float, 2> toneState {}, loopTone {};
+    std::array<float, 2> toneState {}, loopTone {}, primLp {}, secLp {};
+    std::array<swarm::SVF, 2> loopLp, loopHp;
     std::array<swarm::DCBlocker, 2> dc;
 
-    float pitch = 7.0f, tracking = 0.8f, toneCoeff = 0.0f;
+    std::array<swarm::OnePole, 2> driftCents;
+    std::array<float, 2> driftTarget {};
+    int driftCounter = 0;
+    swarm::FastRandom rng { 0x5EED1E5u };
+
+    float pitch = 7.0f, toneCoeff = 0.0f;
     float lastPrimRatio = 1.0f, lastSecRatio = 1.0f;
 };

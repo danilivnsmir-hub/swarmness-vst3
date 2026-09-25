@@ -87,7 +87,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     rainbow->addChild (percent (rbSecondary, "Queen", 0.0f));
     rainbow->addChild (percent (rbTone, "Hive Tone", 60.0f));
     rainbow->addChild (percent (rbTracking, "Hive Tracking", 80.0f));
-    rainbow->addChild (percent (rbMagic, "Venom", 0.0f));
+    rainbow->addChild (percent (rbMagic, "Hive Trails", 0.0f));
+    rainbow->addChild (std::make_unique<juce::AudioParameterFloat> (
+        pid (rbTime), "Hive Time", skewedRange (40.0f, 1200.0f, 250.0f, 1.0f), 180.0f,
+        Attr().withLabel ("ms").withStringFromValueFunction ([] (float v, int)
+        {
+            return v >= 1000.0f ? juce::String (v / 1000.0f, 2) + " s" : juce::String (juce::roundToInt (v)) + " ms";
+        })));
+    rainbow->addChild (toggle (rbSync, "Hive Sync", false));
+    rainbow->addChild (std::make_unique<juce::AudioParameterChoice> (pid (rbDiv), "Hive Division", ParamChoices::divisions, 3));
     rainbow->addChild (toggle (magicHold, "Venom Switch", false));
     rainbow->addChild (toggle (linkOct1, "Venom Links +1 Oct", false));
     rainbow->addChild (toggle (linkOct2, "Venom Links +2 Oct", false));
@@ -125,6 +133,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
 
     // ----------------------------------------------------------------- OUTPUT
     auto out = std::make_unique<Group> ("output", "Output", "|");
+    out->addChild (std::make_unique<juce::AudioParameterFloat> (
+        pid (input), "Input", juce::NormalisableRange<float> (ParamRanges::inputMinDb, ParamRanges::inputMaxDb, 0.1f), 0.0f,
+        Attr().withLabel ("dB").withStringFromValueFunction ([] (float v, int)
+        {
+            return (v > 0.05f ? "+" : "") + juce::String (v, 1) + " dB";
+        })));
     out->addChild (std::make_unique<juce::AudioParameterFloat> (
         pid (output), "Output", juce::NormalisableRange<float> (ParamRanges::outputMinDb, ParamRanges::outputMaxDb, 0.1f), 0.0f,
         Attr().withLabel ("dB").withStringFromValueFunction ([] (float v, int)

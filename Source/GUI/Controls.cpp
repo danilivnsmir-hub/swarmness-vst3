@@ -415,6 +415,14 @@ void LevelMeter::paint (juce::Graphics& g)
     const float barH = juce::jmin (6.0f, (r.getHeight() - 4.0f) * 0.5f);
     const float zeroDb = juce::jmap (0.0f, -60.0f, 6.0f, 0.0f, 1.0f);
 
+    if (zoneMax > zoneMin)
+    {
+        const float x0 = r.getX() + r.getWidth() * juce::jmap (zoneMin, -60.0f, 6.0f, 0.0f, 1.0f);
+        const float x1 = r.getX() + r.getWidth() * juce::jmap (zoneMax, -60.0f, 6.0f, 0.0f, 1.0f);
+        g.setColour (Colours::meterLow.withAlpha (0.22f));
+        g.fillRoundedRectangle (juce::Rectangle<float> (x0, r.getCentreY() - barH - 4.0f, x1 - x0, 2.0f * barH + 8.0f), 2.0f);
+    }
+
     for (size_t i = 0; i < 2; ++i)
     {
         auto bar = juce::Rectangle<float> (r.getX(), r.getCentreY() - barH - 1.0f + (float) i * (barH + 2.0f), r.getWidth(), barH);
@@ -753,22 +761,24 @@ void InfoOverlay::paint (juce::Graphics& g)
     {
         { "STING",    "Hold +1 OCT / +2 OCT (or latch them) for a violent octave. RISE = glide in, FALL = glide back on release. ANGER = detuned dissonance, "
                       "FRENZY = random pitch jumps, BUZZ = all-pass feedback + ring-mod-like AM, MIX = dry / octave blend. DIVE = shift down." },
-        { "HIVE",     "Harmony voices: PITCH (-12..+12 st, SNAP = semitones), DRONE = main voice, QUEEN = its octave, TONE. "
-                      "TRACKING low = lag and tone clusters. VENOM = regeneration up to self-oscillation." },
-        { "VENOM",    "The VENOM footswitch slams the regeneration to max - even with HIVE or the plug-in off. "
+        { "HIVE",     "Harmony voices: PITCH (-12..+12 st, SNAP = semitones), DRONE = main voice, QUEEN = its octave, TONE. TRACKING low = lag "
+                      "and tone clusters. TRAILS = repeats that climb / fall by PITCH each time, TIME = their spacing (SYNC = tempo)." },
+        { "VENOM",    "The VENOM footswitch pushes the TRAILS into self-oscillation - even with HIVE or the plug-in off. "
                       "LINK mini switches next to the octaves make VENOM engage +1 / +2 OCT too." },
         { "SWARM",    "Stereo chorus with bucket-brigade colour. DEEP = 8 voices with feedback. MIX 50% = dry and chorus both full, 100% = vibrato." },
         { "SMOKE",    "Jumbo fuzz. VOICE: DOWN doom / MID / UP scream. SCOOP = mid cut, GLARE = gated octave-up, GATE = starved sputter, "
                       "BLEND = clean under the fuzz. POST = after the pitch effects (off = before)." },
         { "WINGS",    "Rhythmic gate: HARD = stutter, off = tremolo. SYNC locks to the host tempo (DIV)." },
         { "SWITCHES", "MOMENTARY = active while held, LATCH = click on / off. Footswitches work even while bypassed. MIDI-learn them in your DAW." },
+        { "LEVELS",   "INPUT sets how hard the effects are hit (aim for the green zone of the IN meter); it is compensated at the output. "
+                      "VOLUME = output level." },
         { "PRESETS",  "FACTORY / USER tabs pick the bank that the list and the < > arrows browse. SAVE stores your sound in USER "
                       "(an edited factory preset becomes a new user preset). Hover the name for the preset's description." },
     };
 
     for (const auto& item : items)
     {
-        auto row = r.removeFromTop (juce::jmin (58.0f, r.getHeight()));
+        auto row = r.removeFromTop (juce::jmin (54.0f, r.getHeight()));
         g.setFont (font (16.0f, true));
         g.setColour (Colours::accentBright);
         g.drawText (item.title, row.removeFromLeft (120.0f), juce::Justification::topLeft, false);

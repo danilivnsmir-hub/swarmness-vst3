@@ -53,9 +53,10 @@ private:
 
     // HIVE (internally "rainbow")
     PowerButton rainbowPower;
-    PillToggle snapToggle { "SNAP" };
+    PillToggle snapToggle { "SNAP" }, rbSyncToggle { "SYNC" };
     Knob pitchKnob { "PITCH", true }, primaryKnob { "DRONE" }, secondaryKnob { "QUEEN" };
-    Knob toneKnob { "TONE" }, trackingKnob { "TRACKING" }, magicKnob { "VENOM" };
+    Knob toneKnob { "TONE" }, trackingKnob { "TRACKING" }, magicKnob { "TRAILS" };
+    Knob rbTimeKnob { "TIME" }, rbDivKnob { "DIV" };
 
     // SWARM
     PowerButton swarmPower;
@@ -74,8 +75,8 @@ private:
     PillToggle hardToggle { "HARD" }, syncToggle { "SYNC" };
     Knob flowAmountKnob { "AMOUNT" }, flowSpeedKnob { "SPEED" }, flowDivKnob { "DIV" };
 
-    // OUTPUT
-    Knob volumeKnob { "VOLUME", true };
+    // Levels (footer, next to the meters)
+    Knob inputKnob { "INPUT", true }, volumeKnob { "VOLUME", true };
 
     // Footswitches
     Footswitch oct1Switch, oct2Switch, magicSwitch, bypassSwitch;
@@ -87,7 +88,7 @@ private:
     std::vector<std::unique_ptr<APVTS::ButtonAttachment>> buttonAttachments;
 
     // Section rectangles (base coordinates)
-    juce::Rectangle<float> noiseArea, rainbowArea, swarmArea, fuzzArea, flowArea, outputArea;
+    juce::Rectangle<float> noiseArea, rainbowArea, swarmArea, fuzzArea, flowArea;
     std::array<bool, 5> lastSectionStates {};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainPanel)
