@@ -72,6 +72,12 @@ class SegmentedChoice : public juce::Component,
 {
 public:
     SegmentedChoice (juce::RangedAudioParameter& param, juce::StringArray labels);
+    /** Free-standing variant (no parameter): onSelect is called when the user clicks a segment. */
+    explicit SegmentedChoice (juce::StringArray labels);
+
+    void setSelectedIndex (int index);
+    int getSelectedIndex() const noexcept { return selected; }
+    std::function<void (int)> onSelect;
 
     void paint (juce::Graphics&) override;
     void mouseDown (const juce::MouseEvent&) override;
@@ -83,7 +89,7 @@ private:
 
     juce::StringArray labels;
     int selected = 0, hovered = -1;
-    juce::ParameterAttachment attachment;
+    std::unique_ptr<juce::ParameterAttachment> attachment;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SegmentedChoice)
 };
@@ -161,7 +167,11 @@ private:
 };
 
 //==============================================================================
-/** Header preset browser: < [name] > SAVE and a menu with the less frequent actions. */
+/**
+ * Header preset browser: [FACTORY | USER] < [name] > SAVE ...
+ * The bank tabs choose which presets the list and the arrows browse; the bank follows
+ * whatever preset gets loaded (e.g. saving switches to USER).
+ */
 class PresetBar : public juce::Component
 {
 public:
@@ -172,14 +182,18 @@ public:
     void paint (juce::Graphics&) override;
 
 private:
-    void showPresetMenu();
     void showActionsMenu();
     void saveAs();
     void confirmDelete();
     void importPreset();
     void exportPreset();
 
+    void setBank (bool user);
+    void showMenuForBank();
+
     PresetManager& presets;
+    SegmentedChoice bankTabs { { "FACTORY", "USER" } };
+    bool userBank = false;
     juce::TextButton prevButton { "<" }, nextButton { ">" }, nameButton, saveButton { "SAVE" }, menuButton { "..." };
     std::unique_ptr<juce::FileChooser> chooser;
     juce::String shownName;

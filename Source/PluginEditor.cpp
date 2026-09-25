@@ -140,8 +140,8 @@ void MainPanel::setSectionDimmed (std::initializer_list<juce::Component*> comps,
 void MainPanel::resized()
 {
     // Header
-    presetBar.setBounds (300, 16, 400, 32);
-    switchModeSelector.setBounds (736, 18, 196, 28);
+    presetBar.setBounds (222, 16, 510, 32);
+    switchModeSelector.setBounds (746, 18, 188, 28);
     infoButton.setBounds (baseWidth - 16 - 32, 16, 32, 32);
 
     // Section areas

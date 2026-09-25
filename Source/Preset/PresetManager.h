@@ -29,8 +29,9 @@ public:
     bool isUserPreset (const juce::String& name) const;
 
     bool loadPreset (const juce::String& name);
-    void loadNextPreset();
-    void loadPreviousPreset();
+    /** Step through one bank (factory or user). From outside that bank, lands on its first/last preset. */
+    void loadNextPreset (bool userBank);
+    void loadPreviousPreset (bool userBank);
 
     bool saveUserPreset (const juce::String& name);
     bool deleteUserPreset (const juce::String& name);
@@ -54,6 +55,7 @@ private:
     ValueMap captureValues() const;
     void takeSnapshot();
     void setCurrentName (const juce::String&);
+    void stepPreset (bool userBank, int delta);
 
     static juce::var toJson (const juce::String& name, const ValueMap& values);
     static bool fromJson (const juce::var& json, juce::String& name, ValueMap& values);

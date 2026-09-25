@@ -308,20 +308,17 @@ bool PresetManager::loadPreset (const juce::String& name)
     return true;
 }
 
-void PresetManager::loadNextPreset()
-{
-    const auto all = getAllPresetNames();
-    if (all.isEmpty()) return;
-    const int idx = all.indexOf (getCurrentPresetName());
-    loadPreset (all[(idx + 1) % all.size()]);
-}
+void PresetManager::loadNextPreset (bool userBank)     { stepPreset (userBank, 1); }
+void PresetManager::loadPreviousPreset (bool userBank) { stepPreset (userBank, -1); }
 
-void PresetManager::loadPreviousPreset()
+void PresetManager::stepPreset (bool userBank, int delta)
 {
-    const auto all = getAllPresetNames();
-    if (all.isEmpty()) return;
-    const int idx = all.indexOf (getCurrentPresetName());
-    loadPreset (all[idx <= 0 ? all.size() - 1 : idx - 1]);
+    const auto names = userBank ? getUserPresetNames() : getFactoryPresetNames();
+    if (names.isEmpty()) return;
+    const int idx = names.indexOf (getCurrentPresetName());
+    const int n = names.size();
+    const int next = idx < 0 ? (delta > 0 ? 0 : n - 1) : ((idx + delta) % n + n) % n;
+    loadPreset (names[next]);
 }
 
 bool PresetManager::saveUserPreset (const juce::String& rawName)
@@ -344,16 +341,17 @@ bool PresetManager::deleteUserPreset (const juce::String& name)
     if (! isUserPreset (name))
         return false;
 
-    const auto all = getAllPresetNames();
-    const int idx = all.indexOf (name);
+    const int idx = getUserPresetNames().indexOf (name);
 
     if (! getPresetsDirectory().getChildFile (name + extension).deleteFile())
         return false;
 
+    // Stay in the user bank if possible: move to the neighbouring user preset, else back to Init.
     if (getCurrentPresetName() == name)
     {
-        const auto remaining = getAllPresetNames();
-        loadPreset (remaining[juce::jlimit (0, remaining.size() - 1, idx - 1)]);
+        const auto remaining = getUserPresetNames();
+        loadPreset (remaining.isEmpty() ? juce::String ("Init")
+                                        : remaining[juce::jlimit (0, remaining.size() - 1, idx - 1)]);
     }
     return true;
 }

@@ -440,6 +440,42 @@ namespace
         check (! pm.isDirty(), "footswitches / bypass do not affect preset state");
     }
 
+    void testPresetBanks()
+    {
+        std::printf ("\nPreset banks (factory / user)\n");
+        SwarmnessAudioProcessor p;
+        auto& pm = p.getPresetManager();
+        const auto factory = pm.getFactoryPresetNames();
+
+        pm.loadPreset (factory[0]);
+        pm.loadNextPreset (false);
+        check (pm.getCurrentPresetName() == factory[1], "factory: next steps within the factory bank");
+        pm.loadPreset (factory[0]);
+        pm.loadPreviousPreset (false);
+        check (pm.getCurrentPresetName() == factory[factory.size() - 1], "factory: previous wraps to the last factory preset");
+
+        const juce::String a ("zz bank test A"), b ("zz bank test B");
+        pm.saveUserPreset (a);
+        pm.saveUserPreset (b);
+        const auto user = pm.getUserPresetNames();
+        bool noFactory = true;
+        for (const auto& n : user)
+            noFactory = noFactory && ! factory.contains (n);
+        check (noFactory && user.contains (a) && user.contains (b), "user bank lists only user presets");
+
+        pm.loadPreset (factory[factory.size() - 1]);
+        pm.loadNextPreset (true);
+        check (pm.getCurrentPresetName() == user[0], "user: from a factory preset, next lands on the first user preset");
+        pm.loadPreset (b);
+        pm.loadNextPreset (false);
+        check (pm.getCurrentPresetName() == factory[0], "factory: from a user preset, next lands on the first factory preset");
+
+        pm.loadPreset (b);
+        pm.deleteUserPreset (b);
+        check (pm.isUserPreset (pm.getCurrentPresetName()), "deleting a user preset moves to a neighbouring user preset");
+        pm.deleteUserPreset (a);
+    }
+
     void testPerformance()
     {
         std::printf ("\nPerformance (48 kHz, 128-sample blocks)\n");
@@ -545,6 +581,7 @@ int main (int argc, char** argv)
     testFuzzLevel();
     testStateRoundTrip();
     testPresetDirtyTracking();
+    testPresetBanks();
     testPerformance();
 
     std::printf ("\n%s (%d failure%s)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures, failures == 1 ? "" : "s");

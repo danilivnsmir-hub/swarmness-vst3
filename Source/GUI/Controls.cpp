@@ -166,11 +166,24 @@ void PillToggle::paintButton (juce::Graphics& g, bool isMouseOver, bool)
 
 //==============================================================================
 SegmentedChoice::SegmentedChoice (juce::RangedAudioParameter& param, juce::StringArray l)
-    : labels (std::move (l)),
-      attachment (param, [this] (float v) { selected = juce::roundToInt (v); repaint(); }, nullptr)
+    : SegmentedChoice (std::move (l))
 {
-    attachment.sendInitialUpdate();
+    attachment = std::make_unique<juce::ParameterAttachment> (param, [this] (float v) { setSelectedIndex (juce::roundToInt (v)); }, nullptr);
+    attachment->sendInitialUpdate();
+}
+
+SegmentedChoice::SegmentedChoice (juce::StringArray l) : labels (std::move (l))
+{
     setMouseCursor (juce::MouseCursor::PointingHandCursor);
+}
+
+void SegmentedChoice::setSelectedIndex (int index)
+{
+    if (index != selected)
+    {
+        selected = index;
+        repaint();
+    }
 }
 
 int SegmentedChoice::indexAt (juce::Point<float> p) const
@@ -183,7 +196,13 @@ int SegmentedChoice::indexAt (juce::Point<float> p) const
 void SegmentedChoice::mouseDown (const juce::MouseEvent& e)
 {
     if (! isEnabled()) return;
-    attachment.setValueAsCompleteGesture ((float) indexAt (e.position));
+    const int index = indexAt (e.position);
+    if (attachment != nullptr)
+        attachment->setValueAsCompleteGesture ((float) index);
+    else
+        setSelectedIndex (index);
+    if (onSelect != nullptr)
+        onSelect (index);
 }
 
 void SegmentedChoice::mouseMove (const juce::MouseEvent& e)
@@ -494,21 +513,29 @@ void PitchScope::paint (juce::Graphics& g)
 //==============================================================================
 PresetBar::PresetBar (PresetManager& pm) : presets (pm)
 {
+    addAndMakeVisible (bankTabs);
+    bankTabs.setTooltip ("FACTORY = built-in presets, USER = your saved presets");
+    bankTabs.onSelect = [this] (int index)
+    {
+        setBank (index == 1);
+        showMenuForBank();
+    };
+
     for (auto* b : { &prevButton, &nextButton, &nameButton, &saveButton, &menuButton })
     {
         addAndMakeVisible (*b);
         b->setMouseCursor (juce::MouseCursor::PointingHandCursor);
     }
 
-    prevButton.setTooltip ("Previous preset");
-    nextButton.setTooltip ("Next preset");
+    prevButton.setTooltip ("Previous preset in this bank");
+    nextButton.setTooltip ("Next preset in this bank");
     nameButton.setTooltip ("Browse presets");
     saveButton.setTooltip ("Save preset (factory presets are saved as a new user preset)");
     menuButton.setTooltip ("Preset actions");
 
-    prevButton.onClick = [this] { presets.loadPreviousPreset(); refresh(); };
-    nextButton.onClick = [this] { presets.loadNextPreset(); refresh(); };
-    nameButton.onClick = [this] { showPresetMenu(); };
+    prevButton.onClick = [this] { presets.loadPreviousPreset (userBank); refresh(); };
+    nextButton.onClick = [this] { presets.loadNextPreset (userBank); refresh(); };
+    nameButton.onClick = [this] { showMenuForBank(); };
     menuButton.onClick = [this] { showActionsMenu(); };
     saveButton.onClick = [this]
     {
@@ -527,12 +554,22 @@ PresetBar::PresetBar (PresetManager& pm) : presets (pm)
     refresh();
 }
 
+void PresetBar::setBank (bool user)
+{
+    userBank = user;
+    bankTabs.setSelectedIndex (user ? 1 : 0);
+}
+
 void PresetBar::refresh()
 {
     const auto name = presets.getCurrentPresetName();
     const bool dirty = presets.isDirty();
     if (name != shownName || dirty != shownDirty)
     {
+        // The bank follows a newly loaded preset (browsing, saving, host state restore).
+        if (name != shownName)
+            setBank (presets.isUserPreset (name));
+
         shownName = name;
         shownDirty = dirty;
         nameButton.setButtonText (dirty ? name + " *" : name);
@@ -545,6 +582,8 @@ void PresetBar::resized()
 {
     auto r = getLocalBounds();
     const int h = r.getHeight();
+    bankTabs.setBounds (r.removeFromLeft (130).reduced (0, 2));
+    r.removeFromLeft (8);
     prevButton.setBounds (r.removeFromLeft (h));
     r.removeFromLeft (4);
     menuButton.setBounds (r.removeFromRight (h + 6));
@@ -558,24 +597,37 @@ void PresetBar::resized()
 
 void PresetBar::paint (juce::Graphics&) {}
 
-void PresetBar::showPresetMenu()
+void PresetBar::showMenuForBank()
 {
     juce::PopupMenu menu;
     const auto current = presets.getCurrentPresetName();
+    auto load = [this] (const juce::String& n) { return [this, n] { presets.loadPreset (n); refresh(); }; };
 
-    for (const auto& category : presets.getFactoryCategories())
+    if (! userBank)
     {
-        menu.addSectionHeader (category);
-        for (const auto& n : presets.getFactoryPresetNames (category))
-            menu.addItem (n, true, n == current, [this, n] { presets.loadPreset (n); refresh(); });
+        // One submenu per category keeps the factory list short; the current category is ticked.
+        for (const auto& category : presets.getFactoryCategories())
+        {
+            juce::PopupMenu sub;
+            const auto names = presets.getFactoryPresetNames (category);
+            for (const auto& n : names)
+                sub.addItem (n, true, n == current, load (n));
+            menu.addSubMenu (category, sub, true, nullptr, names.contains (current));
+        }
     }
+    else
+    {
+        const auto user = presets.getUserPresetNames();
+        if (user.isEmpty())
+            menu.addItem ("No user presets yet", false, false, nullptr);
+        for (const auto& n : user)
+            menu.addItem (n, true, n == current, load (n));
 
-    const auto user = presets.getUserPresetNames();
-    menu.addSectionHeader ("User");
-    if (user.isEmpty())
-        menu.addItem ("(no user presets yet)", false, false, nullptr);
-    for (const auto& n : user)
-        menu.addItem (n, true, n == current, [this, n] { presets.loadPreset (n); refresh(); });
+        menu.addSeparator();
+        menu.addItem ("Save Current Sound As...", [this] { saveAs(); });
+        menu.addItem ("Import Preset...", [this] { importPreset(); });
+        menu.addItem ("Open Presets Folder", [] { PresetManager::getPresetsDirectory().startAsProcess(); });
+    }
 
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&nameButton)
                                                   .withMinimumWidth (nameButton.getWidth()));
@@ -709,6 +761,8 @@ void InfoOverlay::paint (juce::Graphics& g)
         { "SMOKE",    "Two-stage fuzz. GATE starves it into sputtering velcro. POST places it after the pitch effects (off = before)." },
         { "WINGS",    "Rhythmic gate: HARD = stutter, off = tremolo. SYNC locks to the host tempo (DIV)." },
         { "SWITCHES", "MOMENTARY = active while held, LATCH = click on / off. Footswitches work even while bypassed. MIDI-learn them in your DAW." },
+        { "PRESETS",  "FACTORY / USER tabs pick the bank that the list and the < > arrows browse. SAVE stores your sound in USER "
+                      "(an edited factory preset becomes a new user preset). Hover the name for the preset's description." },
     };
 
     for (const auto& item : items)
