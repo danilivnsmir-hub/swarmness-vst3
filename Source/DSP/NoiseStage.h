@@ -98,7 +98,8 @@ private:
  * NOISE: a Whammy-style octave shifter played with (momentary) footswitches, inspired by
  * Tallon Electric's "The Noise".
  *
- *  RISE  : time for the pitch to travel to the footswitch interval (and back on release)
+ *  RISE  : time for the pitch to travel to the footswitch interval
+ *  FALL  : time to travel back home when the footswitch is released
  *  PANIC : detunes the shifted signal against a second, oppositely detuned voice -> dissonance
  *  CHAOS : random pitch movement away from the centre interval
  *  SPEED : all-pass feedback + amplitude modulation on the shifted signal
@@ -143,15 +144,20 @@ public:
     {
         if (! juce::exactlyEqual (semis, targetSemis))
         {
+            // Moving away from home (footswitch down / switching octaves) uses RISE,
+            // returning home (footswitch released) uses FALL.
+            const bool returning = std::abs (semis) < std::abs (targetSemis) || std::abs (semis) < 0.001f;
             targetSemis = semis;
-            const float riseSamples = juce::jmax (1.0f, riseMs * 0.001f * (float) sampleRate);
-            rampStep = std::abs (targetSemis - currentSemis) / riseSamples;
+            const float ms = returning ? fallMs : riseMs;
+            const float glideSamples = juce::jmax (1.0f, ms * 0.001f * (float) sampleRate);
+            rampStep = std::abs (targetSemis - currentSemis) / glideSamples;
         }
     }
 
-    void setParams (float riseMilliseconds, float panic01, float chaos01, float speed01) noexcept
+    void setParams (float riseMilliseconds, float fallMilliseconds, float panic01, float chaos01, float speed01) noexcept
     {
         riseMs = riseMilliseconds;
+        fallMs = fallMilliseconds;
         panic  = panic01;
         chaos  = chaos01;
         speed  = speed01;
@@ -260,7 +266,7 @@ private:
     swarm::FastRandom rng { 0xBADC0DEu };
     swarm::OnePole chaosSmoother;
 
-    float riseMs = 30.0f, panic = 0.0f, chaos = 0.0f, speed = 0.0f;
+    float riseMs = 30.0f, fallMs = 30.0f, panic = 0.0f, chaos = 0.0f, speed = 0.0f;
     float currentSemis = 0.0f, targetSemis = 0.0f, rampStep = 0.0f, displaySemis = 0.0f;
     float wet = 0.0f, panicLevel = 0.0f;
     float chaosPhase = 0.0f, chaosTarget = 0.0f, wobblePhase = 0.0f;

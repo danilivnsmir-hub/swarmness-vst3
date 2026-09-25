@@ -40,9 +40,9 @@ void PresetManager::initialiseFactoryPresets()
         // ---------------------------------------------------------------- basics
         { "Init", basics, "Everything off: the plug-in is transparent. Start here.", {} },
         { "Clean Sting", basics, "Pure octave shifter. Hold +1 OCT / +2 OCT for a clean, instant jump.",
-          { { rise, 0 } } },
-        { "Slow Rise", basics, "Hold a footswitch and the pitch sweeps up over ~1 s; release and it sweeps back down.",
-          { { rise, 950 } } },
+          { { rise, 0 }, { fall, 0 } } },
+        { "Slow Rise", basics, "RISE and FALL: hold a footswitch and the pitch sweeps up over ~1 s; release and it slides back down over ~1.5 s.",
+          { { rise, 950 }, { fall, 1500 } } },
 
         // ----------------------------------------------------------------- STING
         { "Killer Bee", stingCat, "The all-rounder: a bit of ANGER, FRENZY and BUZZ plus SMOKE in front. Hold +2 OCT for the full shriek.",
@@ -52,11 +52,11 @@ void PresetManager::initialiseFactoryPresets()
         { "Frenzy", stingCat, "FRENZY only: the pitch jumps randomly around the octave, faster than your picking.",
           { { rise, 10 }, { chaos, 75 } } },
         { "Lazy Buzz", stingCat, "Low BUZZ: slow phasing and wobble on a slightly angry octave.",
-          { { rise, 120 }, { speed, 22 }, { panic, 25 } } },
+          { { rise, 120 }, { fall, 400 }, { speed, 22 }, { panic, 25 } } },
         { "Hornet Buzz", stingCat, "High BUZZ: all-pass feedback and AM turn the octave into metallic ring-mod noise.",
-          { { rise, 0 }, { speed, 92 } } },
-        { "Dive Bomb", stingCat, "DIVE with a long RISE: hold for a sub-octave dive, release to climb back. SMOKE after.",
-          { { noiseDown, 1 }, { rise, 450 }, { panic, 15 }, { fuzzOn, 1 }, { fuzzPost, 1 }, { fuzz, 55 }, { fuzzTone, 35 } } },
+          { { rise, 0 }, { fall, 0 }, { speed, 92 } } },
+        { "Dive Bomb", stingCat, "DIVE with a long RISE and a snappy FALL: hold for a slow sub-octave dive, release to snap back. SMOKE after.",
+          { { noiseDown, 1 }, { rise, 450 }, { fall, 60 }, { panic, 15 }, { fuzzOn, 1 }, { fuzzPost, 1 }, { fuzz, 55 }, { fuzzTone, 35 } } },
 
         // ------------------------------------------------------------------ HIVE
         { "Harmony Fifth", hiveCat, "Tight, clean harmony: a fifth above (DRONE) plus its octave (QUEEN). No VENOM.",
@@ -82,7 +82,7 @@ void PresetManager::initialiseFactoryPresets()
         { "Smoked Out", texture, "SMOKE with GATE: the notes sputter and tear apart as they decay.",
           { { fuzzOn, 1 }, { fuzz, 85 }, { fuzzGate, 75 }, { fuzzTone, 45 } } },
         { "Wing Beat Breakdown", texture, "Tempo-synced 1/16 hard WINGS gate on SMOKE. Hold +1 OCT for angry stabs.",
-          { { rise, 0 }, { panic, 30 }, { fuzzOn, 1 }, { fuzz, 65 }, { flowOn, 1 }, { flowSync, 1 }, { flowDiv, 4 }, { flowHard, 1 } } },
+          { { rise, 0 }, { fall, 0 }, { panic, 30 }, { fuzzOn, 1 }, { fuzz, 65 }, { flowOn, 1 }, { flowSync, 1 }, { flowDiv, 4 }, { flowHard, 1 } } },
         { "Ghost Swarm", texture, "Smooth WINGS tremolo, a quiet octave-up DRONE with trails and SWARM - eerie clean parts.",
           { { rbOn, 1 }, { rbPitch, 12 }, { rbPrimary, 30 }, { rbMagic, 25 }, { rbTracking, 85 }, { rbTone, 45 },
             { swarmOn, 1 }, { swarmMix, 35 }, { flowOn, 1 }, { flowHard, 0 }, { flowSpeed, 5.5f }, { flowAmount, 70 } } },

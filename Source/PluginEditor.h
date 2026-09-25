@@ -47,7 +47,7 @@ private:
 
     // STING (internally "noise")
     PillToggle downToggle { "DIVE" };
-    Knob riseKnob { "RISE" }, panicKnob { "ANGER" }, chaosKnob { "FRENZY" }, speedKnob { "BUZZ" };
+    Knob riseKnob { "RISE" }, fallKnob { "FALL" }, panicKnob { "ANGER" }, chaosKnob { "FRENZY" }, speedKnob { "BUZZ" };
     PitchScope pitchScope;
 
     // HIVE (internally "rainbow")

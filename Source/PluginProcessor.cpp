@@ -30,7 +30,7 @@ SwarmnessAudioProcessor::SwarmnessAudioProcessor()
     namespace id = ParamIDs;
     p.oct1 = get (id::oct1);             p.oct2 = get (id::oct2);               p.noiseDown = get (id::noiseDown);
     p.rise = get (id::rise);             p.panic = get (id::panic);             p.chaos = get (id::chaos);
-    p.speed = get (id::speed);
+    p.speed = get (id::speed);           p.fall = get (id::fall);
     p.rbOn = get (id::rbOn);             p.rbPitch = get (id::rbPitch);         p.rbSnap = get (id::rbSnap);
     p.rbPrimary = get (id::rbPrimary);   p.rbSecondary = get (id::rbSecondary); p.rbTone = get (id::rbTone);
     p.rbTracking = get (id::rbTracking); p.rbMagic = get (id::rbMagic);         p.magicHold = get (id::magicHold);
@@ -162,7 +162,7 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     {
         const float dir = on (p.noiseDown) ? -1.0f : 1.0f;
         const float interval = oct2Held ? 24.0f : (oct1Held ? 12.0f : 0.0f);
-        noise.setParams (p.rise->load(), pct (p.panic), pct (p.chaos), pct (p.speed));
+        noise.setParams (p.rise->load(), p.fall->load(), pct (p.panic), pct (p.chaos), pct (p.speed));
         noise.setInterval (dir * interval);
         noise.process (audio, numChannels, numSamples);
         meters.pitchSemitones.store (noise.getCurrentSemitones(), std::memory_order_relaxed);

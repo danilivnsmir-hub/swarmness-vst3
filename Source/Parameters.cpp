@@ -57,12 +57,17 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     noise->addChild (toggle (oct1, "+1 Octave", false));
     noise->addChild (toggle (oct2, "+2 Octaves", false));
     noise->addChild (toggle (noiseDown, "Sting Dive", false));
-    noise->addChild (std::make_unique<juce::AudioParameterFloat> (
-        pid (rise), "Rise", skewedRange (0.0f, 2000.0f, 250.0f, 1.0f), 30.0f,
-        Attr().withLabel ("ms").withStringFromValueFunction ([] (float v, int)
-        {
-            return v >= 1000.0f ? juce::String (v / 1000.0f, 2) + " s" : juce::String (juce::roundToInt (v)) + " ms";
-        })));
+    auto glideTime = [] (const char* id, const juce::String& name)
+    {
+        return std::make_unique<juce::AudioParameterFloat> (
+            pid (id), name, skewedRange (0.0f, 2000.0f, 250.0f, 1.0f), 30.0f,
+            Attr().withLabel ("ms").withStringFromValueFunction ([] (float v, int)
+            {
+                return v >= 1000.0f ? juce::String (v / 1000.0f, 2) + " s" : juce::String (juce::roundToInt (v)) + " ms";
+            }));
+    };
+    noise->addChild (glideTime (rise, "Rise"));
+    noise->addChild (glideTime (fall, "Fall"));
     noise->addChild (percent (panic, "Anger", 0.0f));
     noise->addChild (percent (chaos, "Frenzy", 0.0f));
     noise->addChild (percent (speed, "Buzz", 0.0f));

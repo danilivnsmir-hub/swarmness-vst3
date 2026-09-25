@@ -311,6 +311,38 @@ namespace
         check (db < -60.0, juce::String::formatted ("after release residual %.1f dB", db));
     }
 
+    void testRiseFall()
+    {
+        std::printf ("\nRISE and FALL are independent glide times\n");
+        const double sr = 48000.0;
+        auto semisAfter = [sr] (float riseMs, float fallMs, bool released, double seconds)
+        {
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            setParam (p, ParamIDs::rise, riseMs);
+            setParam (p, ParamIDs::fall, fallMs);
+            setParam (p, ParamIDs::oct1, 1.0f);
+            p.prepareToPlay (sr, 256);
+            auto block = makeSine (sr, 256, 220.0);
+            juce::MidiBuffer midi;
+            auto run = [&] (double secs) { for (int i = 0; i < (int) (secs * sr / 256); ++i) { juce::AudioBuffer<float> b (block); p.processBlock (b, midi); } };
+            run (1.2);                                   // fully risen (RISE <= 1 s)
+            if (released) setParam (p, ParamIDs::oct1, 0.0f);
+            run (seconds);
+            return p.getMeters().pitchSemitones.load();
+        };
+        const float midRise = [&] { SwarmnessAudioProcessor p; resetToInit (p);
+                                    setParam (p, ParamIDs::rise, 1000.0f); setParam (p, ParamIDs::oct1, 1.0f);
+                                    p.prepareToPlay (sr, 256); auto block = makeSine (sr, 256, 220.0); juce::MidiBuffer midi;
+                                    for (int i = 0; i < (int) (0.5 * sr / 256); ++i) { juce::AudioBuffer<float> b (block); p.processBlock (b, midi); }
+                                    return p.getMeters().pitchSemitones.load(); }();
+        const float slowFall = semisAfter (0.0f, 1000.0f, true, 0.5);
+        const float fastFall = semisAfter (1000.0f, 0.0f, true, 0.05);
+        check (midRise > 4.0f && midRise < 8.0f, juce::String::formatted ("RISE 1 s: half way after 0.5 s (%.1f st)", midRise));
+        check (slowFall > 4.0f && slowFall < 8.0f, juce::String::formatted ("FALL 1 s: half way back after 0.5 s (%.1f st)", slowFall));
+        check (std::abs (fastFall) < 0.5f, juce::String::formatted ("FALL 0 with RISE 1 s: home immediately (%.1f st)", fastFall));
+    }
+
     void testRainbowInterval()
     {
         std::printf ("\nRAINBOW primary voice interval (220 Hz sine, dry removed)\n");
@@ -507,6 +539,7 @@ int main (int argc, char** argv)
     testCleanPathTransparency();
     testNoiseOctaves();
     testFootswitchRelease();
+    testRiseFall();
     testRainbowInterval();
     testMagicBounded();
     testFuzzLevel();

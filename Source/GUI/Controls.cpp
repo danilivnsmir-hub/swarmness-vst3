@@ -699,7 +699,7 @@ void InfoOverlay::paint (juce::Graphics& g)
     struct Item { const char* title; const char* body; };
     static const Item items[] =
     {
-        { "STING",    "Hold +1 OCT / +2 OCT (or latch them) for a violent octave. RISE = glide in and out. ANGER = detuned dissonance, "
+        { "STING",    "Hold +1 OCT / +2 OCT (or latch them) for a violent octave. RISE = glide in, FALL = glide back on release. ANGER = detuned dissonance, "
                       "FRENZY = random pitch jumps, BUZZ = all-pass feedback + ring-mod-like AM. DIVE = shift down (drop-tune)." },
         { "HIVE",     "Harmony voices: PITCH (-12..+12 st, SNAP = semitones), DRONE = main voice, QUEEN = its octave, TONE. "
                       "TRACKING low = lag and tone clusters. VENOM = regeneration up to self-oscillation." },

@@ -42,11 +42,12 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
 
     // NOISE
     attachButton (downToggle, noiseDown, "DIVE: the octave footswitches shift DOWN (drop-tune) instead of up");
-    riseKnob .attach (state, rise,  "Time to glide into the octave (and back when released)");
+    riseKnob .attach (state, rise,  "RISE: time to glide into the octave when a footswitch goes down");
+    fallKnob .attach (state, fall,  "FALL: time to glide back home when the footswitch is released");
     panicKnob.attach (state, panic, "ANGER: detunes the shifted signal against a second voice - dissonance, beating, sour clusters");
     chaosKnob.attach (state, chaos, "FRENZY: random pitch jumps around the octave - wider and faster as you turn it up");
     speedKnob.attach (state, speed, "BUZZ: all-pass feedback + amplitude modulation - slow phasing up to metallic ring-mod shrieks");
-    for (auto* c : std::initializer_list<juce::Component*> { &riseKnob, &panicKnob, &chaosKnob, &speedKnob, &pitchScope })
+    for (auto* c : std::initializer_list<juce::Component*> { &riseKnob, &fallKnob, &panicKnob, &chaosKnob, &speedKnob, &pitchScope })
         addAndMakeVisible (c);
 
     // RAINBOW
@@ -159,11 +160,11 @@ void MainPanel::resized()
     downToggle.setBounds ((int) noiseArea.getRight() - 16 - 70, (int) noiseArea.getY() + 9, 70, 24);
     {
         const int y = (int) noiseArea.getY() + 44;
-        int x = (int) noiseArea.getX() + 22;
-        for (auto* k : { &riseKnob, &panicKnob, &chaosKnob, &speedKnob })
+        int x = (int) noiseArea.getX() + 14;
+        for (auto* k : { &riseKnob, &fallKnob, &panicKnob, &chaosKnob, &speedKnob })
         {
-            k->setBounds (x, y, 100, 106);
-            x += 112;
+            k->setBounds (x, y, 88, 106);
+            x += 90;
         }
         pitchScope.setBounds ((int) noiseArea.getX() + 16, (int) noiseArea.getY() + 160, (int) noiseArea.getWidth() - 32, 88);
     }

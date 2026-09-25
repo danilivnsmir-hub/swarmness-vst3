@@ -74,7 +74,7 @@ private:
     {
         std::atomic<float>* oct1 {};       std::atomic<float>* oct2 {};        std::atomic<float>* noiseDown {};
         std::atomic<float>* rise {};       std::atomic<float>* panic {};       std::atomic<float>* chaos {};
-        std::atomic<float>* speed {};
+        std::atomic<float>* speed {};      std::atomic<float>* fall {};
         std::atomic<float>* rbOn {};       std::atomic<float>* rbPitch {};     std::atomic<float>* rbSnap {};
         std::atomic<float>* rbPrimary {};  std::atomic<float>* rbSecondary {}; std::atomic<float>* rbTone {};
         std::atomic<float>* rbTracking {}; std::atomic<float>* rbMagic {};     std::atomic<float>* magicHold {};

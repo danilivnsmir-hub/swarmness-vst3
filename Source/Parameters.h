@@ -14,7 +14,8 @@ namespace ParamIDs
     inline constexpr const char* oct1        = "oct1";         // footswitch: +1 octave
     inline constexpr const char* oct2        = "oct2";         // footswitch: +2 octaves
     inline constexpr const char* noiseDown   = "noiseDown";    // footswitches shift down instead of up
-    inline constexpr const char* rise        = "rise";
+    inline constexpr const char* rise        = "rise";         // glide into the interval (footswitch down)
+    inline constexpr const char* fall        = "fall";         // glide back home (footswitch released)
     inline constexpr const char* panic       = "panic";
     inline constexpr const char* chaos       = "chaos";
     inline constexpr const char* speed       = "speed";
