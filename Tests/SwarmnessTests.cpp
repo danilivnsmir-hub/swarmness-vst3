@@ -138,9 +138,29 @@ namespace
     }
 
     //==========================================================================
+    /** Renders with the NOISE footswitch held for the middle half of the input (like a player would). */
+    juce::AudioBuffer<float> renderWithFootswitch (SwarmnessAudioProcessor& p, const juce::AudioBuffer<float>& input,
+                                                   double sr, int blockSize, const char* switchId, bool magic = false)
+    {
+        p.prepareToPlay (sr, blockSize);
+        juce::AudioBuffer<float> out (input);
+        juce::MidiBuffer midi;
+        const int n = out.getNumSamples();
+        for (int start = 0; start < n; start += blockSize)
+        {
+            const bool held = start > n / 4 && start < (3 * n) / 4;
+            if (switchId != nullptr) setParam (p, switchId, held ? 1.0f : 0.0f);
+            if (magic)               setParam (p, ParamIDs::magicHold, held ? 1.0f : 0.0f);
+            const int len = juce::jmin (blockSize, n - start);
+            juce::AudioBuffer<float> view (out.getArrayOfWritePointers(), out.getNumChannels(), start, len);
+            p.processBlock (view, midi);
+        }
+        return out;
+    }
+
     void testPresetsStable()
     {
-        std::printf ("\nFactory presets: stability at several sample rates / block sizes\n");
+        std::printf ("\nFactory presets (with footswitches played): stability at several sample rates / block sizes\n");
         for (double sr : { 44100.0, 48000.0, 96000.0 })
         {
             for (int block : { 64, 333, 1024 })
@@ -151,13 +171,16 @@ namespace
                 float peak = 0.0f;
                 for (const auto& name : p.getPresetManager().getFactoryPresetNames())
                 {
-                    p.getPresetManager().loadPreset (name);
-                    setParam (p, ParamIDs::flowSync, 0.0f);   // no playhead offline
-                    auto out = render (p, input, sr, block);
-                    ok = ok && allFinite (out);
-                    peak = juce::jmax (peak, out.getMagnitude (0, out.getNumSamples()));
+                    for (const char* sw : { ParamIDs::oct1, ParamIDs::oct2 })
+                    {
+                        p.getPresetManager().loadPreset (name);
+                        setParam (p, ParamIDs::flowSync, 0.0f);   // no playhead offline
+                        auto out = renderWithFootswitch (p, input, sr, block, sw, true);
+                        ok = ok && allFinite (out);
+                        peak = juce::jmax (peak, out.getMagnitude (0, out.getNumSamples()));
+                    }
                 }
-                check (ok && peak < 4.0f, juce::String::formatted ("sr %.0f, block %d: finite, peak %.2f", sr, block, peak));
+                check (ok && peak <= 2.0f, juce::String::formatted ("sr %.0f, block %d: finite, peak %.2f", sr, block, peak));
             }
         }
     }
@@ -165,149 +188,144 @@ namespace
     void testBypassNull()
     {
         std::printf ("\nBypass is sample-accurate and latency compensated\n");
-        for (int quality : { 0, 1 })
-        {
-            SwarmnessAudioProcessor p;
-            resetToInit (p);
-            setParam (p, ParamIDs::quality, (float) quality);
-            setParam (p, ParamIDs::bypass, 1.0f);
-            setParam (p, ParamIDs::drive, 60.0f);
-            const double sr = 48000.0;
-            auto input = makeGuitar (sr, 48000);
-            auto out = render (p, input, sr, 256);
-            const int latency = p.getLatencySamples();
-            const double db = nullDb (out, input, latency, 4096, input.getNumSamples());
-            check (db < -120.0, juce::String::formatted ("%s: bypass null %.1f dB (latency %d)", quality ? "Studio" : "Live", db, latency));
-        }
+        SwarmnessAudioProcessor p;
+        p.getPresetManager().loadPreset ("Self Destruct");
+        setParam (p, ParamIDs::bypass, 1.0f);
+        setParam (p, ParamIDs::oct1, 1.0f);
+        const double sr = 48000.0;
+        auto input = makeGuitar (sr, 48000);
+        auto out = render (p, input, sr, 256);
+        const int latency = p.getLatencySamples();
+        const double db = nullDb (out, input, latency, 4096, input.getNumSamples());
+        check (db < -120.0, juce::String::formatted ("bypass null %.1f dB (latency %d samples)", db, latency));
     }
 
     void testDryAlignment()
     {
         std::printf ("\nMix 0%% returns the dry signal aligned with the reported latency\n");
-        for (int quality : { 0, 1 })
-        {
-            SwarmnessAudioProcessor p;
-            resetToInit (p);
-            setParam (p, ParamIDs::quality, (float) quality);
-            setParam (p, ParamIDs::mix, 0.0f);
-            const double sr = 44100.0;
-            auto input = makeGuitar (sr, 44100);
-            auto out = render (p, input, sr, 512);
-            const double db = nullDb (out, input, p.getLatencySamples(), 8192, input.getNumSamples());
-            check (db < -100.0, juce::String::formatted ("%s: dry null %.1f dB", quality ? "Studio" : "Live", db));
-        }
+        SwarmnessAudioProcessor p;
+        p.getPresetManager().loadPreset ("Whale Song");
+        setParam (p, ParamIDs::mix, 0.0f);
+        const double sr = 44100.0;
+        auto input = makeGuitar (sr, 44100);
+        auto out = render (p, input, sr, 512);
+        const double db = nullDb (out, input, p.getLatencySamples(), 8192, input.getNumSamples());
+        check (db < -100.0, juce::String::formatted ("dry null %.1f dB", db));
     }
 
     void testCleanPathTransparency()
     {
-        std::printf ("\nVoltage off, mix 100%%: effect path is transparent\n");
-        for (int quality : { 0, 1 })
-        {
-            SwarmnessAudioProcessor p;
-            resetToInit (p);
-            setParam (p, ParamIDs::quality, (float) quality);
-            setParam (p, ParamIDs::pitchOn, 0.0f);
-            setParam (p, ParamIDs::mix, 100.0f);
-            const double sr = 48000.0;
-            auto input = makeSine (sr, 48000, 1000.0);
-            auto out = render (p, input, sr, 256);
-            const double db = nullDb (out, input, p.getLatencySamples(), 16384, input.getNumSamples());
-            check (db < -50.0, juce::String::formatted ("%s: clean-path residual %.1f dB", quality ? "Studio" : "Live", db));
-        }
-    }
-
-    void testUnityReconstruction()
-    {
-        std::printf ("\nVoltage on at unison (0 oct, 0 st): pitch engines reconstruct the input\n");
-        for (int quality : { 0, 1 })
-        {
-            SwarmnessAudioProcessor p;
-            resetToInit (p);
-            setParam (p, ParamIDs::quality, (float) quality);
-            setParam (p, ParamIDs::octave, 2.0f);
-            setParam (p, ParamIDs::mix, 100.0f);
-            const double sr = 48000.0;
-            auto input = makeGuitar (sr, 96000);
-            auto out = render (p, input, sr, 256);
-            const double db = nullDb (out, input, p.getLatencySamples(), 48000, input.getNumSamples());
-            if (db > -60.0)
-                for (int lag = 0; lag < 9000; ++lag)
-                    if (nullDb (out, input, lag, 48000, 52000) < -40.0)
-                        std::printf ("    matches at lag %d (reported %d)\n", lag, p.getLatencySamples());
-            check (db < -60.0, juce::String::formatted ("%s: unison residual %.1f dB", quality ? "Studio" : "Live", db));
-        }
-    }
-
-    void testDriveLoudness()
-    {
-        std::printf ("\nDrive: automatic gain compensation keeps loudness steady\n");
-        const double sr = 48000.0;
-        auto input = makeGuitar (sr, 96000);
-        double reference = 0.0;
-        for (float drive : { 0.0f, 25.0f, 50.0f, 75.0f, 100.0f })
-        {
-            SwarmnessAudioProcessor p;
-            resetToInit (p);
-            setParam (p, ParamIDs::pitchOn, 0.0f);
-            setParam (p, ParamIDs::mix, 100.0f);
-            setParam (p, ParamIDs::drive, drive);
-            auto out = render (p, input, sr, 256);
-            const double rms = juce::Decibels::gainToDecibels ((double) out.getRMSLevel (0, 24000, 72000));
-            if (drive == 0.0f) reference = rms;
-            check (std::abs (rms - reference) < 4.0, juce::String::formatted ("drive %3.0f%%: %+.1f dB vs clean", drive, rms - reference));
-        }
-    }
-
-    void testQualitySwitch()
-    {
-        std::printf ("\nSwitching engines while running\n");
+        std::printf ("\nNothing engaged: the plug-in is transparent\n");
         SwarmnessAudioProcessor p;
         resetToInit (p);
-        const double sr = 44100.0;
-        p.prepareToPlay (sr, 256);
-        auto input = makeGuitar (sr, 256);
-        juce::MidiBuffer midi;
-        bool ok = true;
-        for (int i = 0; i < 400; ++i)
-        {
-            if (i % 50 == 0)
-                setParam (p, ParamIDs::quality, (float) ((i / 50) % 2));
-            juce::AudioBuffer<float> b (input);
-            p.processBlock (b, midi);
-            ok = ok && allFinite (b);
-        }
-        check (ok, "no invalid output while toggling Live/Studio");
+        const double sr = 48000.0;
+        auto input = makeGuitar (sr, 48000);
+        auto out = render (p, input, sr, 256);
+        const double db = nullDb (out, input, p.getLatencySamples(), 4096, input.getNumSamples());
+        check (db < -100.0, juce::String::formatted ("idle residual %.1f dB", db));
     }
 
-    void testPitchAccuracy()
+    void testNoiseOctaves()
     {
-        std::printf ("\nPitch accuracy and purity (220 Hz sine, mix 100%%)\n");
-        struct Case { int octave; int semi; double expected; };
-        const Case cases[] = { { 2, 0, 220.0 }, { 3, 0, 440.0 }, { 1, 0, 110.0 }, { 2, 7, 329.63 }, { 4, 0, 880.0 }, { 0, 0, 55.0 } };
-
-        for (int quality : { 0, 1 })
+        std::printf ("\nNOISE footswitches: pitch accuracy (220 Hz sine, no Panic/Chaos/Speed)\n");
+        struct Case { const char* sw; bool down; double expected; };
+        const Case cases[] = { { ParamIDs::oct1, false, 440.0 }, { ParamIDs::oct2, false, 880.0 },
+                               { ParamIDs::oct1, true, 110.0 },  { ParamIDs::oct2, true, 55.0 } };
+        for (const auto& c : cases)
         {
-            for (const auto& c : cases)
-            {
-                SwarmnessAudioProcessor p;
-                resetToInit (p);
-                setParam (p, ParamIDs::quality, (float) quality);
-                setParam (p, ParamIDs::octave, (float) c.octave);
-                setParam (p, ParamIDs::semitone, (float) c.semi);
-                setParam (p, ParamIDs::rise, 0.0f);
-                setParam (p, ParamIDs::mix, 100.0f);
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            setParam (p, ParamIDs::rise, 0.0f);
+            setParam (p, ParamIDs::noiseDown, c.down ? 1.0f : 0.0f);
+            setParam (p, c.sw, 1.0f);
+            const double sr = 48000.0;
+            auto input = makeSine (sr, 48000 * 2, 220.0);
+            auto out = render (p, input, sr, 256);
+            double purity = 0.0;
+            const double f = dominantFrequency (out, sr, 48000, purity);
+            const double cents = 1200.0 * std::log2 (f / c.expected);
+            check (std::abs (cents) < 5.0, juce::String::formatted ("%s %s: %.2f Hz (%+.1f cents), spurious %.1f dB",
+                                                                    c.sw, c.down ? "down" : "up  ", f, cents, purity));
+        }
+    }
 
-                const double sr = 48000.0;
-                auto input = makeSine (sr, 48000 * 2, 220.0);
-                auto out = render (p, input, sr, 256);
+    void testFootswitchRelease()
+    {
+        std::printf ("\nNOISE footswitch release: glides home and returns to the clean signal\n");
+        SwarmnessAudioProcessor p;
+        resetToInit (p);
+        setParam (p, ParamIDs::rise, 100.0f);
+        setParam (p, ParamIDs::panic, 60.0f);
+        setParam (p, ParamIDs::chaos, 60.0f);
+        setParam (p, ParamIDs::speed, 60.0f);
+        const double sr = 48000.0;
+        auto input = makeGuitar (sr, 96000);
+        auto out = renderWithFootswitch (p, input, sr, 128, ParamIDs::oct1);
+        // Last quarter: released for > 0.4 s -> must be back to (latency-aligned) dry
+        const double db = nullDb (out, input, p.getLatencySamples(), 96000 * 3 / 4 + 24000 / 2, 96000);
+        check (db < -60.0, juce::String::formatted ("after release residual %.1f dB", db));
+    }
 
-                double purity = 0.0;
-                const double f = dominantFrequency (out, sr, 48000, purity);
-                const double cents = 1200.0 * std::log2 (f / c.expected);
-                check (std::abs (cents) < 5.0 && purity < (quality == 1 ? -30.0 : -14.0),
-                       juce::String::formatted ("%s oct %+d semi %+d: %.2f Hz (%+.1f cents), spurious %.1f dB",
-                                                quality ? "Studio" : "Live  ", c.octave - 2, c.semi, f, cents, purity));
-            }
+    void testRainbowInterval()
+    {
+        std::printf ("\nRAINBOW primary voice interval (220 Hz sine, dry removed)\n");
+        for (float pitch : { 7.0f, -5.0f, 12.0f })
+        {
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            setParam (p, ParamIDs::rbOn, 1.0f);
+            setParam (p, ParamIDs::rbPitch, pitch);
+            setParam (p, ParamIDs::rbPrimary, 100.0f);
+            setParam (p, ParamIDs::rbTracking, 100.0f);
+            const double sr = 48000.0;
+            auto input = makeSine (sr, 48000 * 2, 220.0);
+            auto out = render (p, input, sr, 256);
+            // remove the dry part (rainbow adds voices to the input)
+            juce::AudioBuffer<float> voices (out);
+            const int lat = p.getLatencySamples();
+            for (int ch = 0; ch < 2; ++ch)
+                for (int i = lat; i < voices.getNumSamples(); ++i)
+                    voices.setSample (ch, i, out.getSample (ch, i) - input.getSample (ch, i - lat));
+            double purity = 0.0;
+            const double f = dominantFrequency (voices, sr, 48000, purity);
+            const double expected = 220.0 * std::pow (2.0, pitch / 12.0);
+            const double cents = 1200.0 * std::log2 (f / expected);
+            check (std::abs (cents) < 5.0, juce::String::formatted ("pitch %+.0f st: %.2f Hz (%+.1f cents)", pitch, f, cents));
+        }
+    }
+
+    void testMagicBounded()
+    {
+        std::printf ("\nMAGIC at maximum + switch held: self-oscillates but stays bounded\n");
+        SwarmnessAudioProcessor p;
+        p.getPresetManager().loadPreset ("Self Destruct");
+        setParam (p, ParamIDs::fuzzOn, 0.0f);
+        const double sr = 48000.0;
+        auto input = makeGuitar (sr, 48000 * 6);
+        for (int ch = 0; ch < 2; ++ch)
+            input.clear (ch, 48000 * 2, 48000 * 4);   // silence: whatever sounds now is self-oscillation
+        auto out = renderWithFootswitch (p, input, sr, 256, nullptr, true);
+        const float peak = out.getMagnitude (0, out.getNumSamples());
+        const float tail = out.getRMSLevel (0, 48000 * 4, 48000);
+        check (allFinite (out) && peak <= 2.0f && tail > 0.01f, juce::String::formatted ("peak %.2f, self-oscillation during silence %.1f dBFS", peak,
+                                                                          juce::Decibels::gainToDecibels (tail)));
+    }
+
+    void testFuzzLevel()
+    {
+        std::printf ("\nFUZZ: loud but controlled output level\n");
+        const double sr = 48000.0;
+        auto input = makeGuitar (sr, 96000);
+        const double inRms = juce::Decibels::gainToDecibels ((double) input.getRMSLevel (0, 24000, 72000));
+        for (float fz : { 0.0f, 50.0f, 100.0f })
+        {
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            setParam (p, ParamIDs::fuzzOn, 1.0f);
+            setParam (p, ParamIDs::fuzz, fz);
+            auto out = render (p, input, sr, 256);
+            const double rms = juce::Decibels::gainToDecibels ((double) out.getRMSLevel (0, 24000, 72000));
+            check (rms - inRms > -6.0 && rms - inRms < 14.0, juce::String::formatted ("fuzz %3.0f%%: %+.1f dB vs input", fz, rms - inRms));
         }
     }
 
@@ -315,17 +333,19 @@ namespace
     {
         std::printf ("\nState save / restore\n");
         SwarmnessAudioProcessor a;
-        a.getPresetManager().loadPreset ("Swarm Cloud");
-        setParam (a, ParamIDs::drive, 42.0f);
+        a.getPresetManager().loadPreset ("Pixie Trails");
+        setParam (a, ParamIDs::fuzz, 42.0f);
+        setParam (a, ParamIDs::oct1, 1.0f);   // momentary switch left down
         juce::MemoryBlock mb;
         a.getStateInformation (mb);
 
         SwarmnessAudioProcessor b;
         b.setStateInformation (mb.getData(), (int) mb.getSize());
-        const float drive = b.getAPVTS().getRawParameterValue (ParamIDs::drive)->load();
-        const float swarmMix = b.getAPVTS().getRawParameterValue (ParamIDs::swarmMix)->load();
-        check (std::abs (drive - 42.0f) < 0.05f && std::abs (swarmMix - 60.0f) < 0.05f, "parameters restored");
-        check (b.getPresetManager().getCurrentPresetName() == "Swarm Cloud", "preset name restored");
+        auto value = [&b] (const char* id) { return b.getAPVTS().getRawParameterValue (id)->load(); };
+        check (std::abs (value (ParamIDs::fuzz) - 42.0f) < 0.05f && std::abs (value (ParamIDs::rbMagic) - 45.0f) < 0.05f,
+               "parameters restored");
+        check (value (ParamIDs::oct1) < 0.5f, "momentary footswitch not restored as held");
+        check (b.getPresetManager().getCurrentPresetName() == "Pixie Trails", "preset name restored");
     }
 
     void testPresetDirtyTracking()
@@ -333,35 +353,36 @@ namespace
         std::printf ("\nPreset dirty tracking\n");
         SwarmnessAudioProcessor p;
         auto& pm = p.getPresetManager();
-        pm.loadPreset ("Glitch Anger");
+        pm.loadPreset ("Chaos Engine");
         check (! pm.isDirty(), "clean after load");
         setParam (p, ParamIDs::mix, 12.0f);
         check (pm.isDirty(), "dirty after edit");
+        pm.loadPreset ("Chaos Engine");
+        setParam (p, ParamIDs::oct2, 1.0f);
         setParam (p, ParamIDs::bypass, 1.0f);
-        pm.loadPreset ("Glitch Anger");
-        check (! pm.isDirty(), "bypass does not affect preset state");
+        check (! pm.isDirty(), "footswitches / bypass do not affect preset state");
     }
 
     void testPerformance()
     {
-        std::printf ("\nPerformance (48 kHz, 128-sample blocks, everything on)\n");
-        for (int quality : { 0, 1 })
-        {
-            SwarmnessAudioProcessor p;
-            p.getPresetManager().loadPreset ("Swarm Cloud");
-            setParam (p, ParamIDs::quality, (float) quality);
-            setParam (p, ParamIDs::drive, 50.0f);
-            setParam (p, ParamIDs::flowAmount, 50.0f);
-            setParam (p, ParamIDs::anger, 50.0f);
-            const double sr = 48000.0;
-            auto input = makeGuitar (sr, (int) sr * 10);
-            const auto t0 = std::chrono::steady_clock::now();
-            auto out = render (p, input, sr, 128);
-            const double secs = std::chrono::duration<double> (std::chrono::steady_clock::now() - t0).count();
-            const double load = secs / 10.0 * 100.0;
-            check (load < 25.0, juce::String::formatted ("%s: %.2f%% of one core (realtime factor %.0fx)",
-                                                         quality ? "Studio" : "Live", load, 10.0 / secs));
-        }
+        std::printf ("\nPerformance (48 kHz, 128-sample blocks)\n");
+        SwarmnessAudioProcessor p;
+        p.getPresetManager().loadPreset ("Self Destruct");
+        setParam (p, ParamIDs::panic, 80.0f);
+        setParam (p, ParamIDs::chaos, 50.0f);
+        setParam (p, ParamIDs::speed, 50.0f);
+        setParam (p, ParamIDs::rbSecondary, 50.0f);
+        setParam (p, ParamIDs::swarmOn, 1.0f);
+        setParam (p, ParamIDs::swarmDeep, 1.0f);
+        setParam (p, ParamIDs::flowOn, 1.0f);
+        setParam (p, ParamIDs::oct1, 1.0f);
+        const double sr = 48000.0;
+        auto input = makeGuitar (sr, (int) sr * 10);
+        const auto t0 = std::chrono::steady_clock::now();
+        auto out = render (p, input, sr, 128);
+        const double secs = std::chrono::duration<double> (std::chrono::steady_clock::now() - t0).count();
+        const double load = secs / 10.0 * 100.0;
+        check (load < 25.0, juce::String::formatted ("everything on: %.2f%% of one core (realtime factor %.0fx)", load, 10.0 / secs));
     }
 
     void renderPresets (const juce::File& dir)
@@ -374,7 +395,7 @@ namespace
         {
             p.getPresetManager().loadPreset (name);
             setParam (p, ParamIDs::flowSync, 0.0f);
-            auto out = render (p, input, sr, 256);
+            auto out = renderWithFootswitch (p, input, sr, 256, ParamIDs::oct1, true);
             auto file = dir.getChildFile (juce::File::createLegalFileName (name) + ".wav");
             file.deleteFile();
             juce::WavAudioFormat wav;
@@ -400,9 +421,10 @@ int main (int argc, char** argv)
         p.prepareToPlay (48000.0, 256);
         if (argc >= 4)
             p.getPresetManager().loadPreset (argv[3]);
+        p.getAPVTS().getParameter (ParamIDs::oct1)->setValueNotifyingHost (1.0f);
         const float scale = argc >= 5 ? juce::String (argv[4]).getFloatValue() : 1.0f;
         std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
-        editor->setSize (juce::roundToInt (1000 * scale), juce::roundToInt (640 * scale));
+        editor->setSize (juce::roundToInt (1000 * scale), juce::roundToInt (680 * scale));
 
         // Feed a little audio so meters and the pitch trace show activity.
         auto input = makeGuitar (48000.0, 256);
@@ -436,10 +458,11 @@ int main (int argc, char** argv)
     testBypassNull();
     testDryAlignment();
     testCleanPathTransparency();
-    testUnityReconstruction();
-    testPitchAccuracy();
-    testDriveLoudness();
-    testQualitySwitch();
+    testNoiseOctaves();
+    testFootswitchRelease();
+    testRainbowInterval();
+    testMagicBounded();
+    testFuzzLevel();
     testStateRoundTrip();
     testPresetDirtyTracking();
     testPerformance();

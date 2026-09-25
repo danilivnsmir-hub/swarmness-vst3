@@ -89,19 +89,26 @@ private:
 };
 
 //==============================================================================
-/** Metal stomp switch bound to the (host) bypass parameter. */
+/**
+ * Metal stomp switch bound to a boolean parameter: LED on top, caption below.
+ * Momentary switches are "on" only while held (mouse down .. mouse up); latching ones toggle.
+ */
 class Footswitch : public juce::Component,
                    public juce::SettableTooltipClient
 {
 public:
-    explicit Footswitch (juce::RangedAudioParameter& bypassParam);
+    Footswitch (juce::RangedAudioParameter& param, const juce::String& caption, juce::Colour ledColour,
+                bool ledShowsInverse, std::function<bool()> isMomentary);
 
     void paint (juce::Graphics&) override;
     void mouseDown (const juce::MouseEvent&) override;
     void mouseUp (const juce::MouseEvent&) override;
 
 private:
-    bool bypassed = false, pressed = false;
+    juce::String caption;
+    juce::Colour ledColour;
+    bool inverse = false, value = false, pressed = false, holding = false;
+    std::function<bool()> momentary;
     juce::ParameterAttachment attachment;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Footswitch)

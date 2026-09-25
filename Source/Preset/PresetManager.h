@@ -19,6 +19,9 @@ public:
     static const juce::String extension;
 
     juce::StringArray getFactoryPresetNames() const;
+    juce::StringArray getFactoryCategories() const;                          // in display order
+    juce::StringArray getFactoryPresetNames (const juce::String& category) const;
+    juce::String getPresetDescription (const juce::String& name) const;     // empty for user presets
     juce::StringArray getUserPresetNames() const;
     juce::StringArray getAllPresetNames() const;   // factory first, then user
 
@@ -56,7 +59,12 @@ private:
     static bool fromJson (const juce::var& json, juce::String& name, ValueMap& values);
 
     juce::AudioProcessorValueTreeState& apvts;
-    std::vector<std::pair<juce::String, ValueMap>> factoryPresets;
+    struct FactoryPreset
+    {
+        juce::String name, category, description;
+        ValueMap values;
+    };
+    std::vector<FactoryPreset> factoryPresets;
     // Guarded by 'lock': the host may restore state from a non-message thread.
     mutable juce::CriticalSection lock;
     juce::String currentName { "Init" };

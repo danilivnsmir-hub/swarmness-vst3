@@ -2,11 +2,9 @@
 
 #include <JuceHeader.h>
 #include "Parameters.h"
-#include "DSP/PitchModulator.h"
-#include "DSP/LivePitchShifter.h"
-#include "DSP/StudioPitchShifter.h"
-#include "DSP/ToneStage.h"
-#include "DSP/DriveStage.h"
+#include "DSP/NoiseStage.h"
+#include "DSP/RainbowStage.h"
+#include "DSP/FuzzStage.h"
 #include "DSP/SwarmChorus.h"
 #include "DSP/FlowGate.h"
 #include "Preset/PresetManager.h"
@@ -14,12 +12,11 @@
 #include <array>
 #include <atomic>
 
-class SwarmnessAudioProcessor : public juce::AudioProcessor,
-                                private juce::AsyncUpdater
+class SwarmnessAudioProcessor : public juce::AudioProcessor
 {
 public:
     SwarmnessAudioProcessor();
-    ~SwarmnessAudioProcessor() override;
+    ~SwarmnessAudioProcessor() override = default;
 
     //==============================================================================
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
@@ -36,7 +33,7 @@ public:
     bool acceptsMidi() const override  { return false; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
-    double getTailLengthSeconds() const override { return 0.25; }
+    double getTailLengthSeconds() const override { return 1.0; }
 
     int getNumPrograms() override    { return 1; }
     int getCurrentProgram() override { return 0; }
@@ -58,8 +55,8 @@ public:
     {
         std::array<std::atomic<float>, 2> input  {};
         std::array<std::atomic<float>, 2> output {};
-        std::atomic<float> pitchSemitones { 0.0f };   // current total transposition
-        std::atomic<float> flowGain { 1.0f };
+        std::atomic<float> pitchSemitones { 0.0f };   // current NOISE transposition
+        std::atomic<bool>  noiseEngaged { false };
     };
 
     Meters& getMeters() noexcept { return meters; }
@@ -69,55 +66,42 @@ public:
     void setUiScale (float scale) noexcept { uiScale = scale; }
 
 private:
-    void handleAsyncUpdate() override;
-    int computeLatency (int qualityIndex) const;
-    void processPitch (juce::AudioBuffer<float>& buffer, int numChannels, int numSamples);
-
     juce::AudioProcessorValueTreeState apvts;
     std::unique_ptr<PresetManager> presetManager;
 
     // Parameters (cached raw pointers - lock-free reads on the audio thread)
     struct Params
     {
-        std::atomic<float>* pitchOn {};   std::atomic<float>* octave {};    std::atomic<float>* semitone {};
-        std::atomic<float>* rise {};      std::atomic<float>* randRange {}; std::atomic<float>* randSpeed {};
-        std::atomic<float>* quality {};   std::atomic<float>* rush {};      std::atomic<float>* anger {};
-        std::atomic<float>* modRate {};   std::atomic<float>* lowCut {};    std::atomic<float>* highCut {};
-        std::atomic<float>* mid {};       std::atomic<float>* swarmOn {};   std::atomic<float>* swarmDeep {};
-        std::atomic<float>* swarmRate {}; std::atomic<float>* swarmDepth {};std::atomic<float>* swarmMix {};
-        std::atomic<float>* flowOn {};    std::atomic<float>* flowHard {};  std::atomic<float>* flowSync {};
-        std::atomic<float>* flowAmount {};std::atomic<float>* flowSpeed {}; std::atomic<float>* flowDiv {};
-        std::atomic<float>* mix {};       std::atomic<float>* drive {};     std::atomic<float>* output {};
-        std::atomic<float>* bypass {};
+        std::atomic<float>* oct1 {};       std::atomic<float>* oct2 {};        std::atomic<float>* noiseDown {};
+        std::atomic<float>* rise {};       std::atomic<float>* panic {};       std::atomic<float>* chaos {};
+        std::atomic<float>* speed {};
+        std::atomic<float>* rbOn {};       std::atomic<float>* rbPitch {};     std::atomic<float>* rbSnap {};
+        std::atomic<float>* rbPrimary {};  std::atomic<float>* rbSecondary {}; std::atomic<float>* rbTone {};
+        std::atomic<float>* rbTracking {}; std::atomic<float>* rbMagic {};     std::atomic<float>* magicHold {};
+        std::atomic<float>* swarmOn {};    std::atomic<float>* swarmDeep {};   std::atomic<float>* swarmRate {};
+        std::atomic<float>* swarmDepth {}; std::atomic<float>* swarmMix {};
+        std::atomic<float>* fuzzOn {};     std::atomic<float>* fuzzPost {};    std::atomic<float>* fuzz {};
+        std::atomic<float>* fuzzTone {};   std::atomic<float>* fuzzGate {};
+        std::atomic<float>* flowOn {};     std::atomic<float>* flowHard {};    std::atomic<float>* flowSync {};
+        std::atomic<float>* flowAmount {}; std::atomic<float>* flowSpeed {};   std::atomic<float>* flowDiv {};
+        std::atomic<float>* mix {};        std::atomic<float>* output {};      std::atomic<float>* bypass {};
     } p;
 
     juce::AudioParameterBool* bypassParam = nullptr;
 
-    // DSP
-    PitchModulator     pitchMod;
-    LivePitchShifter   liveShifter;
-    StudioPitchShifter studioShifter;
-    ToneStage          tone;
-    DriveStage         drive;
-    SwarmChorus        swarmChorus;
-    FlowGate           flow;
+    // DSP chain: [fuzz pre] -> noise -> rainbow -> swarm -> [fuzz post] -> mix -> flow
+    FuzzStage    fuzzPre, fuzzPost;
+    NoiseStage   noise;
+    RainbowStage rainbow;
+    SwarmChorus  swarmChorus;
+    FlowGate     flow;
 
     juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::None> dryDelay { 1 };
-    juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::None> pitchDryDelay { 1 };
-
-    juce::AudioBuffer<float> dryBuffer, pitchDryBuffer;
-
-    juce::SmoothedValue<float> mixSmoothed, outputGainSmoothed, bypassSmoothed, pitchWetSmoothed;
-    swarm::OnePole basePitchGlide;
+    juce::AudioBuffer<float> dryBuffer;
+    juce::SmoothedValue<float> mixSmoothed, outputGainSmoothed, bypassSmoothed;
 
     double currentSampleRate = 44100.0;
     int maxBlockSize = 512;
-    int activeQuality = -1;          // quality currently used by the audio thread
-    int pitchLatency = 0;            // latency of the active pitch engine
-    std::atomic<int> pendingLatency { 0 };
-    bool wasPitchOn = true;
-    float currentRiseMs = -1.0f;
-    float lastRatio = 1.0f;
 
     Meters meters;
     std::atomic<float> uiScale { 1.0f };

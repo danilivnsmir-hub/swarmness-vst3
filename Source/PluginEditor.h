@@ -10,7 +10,7 @@ class MainPanel : public juce::Component
 {
 public:
     static constexpr int baseWidth  = 1000;
-    static constexpr int baseHeight = 640;
+    static constexpr int baseHeight = 680;
 
     explicit MainPanel (SwarmnessAudioProcessor&);
 
@@ -31,6 +31,7 @@ private:
 
     void attachButton (juce::Button&, const juce::String& id, const juce::String& tooltip);
     bool paramOn (const char* id) const;
+    bool footswitchesMomentary() const;
     void setSectionDimmed (std::initializer_list<juce::Component*>, bool dimmed);
 
     SwarmnessAudioProcessor& processor;
@@ -41,34 +42,40 @@ private:
 
     // Header
     PresetBar presetBar;
+    SegmentedChoice switchModeSelector;
     juce::TextButton infoButton { "?" };
 
-    // VOLTAGE
-    PowerButton pitchPower;
-    SegmentedChoice octaveSelector;
-    SegmentedChoice qualitySelector;
-    Knob semiKnob { "SEMI", true }, riseKnob { "RISE" }, rangeKnob { "RANGE" }, speedKnob { "SPEED" };
-    Knob rushKnob { "RUSH" }, angerKnob { "ANGER" }, modRateKnob { "RATE" };
+    // NOISE
+    PillToggle downToggle { "DOWN" };
+    Knob riseKnob { "RISE" }, panicKnob { "PANIC" }, chaosKnob { "CHAOS" }, speedKnob { "SPEED" };
     PitchScope pitchScope;
 
-    // TONE
-    Fader lowCutFader { "LOW CUT" }, highCutFader { "HIGH CUT" }, midFader { "MID" };
-
-    // OUTPUT
-    Fader mixFader { "MIX" }, driveFader { "DRIVE" }, volumeFader { "VOLUME", true };
+    // RAINBOW
+    PowerButton rainbowPower;
+    PillToggle snapToggle { "SNAP" };
+    Knob pitchKnob { "PITCH", true }, primaryKnob { "PRIMARY" }, secondaryKnob { "SECONDARY" };
+    Knob toneKnob { "TONE" }, trackingKnob { "TRACKING" }, magicKnob { "MAGIC" };
 
     // SWARM
     PowerButton swarmPower;
     PillToggle deepToggle { "DEEP" };
     Knob swarmDepthKnob { "DEPTH" }, swarmRateKnob { "RATE" }, swarmMixKnob { "MIX" };
 
+    // FUZZ
+    PowerButton fuzzPower;
+    PillToggle postToggle { "POST" };
+    Knob fuzzKnob { "FUZZ" }, fuzzToneKnob { "TONE" }, fuzzGateKnob { "GATE" };
+
     // FLOW
     PowerButton flowPower;
     PillToggle hardToggle { "HARD" }, syncToggle { "SYNC" };
     Knob flowAmountKnob { "AMOUNT" }, flowSpeedKnob { "SPEED" }, flowDivKnob { "DIV" };
 
-    // Footer
-    Footswitch footswitch;
+    // OUTPUT
+    Knob mixKnob { "MIX" }, volumeKnob { "VOLUME", true };
+
+    // Footswitches
+    Footswitch oct1Switch, oct2Switch, magicSwitch, bypassSwitch;
     LevelMeter inMeter { "IN" }, outMeter { "OUT" };
 
     InfoOverlay infoOverlay;
@@ -76,9 +83,8 @@ private:
     std::vector<std::unique_ptr<APVTS::ButtonAttachment>> buttonAttachments;
 
     // Section rectangles (base coordinates)
-    juce::Rectangle<float> voltageArea, toneArea, outputArea, swarmArea, flowArea;
-    juce::String latencyText;
-    std::array<bool, 3> lastSectionStates { true, true, true };
+    juce::Rectangle<float> noiseArea, rainbowArea, swarmArea, fuzzArea, flowArea, outputArea;
+    std::array<bool, 5> lastSectionStates {};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainPanel)
 };

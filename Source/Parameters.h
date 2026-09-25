@@ -5,29 +5,29 @@
 /**
  * Central definition of every automatable parameter.
  *
- * All parameters use real-world units (Hz, dB, ms, semitones, %) so that
- * hosts display meaningful values and presets stay readable.
+ * Signal flow:  [FUZZ pre] -> NOISE -> RAINBOW -> SWARM -> [FUZZ post] -> FLOW -> MIX / OUTPUT
  */
 namespace ParamIDs
 {
-    // VOLTAGE / Pitch
-    inline constexpr const char* pitchOn     = "pitchOn";
-    inline constexpr const char* octave      = "octave";
-    inline constexpr const char* semitone    = "semitone";
+    // NOISE (Tallon Electric "The Noise" inspired): momentary octave footswitches + mangling
+    inline constexpr const char* oct1        = "oct1";         // footswitch: +1 octave
+    inline constexpr const char* oct2        = "oct2";         // footswitch: +2 octaves
+    inline constexpr const char* noiseDown   = "noiseDown";    // footswitches shift down instead of up
     inline constexpr const char* rise        = "rise";
-    inline constexpr const char* randRange   = "randRange";
-    inline constexpr const char* randSpeed   = "randSpeed";
-    inline constexpr const char* quality     = "quality";
+    inline constexpr const char* panic       = "panic";
+    inline constexpr const char* chaos       = "chaos";
+    inline constexpr const char* speed       = "speed";
 
-    // VOLTAGE / Modulation
-    inline constexpr const char* rush        = "rush";
-    inline constexpr const char* anger       = "anger";
-    inline constexpr const char* modRate     = "modRate";
-
-    // TONE
-    inline constexpr const char* lowCut      = "lowCut";
-    inline constexpr const char* highCut     = "highCut";
-    inline constexpr const char* mid         = "mid";
+    // RAINBOW (EarthQuaker "Rainbow Machine" inspired): harmony voices with regeneration
+    inline constexpr const char* rbOn        = "rbOn";
+    inline constexpr const char* rbPitch     = "rbPitch";
+    inline constexpr const char* rbSnap      = "rbSnap";
+    inline constexpr const char* rbPrimary   = "rbPrimary";
+    inline constexpr const char* rbSecondary = "rbSecondary";
+    inline constexpr const char* rbTone      = "rbTone";
+    inline constexpr const char* rbTracking  = "rbTracking";
+    inline constexpr const char* rbMagic     = "rbMagic";
+    inline constexpr const char* magicHold   = "magicHold";    // footswitch: magic to self-oscillation
 
     // SWARM (chorus)
     inline constexpr const char* swarmOn     = "swarmOn";
@@ -35,6 +35,13 @@ namespace ParamIDs
     inline constexpr const char* swarmRate   = "swarmRate";
     inline constexpr const char* swarmDepth  = "swarmDepth";
     inline constexpr const char* swarmMix    = "swarmMix";
+
+    // FUZZ
+    inline constexpr const char* fuzzOn      = "fuzzOn";
+    inline constexpr const char* fuzzPost    = "fuzzPost";     // false = before the pitch stages
+    inline constexpr const char* fuzz        = "fuzz";
+    inline constexpr const char* fuzzTone    = "fuzzTone";
+    inline constexpr const char* fuzzGate    = "fuzzGate";
 
     // FLOW (rhythmic gate)
     inline constexpr const char* flowOn      = "flowOn";
@@ -44,34 +51,24 @@ namespace ParamIDs
     inline constexpr const char* flowSpeed   = "flowSpeed";
     inline constexpr const char* flowDiv     = "flowDiv";
 
-    // OUTPUT
+    // OUTPUT / GLOBAL
     inline constexpr const char* mix         = "mix";
-    inline constexpr const char* drive       = "drive";
     inline constexpr const char* output      = "output";
+    inline constexpr const char* switchMode  = "switchMode";   // footswitch behaviour: momentary / latch
     inline constexpr const char* bypass      = "bypass";
 }
 
 namespace ParamRanges
 {
-    inline constexpr float lowCutMin   = 20.0f;
-    inline constexpr float lowCutMax   = 1000.0f;
-    inline constexpr float highCutMin  = 1000.0f;
-    inline constexpr float highCutMax  = 20000.0f;
-    inline constexpr float midMaxDb    = 12.0f;
     inline constexpr float outputMinDb = -24.0f;
     inline constexpr float outputMaxDb = 12.0f;
-
-    /** Low cut at its minimum and high cut at its maximum mean "filter off". */
-    inline bool isLowCutOff  (float hz) { return hz <= lowCutMin + 0.5f; }
-    inline bool isHighCutOff (float hz) { return hz >= highCutMax - 1.0f; }
 }
 
 namespace ParamChoices
 {
-    inline const juce::StringArray octaves   { "-2 OCT", "-1 OCT", "0", "+1 OCT", "+2 OCT" };
-    inline const juce::StringArray qualities { "Live", "Studio" };
-    inline const juce::StringArray divisions { "1/1", "1/2", "1/4", "1/8", "1/16", "1/32",
-                                               "1/4T", "1/8T", "1/16T", "1/8D", "1/16D" };
+    inline const juce::StringArray switchModes { "Momentary", "Latch" };
+    inline const juce::StringArray divisions   { "1/1", "1/2", "1/4", "1/8", "1/16", "1/32",
+                                                 "1/4T", "1/8T", "1/16T", "1/8D", "1/16D" };
 
     /** Length of each tempo division, in quarter notes. */
     inline double divisionInBeats (int index)
@@ -80,8 +77,12 @@ namespace ParamChoices
                                           2.0 / 3.0, 1.0 / 3.0, 1.0 / 6.0, 0.75, 0.375 };
         return beats[juce::jlimit (0, (int) std::size (beats) - 1, index)];
     }
+}
 
-    inline int octaveIndexToSemitones (int index) { return (index - 2) * 12; }
+/** Performance switches: not stored in presets (like a pedal's footswitch position). */
+inline bool isPerformanceParameter (const juce::String& id)
+{
+    return id == ParamIDs::bypass || id == ParamIDs::oct1 || id == ParamIDs::oct2 || id == ParamIDs::magicHold;
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();

@@ -5,9 +5,10 @@ const juce::String PresetManager::extension = ".swpreset";
 
 namespace
 {
+    /** Footswitches and the footswitch mode are performance settings, not part of a sound. */
     bool isPresetParameter (const juce::String& id)
     {
-        return id != ParamIDs::bypass;
+        return ! isPerformanceParameter (id) && id != ParamIDs::switchMode;
     }
 
     juce::String sanitiseName (const juce::String& name)
@@ -28,28 +29,72 @@ void PresetManager::initialiseFactoryPresets()
 {
     using namespace ParamIDs;
 
-    // Octave choice indices: 0 = -2, 1 = -1, 2 = 0, 3 = +1, 4 = +2
-    // Quality: 0 = Live, 1 = Studio.  Flow division: 3 = 1/8, 4 = 1/16
+    // Presets store the sound; the footswitches (+1 / +2 OCT, MAGIC) are played live.
+    // Flow division indices: 3 = 1/8, 4 = 1/16, 5 = 1/32, 7 = 1/8T
+    const juce::String basics ("Basics"), noiseCat ("Noise - hold +1/+2 OCT"), rainbowCat ("Rainbow"),
+                       texture ("Fuzz, Swarm & Flow"), combo ("Full Chaos");
+
     factoryPresets = {
-        { "Init", {} },
-        { "Octave Up Classic",  { { octave, 3 }, { mix, 50 }, { rise, 20 } } },
-        { "Sub Octave Djent",   { { octave, 1 }, { mix, 55 }, { lowCut, 30 }, { highCut, 6500 }, { mid, 2.0f } } },
-        { "Whammy Rise",        { { octave, 3 }, { rise, 650 }, { mix, 100 }, { highCut, 12000 } } },
-        { "Dive Bomb",          { { octave, 0 }, { rise, 1400 }, { mix, 100 }, { lowCut, 25 } } },
-        { "Fifth Harmony",      { { octave, 2 }, { semitone, 7 }, { mix, 45 }, { swarmMix, 25 }, { swarmDepth, 40 } } },
-        { "Swarm Cloud",        { { octave, 3 }, { rush, 16 }, { modRate, 0.7f }, { swarmDeep, 1 }, { swarmMix, 60 },
-                                  { swarmDepth, 70 }, { swarmRate, 0.35f }, { mix, 45 }, { highCut, 9000 } } },
-        { "Glitch Anger",       { { octave, 3 }, { anger, 70 }, { modRate, 4.0f }, { mix, 70 }, { lowCut, 90 } } },
-        { "Panic Room",         { { octave, 1 }, { rush, 60 }, { modRate, 3.0f }, { drive, 30 }, { mix, 60 }, { mid, 3.0f } } },
-        { "Random Arps",        { { octave, 3 }, { randRange, 12 }, { randSpeed, 6.0f }, { mix, 60 }, { swarmMix, 20 } } },
-        { "Stutter 1/16",       { { octave, 3 }, { mix, 50 }, { flowAmount, 100 }, { flowSync, 1 }, { flowDiv, 4 }, { flowHard, 1 } } },
-        { "Tremolo Ghost",      { { octave, 4 }, { mix, 35 }, { flowAmount, 60 }, { flowHard, 0 }, { flowSpeed, 5.0f },
-                                  { swarmMix, 40 }, { highCut, 8000 } } },
-        { "Fuzz Octaver",       { { octave, 3 }, { quality, 0 }, { drive, 70 }, { mid, 6.0f }, { lowCut, 120 }, { mix, 65 },
-                                  { output, -4.0f } } },
-        { "Live Octave Down",   { { octave, 1 }, { quality, 0 }, { mix, 60 }, { lowCut, 35 } } },
-        { "Detune Wall",        { { octave, 2 }, { rush, 8 }, { modRate, 0.4f }, { swarmDeep, 1 }, { swarmMix, 50 },
-                                  { swarmDepth, 55 }, { mix, 50 } } },
+        // ---------------------------------------------------------------- basics
+        { "Init", basics, "Everything off: the plug-in is transparent. Start here.", {} },
+        { "Whammy Classic", basics, "Clean octave shifter. Hold +1 OCT / +2 OCT for a pure Whammy-style jump.",
+          { { rise, 0 } } },
+        { "Slow Rise", basics, "Hold a footswitch and the pitch sweeps up over ~1 s; release and it sweeps back down.",
+          { { rise, 950 } } },
+
+        // ----------------------------------------------------------------- NOISE
+        { "The Noise", noiseCat, "The all-rounder: a bit of every NOISE knob plus pre-fuzz. Hold +2 OCT for the full shriek.",
+          { { rise, 30 }, { panic, 45 }, { chaos, 30 }, { speed, 25 }, { fuzzOn, 1 }, { fuzz, 55 }, { fuzzTone, 55 } } },
+        { "Panic Attack", noiseCat, "PANIC only: the octave is torn into two detuned voices - sour, beating dissonance.",
+          { { rise, 15 }, { panic, 85 } } },
+        { "Chaos Engine", noiseCat, "CHAOS only: the pitch jumps randomly around the octave, faster and wider than your picking.",
+          { { rise, 10 }, { chaos, 75 } } },
+        { "Seasick", noiseCat, "Low SPEED: slow all-pass phasing and wobble on a slightly detuned octave.",
+          { { rise, 120 }, { speed, 22 }, { panic, 25 } } },
+        { "Ring Mod Hell", noiseCat, "High SPEED: all-pass feedback and AM turn the octave into metallic ring-mod noise.",
+          { { rise, 0 }, { speed, 92 } } },
+        { "Drop Tune Dive", noiseCat, "DOWN mode with a long RISE: hold for a sub-octave dive, release to climb back. Fuzz after.",
+          { { noiseDown, 1 }, { rise, 450 }, { panic, 15 }, { fuzzOn, 1 }, { fuzzPost, 1 }, { fuzz, 55 }, { fuzzTone, 35 } } },
+
+        // --------------------------------------------------------------- RAINBOW
+        { "Harmony Fifth", rainbowCat, "Tight, clean harmony: a fifth above plus its octave. No regeneration.",
+          { { rbOn, 1 }, { rbPitch, 7 }, { rbPrimary, 60 }, { rbSecondary, 25 }, { rbTracking, 95 }, { rbTone, 70 } } },
+        { "Atonal Detune", rainbowCat, "SNAP off: a quarter-tone-flat double. Instantly wrong in the best way.",
+          { { rbOn, 1 }, { rbSnap, 0 }, { rbPitch, -0.4f }, { rbPrimary, 85 }, { rbTracking, 100 }, { rbTone, 65 } } },
+        { "Tone Clusters", rainbowCat, "Low TRACKING: the harmony lags and repeats grains, smearing into rhythmic clusters.",
+          { { rbOn, 1 }, { rbPitch, 5 }, { rbPrimary, 70 }, { rbSecondary, 20 }, { rbTracking, 8 }, { rbMagic, 20 }, { rbTone, 55 } } },
+        { "Pixie Trails", rainbowCat, "MAGIC mid-way: every repeat climbs another fifth - glittering ascending trails.",
+          { { rbOn, 1 }, { rbPitch, 7 }, { rbPrimary, 55 }, { rbTracking, 75 }, { rbMagic, 45 }, { rbTone, 55 } } },
+        { "Descending Spiral", rainbowCat, "Negative PITCH with regeneration: notes fall away in a spiral of fourths.",
+          { { rbOn, 1 }, { rbPitch, -5 }, { rbPrimary, 65 }, { rbTracking, 70 }, { rbMagic, 60 }, { rbTone, 40 } } },
+        { "Whale Song", rainbowCat, "Atonal down-shift, loose tracking and heavy MAGIC through the deep chorus: moaning, gurgling.",
+          { { rbOn, 1 }, { rbSnap, 0 }, { rbPitch, -1.7f }, { rbPrimary, 70 }, { rbSecondary, 30 }, { rbTracking, 35 },
+            { rbMagic, 80 }, { rbTone, 30 }, { swarmOn, 1 }, { swarmDeep, 1 }, { swarmMix, 40 } } },
+        { "Self-Oscillator", rainbowCat, "MAGIC on the edge. Hold the MAGIC footswitch and it takes off into squalls on its own.",
+          { { rbOn, 1 }, { rbPitch, 12 }, { rbPrimary, 50 }, { rbTracking, 60 }, { rbMagic, 92 }, { rbTone, 60 } } },
+
+        // ------------------------------------------------------------- textures
+        { "Swarm Cloud", texture, "DEEP chorus over a barely-detuned double: wide, seasick, huge.",
+          { { rbOn, 1 }, { rbSnap, 0 }, { rbPitch, 0.2f }, { rbPrimary, 40 }, { rbTracking, 90 },
+            { swarmOn, 1 }, { swarmDeep, 1 }, { swarmDepth, 75 }, { swarmRate, 0.35f }, { swarmMix, 60 } } },
+        { "Velcro Fuzz", texture, "Fuzz with GATE: the notes sputter and tear apart as they decay.",
+          { { fuzzOn, 1 }, { fuzz, 85 }, { fuzzGate, 75 }, { fuzzTone, 45 } } },
+        { "Stutter Breakdown", texture, "Tempo-synced 1/16 hard gate on pre-fuzz. Hold +1 OCT for detuned stabs.",
+          { { rise, 0 }, { panic, 30 }, { fuzzOn, 1 }, { fuzz, 65 }, { flowOn, 1 }, { flowSync, 1 }, { flowDiv, 4 }, { flowHard, 1 } } },
+        { "Tremolo Ghost", texture, "Smooth tremolo, a quiet octave-up voice with trails and chorus - eerie clean parts.",
+          { { rbOn, 1 }, { rbPitch, 12 }, { rbPrimary, 30 }, { rbMagic, 25 }, { rbTracking, 85 }, { rbTone, 45 },
+            { swarmOn, 1 }, { swarmMix, 35 }, { flowOn, 1 }, { flowHard, 0 }, { flowSpeed, 5.5f }, { flowAmount, 70 } } },
+
+        // ------------------------------------------------------------ full chaos
+        { "Alpha Scream", combo, "Hot pre-fuzz into a panicked, chaotic octave. Hold +2 OCT for the scream.",
+          { { rise, 15 }, { panic, 50 }, { chaos, 15 }, { speed, 20 }, { fuzzOn, 1 }, { fuzz, 80 }, { fuzzTone, 65 } } },
+        { "Broken Radio", combo, "Atonal loose harmony, dark post-fuzz and tremolo: a dying transmission.",
+          { { rbOn, 1 }, { rbSnap, 0 }, { rbPitch, -2.6f }, { rbPrimary, 80 }, { rbTracking, 15 }, { rbTone, 30 },
+            { fuzzOn, 1 }, { fuzzPost, 1 }, { fuzz, 45 }, { fuzzTone, 20 },
+            { flowOn, 1 }, { flowHard, 0 }, { flowSpeed, 6.0f }, { flowAmount, 60 } } },
+        { "Self Destruct", combo, "Everything at once: max MAGIC octave spirals into gated post-fuzz. Hold MAGIC and +2 OCT.",
+          { { panic, 40 }, { chaos, 40 }, { rbOn, 1 }, { rbPitch, 12 }, { rbPrimary, 60 }, { rbMagic, 100 }, { rbTracking, 55 },
+            { fuzzOn, 1 }, { fuzzPost, 1 }, { fuzz, 90 }, { fuzzGate, 30 } } },
     };
 }
 
@@ -57,8 +102,33 @@ juce::StringArray PresetManager::getFactoryPresetNames() const
 {
     juce::StringArray names;
     for (const auto& fp : factoryPresets)
-        names.add (fp.first);
+        names.add (fp.name);
     return names;
+}
+
+juce::StringArray PresetManager::getFactoryCategories() const
+{
+    juce::StringArray cats;
+    for (const auto& fp : factoryPresets)
+        cats.addIfNotAlreadyThere (fp.category);
+    return cats;
+}
+
+juce::StringArray PresetManager::getFactoryPresetNames (const juce::String& category) const
+{
+    juce::StringArray names;
+    for (const auto& fp : factoryPresets)
+        if (fp.category == category)
+            names.add (fp.name);
+    return names;
+}
+
+juce::String PresetManager::getPresetDescription (const juce::String& name) const
+{
+    for (const auto& fp : factoryPresets)
+        if (fp.name == name)
+            return fp.description;
+    return {};
 }
 
 juce::StringArray PresetManager::getUserPresetNames() const
@@ -210,11 +280,11 @@ bool PresetManager::fromJson (const juce::var& json, juce::String& name, ValueMa
 
 bool PresetManager::loadPreset (const juce::String& name)
 {
-    for (const auto& [presetName, values] : factoryPresets)
+    for (const auto& fp : factoryPresets)
     {
-        if (presetName == name)
+        if (fp.name == name)
         {
-            applyValues (values, true);
+            applyValues (fp.values, true);
             setCurrentName (name);
             takeSnapshot();
             return true;

@@ -2,11 +2,11 @@
 
 namespace
 {
-    using Attr     = juce::AudioParameterFloatAttributes;
-    using Layout   = juce::AudioProcessorValueTreeState::ParameterLayout;
-    using Group    = juce::AudioProcessorParameterGroup;
+    using Attr   = juce::AudioParameterFloatAttributes;
+    using Layout = juce::AudioProcessorValueTreeState::ParameterLayout;
+    using Group  = juce::AudioProcessorParameterGroup;
 
-    constexpr int kVersion = 1;
+    constexpr int kVersion = 3;
 
     juce::ParameterID pid (const char* id) { return { id, kVersion }; }
 
@@ -17,53 +17,33 @@ namespace
         return r;
     }
 
+    juce::NormalisableRange<float> percentRange() { return { 0.0f, 100.0f, 0.1f }; }
+
     juce::String formatHz (float hz)
     {
         if (hz >= 1000.0f)
-            return juce::String (hz / 1000.0f, hz >= 10000.0f ? 1 : 2) + " kHz";
-        return juce::String (hz, hz < 10.0f ? 2 : (hz < 100.0f ? 1 : 0)) + " Hz";
+            return juce::String (hz / 1000.0f, 2) + " kHz";
+        return juce::String (hz, hz < 10.0f ? 2 : 1) + " Hz";
     }
 
     Attr hzAttr()
     {
-        return Attr().withLabel ("Hz")
-                     .withStringFromValueFunction ([] (float v, int) { return formatHz (v); });
+        return Attr().withLabel ("Hz").withStringFromValueFunction ([] (float v, int) { return formatHz (v); });
     }
 
     Attr percentAttr()
     {
-        return Attr().withLabel ("%")
-                     .withStringFromValueFunction ([] (float v, int) { return juce::String (juce::roundToInt (v)) + "%"; });
+        return Attr().withLabel ("%").withStringFromValueFunction ([] (float v, int) { return juce::String (juce::roundToInt (v)) + "%"; });
     }
 
-    Attr dbAttr (bool showPlus = true)
+    std::unique_ptr<juce::AudioParameterBool> toggle (const char* id, const juce::String& name, bool def)
     {
-        return Attr().withLabel ("dB")
-                     .withStringFromValueFunction ([showPlus] (float v, int)
-                     {
-                         const auto s = juce::String (v, 1);
-                         return (showPlus && v > 0.05f ? "+" : "") + s + " dB";
-                     });
+        return std::make_unique<juce::AudioParameterBool> (pid (id), name, def);
     }
 
-    Attr msAttr()
+    std::unique_ptr<juce::AudioParameterFloat> percent (const char* id, const juce::String& name, float def)
     {
-        return Attr().withLabel ("ms")
-                     .withStringFromValueFunction ([] (float v, int)
-                     {
-                         if (v >= 1000.0f)
-                             return juce::String (v / 1000.0f, 2) + " s";
-                         return juce::String (juce::roundToInt (v)) + " ms";
-                     });
-    }
-
-    Attr semitoneAttr (int decimals)
-    {
-        return Attr().withLabel ("st")
-                     .withStringFromValueFunction ([decimals] (float v, int)
-                     {
-                         return juce::String (v, decimals) + " st";
-                     });
+        return std::make_unique<juce::AudioParameterFloat> (pid (id), name, percentRange(), def, percentAttr());
     }
 }
 
@@ -72,99 +52,77 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     using namespace ParamIDs;
     Layout layout;
 
-    // ---------------------------------------------------------------- VOLTAGE
-    auto voltage = std::make_unique<Group> ("voltage", "Voltage", "|");
-
-    voltage->addChild (std::make_unique<juce::AudioParameterBool> (pid (pitchOn), "Voltage On", true));
-
-    voltage->addChild (std::make_unique<juce::AudioParameterChoice> (pid (octave), "Octave",
-                                                                     ParamChoices::octaves, 3));
-
-    voltage->addChild (std::make_unique<juce::AudioParameterInt> (
-        pid (semitone), "Semitone", -12, 12, 0,
-        juce::AudioParameterIntAttributes().withLabel ("st").withStringFromValueFunction ([] (int v, int)
+    // ------------------------------------------------------------------ NOISE
+    auto noise = std::make_unique<Group> ("noise", "Noise", "|");
+    noise->addChild (toggle (oct1, "+1 Octave", false));
+    noise->addChild (toggle (oct2, "+2 Octaves", false));
+    noise->addChild (toggle (noiseDown, "Noise Down", false));
+    noise->addChild (std::make_unique<juce::AudioParameterFloat> (
+        pid (rise), "Rise", skewedRange (0.0f, 2000.0f, 250.0f, 1.0f), 30.0f,
+        Attr().withLabel ("ms").withStringFromValueFunction ([] (float v, int)
         {
-            return (v > 0 ? "+" : "") + juce::String (v) + " st";
+            return v >= 1000.0f ? juce::String (v / 1000.0f, 2) + " s" : juce::String (juce::roundToInt (v)) + " ms";
         })));
+    noise->addChild (percent (panic, "Panic", 0.0f));
+    noise->addChild (percent (chaos, "Chaos", 0.0f));
+    noise->addChild (percent (speed, "Speed", 0.0f));
 
-    voltage->addChild (std::make_unique<juce::AudioParameterFloat> (pid (rise), "Rise",
-                                                                    skewedRange (0.0f, 2000.0f, 250.0f, 1.0f), 40.0f, msAttr()));
-
-    voltage->addChild (std::make_unique<juce::AudioParameterFloat> (pid (randRange), "Random Range",
-                                                                    skewedRange (0.0f, 24.0f, 6.0f, 0.01f), 0.0f, semitoneAttr (1)));
-
-    voltage->addChild (std::make_unique<juce::AudioParameterFloat> (pid (randSpeed), "Random Speed",
-                                                                    skewedRange (0.1f, 20.0f, 2.0f, 0.01f), 2.0f, hzAttr()));
-
-    voltage->addChild (std::make_unique<juce::AudioParameterChoice> (pid (quality), "Quality",
-                                                                     ParamChoices::qualities, 1));
-
-    voltage->addChild (std::make_unique<juce::AudioParameterFloat> (pid (rush), "Rush",
-                                                                    juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 0.0f, percentAttr()));
-
-    voltage->addChild (std::make_unique<juce::AudioParameterFloat> (pid (anger), "Anger",
-                                                                    juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 0.0f, percentAttr()));
-
-    voltage->addChild (std::make_unique<juce::AudioParameterFloat> (pid (modRate), "Mod Rate",
-                                                                    skewedRange (0.1f, 20.0f, 2.0f, 0.01f), 1.5f, hzAttr()));
-
-    // ------------------------------------------------------------------- TONE
-    auto tone = std::make_unique<Group> ("tone", "Tone", "|");
-
-    tone->addChild (std::make_unique<juce::AudioParameterFloat> (
-        pid (lowCut), "Low Cut", skewedRange (ParamRanges::lowCutMin, ParamRanges::lowCutMax, 150.0f, 0.1f), 20.0f,
-        Attr().withLabel ("Hz").withStringFromValueFunction ([] (float v, int)
+    // ---------------------------------------------------------------- RAINBOW
+    auto rainbow = std::make_unique<Group> ("rainbow", "Rainbow", "|");
+    rainbow->addChild (toggle (rbOn, "Rainbow On", false));
+    rainbow->addChild (std::make_unique<juce::AudioParameterFloat> (
+        pid (rbPitch), "Rainbow Pitch", juce::NormalisableRange<float> (-12.0f, 12.0f, 0.01f), 7.0f,
+        Attr().withLabel ("st").withStringFromValueFunction ([] (float v, int)
         {
-            return ParamRanges::isLowCutOff (v) ? juce::String ("OFF") : formatHz (v);
+            return (v > 0.005f ? "+" : "") + juce::String (v, 2) + " st";
         })));
-
-    tone->addChild (std::make_unique<juce::AudioParameterFloat> (
-        pid (highCut), "High Cut", skewedRange (ParamRanges::highCutMin, ParamRanges::highCutMax, 5000.0f, 1.0f), 20000.0f,
-        Attr().withLabel ("Hz").withStringFromValueFunction ([] (float v, int)
-        {
-            return ParamRanges::isHighCutOff (v) ? juce::String ("OFF") : formatHz (v);
-        })));
-
-    tone->addChild (std::make_unique<juce::AudioParameterFloat> (pid (mid), "Mid Boost",
-                                                                 juce::NormalisableRange<float> (0.0f, ParamRanges::midMaxDb, 0.1f), 0.0f, dbAttr()));
+    rainbow->addChild (toggle (rbSnap, "Rainbow Snap", true));
+    rainbow->addChild (percent (rbPrimary, "Primary", 60.0f));
+    rainbow->addChild (percent (rbSecondary, "Secondary", 0.0f));
+    rainbow->addChild (percent (rbTone, "Rainbow Tone", 60.0f));
+    rainbow->addChild (percent (rbTracking, "Tracking", 80.0f));
+    rainbow->addChild (percent (rbMagic, "Magic", 0.0f));
+    rainbow->addChild (toggle (magicHold, "Magic Switch", false));
 
     // ------------------------------------------------------------------ SWARM
     auto swarm = std::make_unique<Group> ("swarm", "Swarm", "|");
-
-    swarm->addChild (std::make_unique<juce::AudioParameterBool> (pid (swarmOn),   "Swarm On",   true));
-    swarm->addChild (std::make_unique<juce::AudioParameterBool> (pid (swarmDeep), "Swarm Deep", false));
+    swarm->addChild (toggle (swarmOn, "Swarm On", false));
+    swarm->addChild (toggle (swarmDeep, "Swarm Deep", false));
     swarm->addChild (std::make_unique<juce::AudioParameterFloat> (pid (swarmRate), "Swarm Rate",
-                                                                  skewedRange (0.05f, 5.0f, 0.8f, 0.01f), 0.6f, hzAttr()));
-    swarm->addChild (std::make_unique<juce::AudioParameterFloat> (pid (swarmDepth), "Swarm Depth",
-                                                                  juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 50.0f, percentAttr()));
-    swarm->addChild (std::make_unique<juce::AudioParameterFloat> (pid (swarmMix), "Swarm Mix",
-                                                                  juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 0.0f, percentAttr()));
+                                                                  skewedRange (0.05f, 8.0f, 0.8f, 0.01f), 0.6f, hzAttr()));
+    swarm->addChild (percent (swarmDepth, "Swarm Depth", 50.0f));
+    swarm->addChild (percent (swarmMix, "Swarm Mix", 50.0f));
+
+    // ------------------------------------------------------------------- FUZZ
+    auto fz = std::make_unique<Group> ("fuzz", "Fuzz", "|");
+    fz->addChild (toggle (fuzzOn, "Fuzz On", false));
+    fz->addChild (toggle (fuzzPost, "Fuzz Post", false));
+    fz->addChild (percent (fuzz, "Fuzz", 60.0f));
+    fz->addChild (percent (fuzzTone, "Fuzz Tone", 50.0f));
+    fz->addChild (percent (fuzzGate, "Fuzz Gate", 0.0f));
 
     // ------------------------------------------------------------------- FLOW
     auto flow = std::make_unique<Group> ("flow", "Flow", "|");
-
-    flow->addChild (std::make_unique<juce::AudioParameterBool> (pid (flowOn),   "Flow On",   true));
-    flow->addChild (std::make_unique<juce::AudioParameterBool> (pid (flowHard), "Flow Hard", true));
-    flow->addChild (std::make_unique<juce::AudioParameterBool> (pid (flowSync), "Flow Sync", false));
-    flow->addChild (std::make_unique<juce::AudioParameterFloat> (pid (flowAmount), "Flow Amount",
-                                                                 juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 0.0f, percentAttr()));
+    flow->addChild (toggle (flowOn, "Flow On", false));
+    flow->addChild (toggle (flowHard, "Flow Hard", true));
+    flow->addChild (toggle (flowSync, "Flow Sync", false));
+    flow->addChild (percent (flowAmount, "Flow Amount", 100.0f));
     flow->addChild (std::make_unique<juce::AudioParameterFloat> (pid (flowSpeed), "Flow Speed",
-                                                                 skewedRange (0.5f, 20.0f, 4.0f, 0.01f), 4.0f, hzAttr()));
-    flow->addChild (std::make_unique<juce::AudioParameterChoice> (pid (flowDiv), "Flow Division",
-                                                                  ParamChoices::divisions, 3));
+                                                                 skewedRange (0.5f, 30.0f, 5.0f, 0.01f), 8.0f, hzAttr()));
+    flow->addChild (std::make_unique<juce::AudioParameterChoice> (pid (flowDiv), "Flow Division", ParamChoices::divisions, 4));
 
     // ----------------------------------------------------------------- OUTPUT
     auto out = std::make_unique<Group> ("output", "Output", "|");
+    out->addChild (percent (mix, "Mix", 100.0f));
+    out->addChild (std::make_unique<juce::AudioParameterFloat> (
+        pid (output), "Output", juce::NormalisableRange<float> (ParamRanges::outputMinDb, ParamRanges::outputMaxDb, 0.1f), 0.0f,
+        Attr().withLabel ("dB").withStringFromValueFunction ([] (float v, int)
+        {
+            return (v > 0.05f ? "+" : "") + juce::String (v, 1) + " dB";
+        })));
+    out->addChild (std::make_unique<juce::AudioParameterChoice> (pid (switchMode), "Footswitch Mode", ParamChoices::switchModes, 0));
+    out->addChild (toggle (bypass, "Bypass", false));
 
-    out->addChild (std::make_unique<juce::AudioParameterFloat> (pid (mix), "Mix",
-                                                                juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 50.0f, percentAttr()));
-    out->addChild (std::make_unique<juce::AudioParameterFloat> (pid (drive), "Drive",
-                                                                juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 0.0f, percentAttr()));
-    out->addChild (std::make_unique<juce::AudioParameterFloat> (pid (output), "Output",
-                                                                juce::NormalisableRange<float> (ParamRanges::outputMinDb, ParamRanges::outputMaxDb, 0.1f),
-                                                                0.0f, dbAttr()));
-    out->addChild (std::make_unique<juce::AudioParameterBool> (pid (bypass), "Bypass", false));
-
-    layout.add (std::move (voltage), std::move (tone), std::move (swarm), std::move (flow), std::move (out));
+    layout.add (std::move (noise), std::move (rainbow), std::move (swarm), std::move (fz), std::move (flow), std::move (out));
     return layout;
 }

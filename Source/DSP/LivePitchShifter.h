@@ -20,21 +20,32 @@ public:
     void prepare (double sr, int numChannels)
     {
         sampleRate = sr;
-        bufferSize = juce::nextPowerOfTwo ((int) std::ceil (sr * 0.25) + 16);
+        bufferSize = juce::nextPowerOfTwo ((int) std::ceil (sr * 0.7) + 16);
         mask = bufferSize - 1;
         buffers.assign ((size_t) juce::jmax (1, numChannels), std::vector<float> ((size_t) bufferSize, 0.0f));
 
-        const auto ms = [sr] (double v) { return (float) (sr * v * 0.001); };
-        minDelay     = 3.0f;
-        fadeLength   = juce::jmax (16, (int) ms (10.0));
-        searchRange  = ms (8.0);
-        corrLength   = juce::jmax (32, (int) ms (12.0));
+        corrLength   = juce::jmax (32, (int) (sr * 0.012));
         corrStep     = sr > 60000.0 ? 4 : 2;
-        downJump     = ms (28.0);
-        minUpJump    = ms (18.0);
         maxDelay     = (float) bufferSize - (float) corrLength - 8.0f;
+        setTightness (tightness);
 
         reset();
+    }
+
+    /**
+     * 1 = tight: short, phase-aligned splices (clean tracking).
+     * 0 = loose: long, unaligned jumps that repeat fragments ("tracking" glitches / tone clusters).
+     */
+    void setTightness (float t) noexcept
+    {
+        tightness = juce::jlimit (0.0f, 1.0f, t);
+        const float loose = 1.0f - tightness;
+        const auto ms = [this] (float v) { return (float) (sampleRate * v * 0.001); };
+        fadeLength     = juce::jmax (16, (int) ms (10.0f + 18.0f * loose));
+        searchRange    = ms (8.0f);
+        downJump       = ms (28.0f + 170.0f * loose * loose);
+        minUpJump      = ms (18.0f + 160.0f * loose * loose);
+        alignSplices   = tightness > 0.3f;
     }
 
     void reset()
@@ -130,7 +141,7 @@ private:
         }
 
         target = juce::jlimit (minDelay + searchRange + fadeTravel, maxDelay - searchRange, target);
-        delay[(size_t) (1 - active)] = findBestDelay (d, target, numChannels);
+        delay[(size_t) (1 - active)] = alignSplices ? findBestDelay (d, target, numChannels) : target;
         fading = true;
         fadePos = 0;
     }
@@ -190,6 +201,8 @@ private:
     int fadePos = 0;
     float unityBlend = 0.0f;
 
+    float tightness = 1.0f;
+    bool alignSplices = true;
     float minDelay = 3.0f, searchRange = 384.0f, downJump = 1344.0f, minUpJump = 864.0f, maxDelay = 10000.0f;
     int fadeLength = 480, corrLength = 576, corrStep = 2;
 };

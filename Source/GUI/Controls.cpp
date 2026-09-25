@@ -238,50 +238,72 @@ void SegmentedChoice::paint (juce::Graphics& g)
 }
 
 //==============================================================================
-Footswitch::Footswitch (juce::RangedAudioParameter& param)
-    : attachment (param, [this] (float v) { bypassed = v >= 0.5f; repaint(); }, nullptr)
+Footswitch::Footswitch (juce::RangedAudioParameter& param, const juce::String& c, juce::Colour led,
+                        bool ledShowsInverse, std::function<bool()> isMomentary)
+    : caption (c), ledColour (led), inverse (ledShowsInverse), momentary (std::move (isMomentary)),
+      attachment (param, [this] (float v) { value = v >= 0.5f; repaint(); }, nullptr)
 {
     attachment.sendInitialUpdate();
     setMouseCursor (juce::MouseCursor::PointingHandCursor);
-    setTooltip ("Bypass (host-synced, latency compensated)");
 }
 
 void Footswitch::mouseDown (const juce::MouseEvent&)
 {
     pressed = true;
-    attachment.setValueAsCompleteGesture (bypassed ? 0.0f : 1.0f);
+    if (momentary && momentary())
+    {
+        holding = true;
+        attachment.beginGesture();
+        attachment.setValueAsPartOfGesture (1.0f);
+    }
+    else
+    {
+        attachment.setValueAsCompleteGesture (value ? 0.0f : 1.0f);
+    }
     repaint();
 }
 
 void Footswitch::mouseUp (const juce::MouseEvent&)
 {
     pressed = false;
+    if (holding)
+    {
+        holding = false;
+        attachment.setValueAsPartOfGesture (0.0f);
+        attachment.endGesture();
+    }
     repaint();
 }
 
 void Footswitch::paint (juce::Graphics& g)
 {
     auto r = getLocalBounds().toFloat();
-    const bool active = ! bypassed;
+    const bool lit = inverse ? ! value : value;
 
     // LED
-    auto ledArea = r.removeFromLeft (r.getHeight() * 0.55f);
-    const auto led = juce::Rectangle<float> (10.0f, 10.0f).withCentre (ledArea.getCentre());
-    if (active)
+    const auto led = juce::Rectangle<float> (10.0f, 10.0f).withCentre ({ r.getCentreX(), r.getY() + 8.0f });
+    r.removeFromTop (18.0f);
+    if (lit)
     {
-        juce::ColourGradient glow (Colours::ledRed.withAlpha (0.6f), led.getCentre(),
-                                   Colours::ledRed.withAlpha (0.0f), led.getCentre().translated (14.0f, 0.0f), true);
+        juce::ColourGradient glow (ledColour.withAlpha (0.65f), led.getCentre(),
+                                   ledColour.withAlpha (0.0f), led.getCentre().translated (15.0f, 0.0f), true);
         g.setGradientFill (glow);
-        g.fillEllipse (led.expanded (10.0f));
+        g.fillEllipse (led.expanded (11.0f));
     }
-    g.setColour (active ? Colours::ledRed : Colours::ledRed.withAlpha (0.18f));
+    g.setColour (lit ? ledColour : ledColour.withAlpha (0.18f));
     g.fillEllipse (led);
-    g.setColour (juce::Colours::white.withAlpha (active ? 0.55f : 0.12f));
+    g.setColour (juce::Colours::white.withAlpha (lit ? 0.55f : 0.12f));
     g.fillEllipse (led.reduced (3.0f).translated (-1.0f, -1.0f));
 
+    // Caption
+    auto text = r.removeFromBottom (18.0f);
+    g.setFont (font (14.5f, true));
+    g.setColour (lit ? Colours::text : Colours::textDim);
+    g.drawText (caption, text, juce::Justification::centred, false);
+
     // Stomp
-    const float size = juce::jmin (r.getWidth(), r.getHeight());
-    auto outer = r.withSizeKeepingCentre (size, size).withX (r.getX()).reduced (2.0f);
+    const float size = juce::jmin (r.getWidth(), r.getHeight()) - 4.0f;
+    auto outer = r.withSizeKeepingCentre (size, size);
     const auto c = outer.getCentre();
 
     juce::Path ring; ring.addEllipse (outer);
@@ -299,12 +321,6 @@ void Footswitch::paint (juce::Graphics& g)
     g.drawEllipse (inner, 1.0f);
     g.setColour (juce::Colours::white.withAlpha (0.35f));
     g.drawEllipse (inner.reduced (size * 0.07f), 0.8f);
-
-    // Caption
-    auto text = r.withTrimmedLeft (size + 8.0f);
-    g.setFont (font (15.0f, true));
-    g.setColour (active ? Colours::text : Colours::textDim);
-    g.drawText (active ? "ACTIVE" : "BYPASSED", text, juce::Justification::centredLeft, false);
 }
 
 //==============================================================================
@@ -475,6 +491,8 @@ void PresetBar::refresh()
         shownName = name;
         shownDirty = dirty;
         nameButton.setButtonText (dirty ? name + " *" : name);
+        const auto description = presets.getPresetDescription (name);
+        nameButton.setTooltip (description.isNotEmpty() ? description : juce::String ("Browse presets"));
     }
 }
 
@@ -500,9 +518,12 @@ void PresetBar::showPresetMenu()
     juce::PopupMenu menu;
     const auto current = presets.getCurrentPresetName();
 
-    menu.addSectionHeader ("Factory");
-    for (const auto& n : presets.getFactoryPresetNames())
-        menu.addItem (n, true, n == current, [this, n] { presets.loadPreset (n); refresh(); });
+    for (const auto& category : presets.getFactoryCategories())
+    {
+        menu.addSectionHeader (category);
+        for (const auto& n : presets.getFactoryPresetNames (category))
+            menu.addItem (n, true, n == current, [this, n] { presets.loadPreset (n); refresh(); });
+    }
 
     const auto user = presets.getUserPresetNames();
     menu.addSectionHeader ("User");
@@ -633,14 +654,15 @@ void InfoOverlay::paint (juce::Graphics& g)
     struct Item { const char* title; const char* body; };
     static const Item items[] =
     {
-        { "VOLTAGE",  "Pitch engine. OCTAVE and SEMI set the interval, RISE glides into it (also when the section is engaged). "
-                      "RANGE / SPEED add smooth random pitch wander. LIVE = zero-latency engine for tracking, STUDIO = phase-coherent spectral engine." },
-        { "MODULATION", "RUSH = organic pitch drift, ANGER = rhythmic semitone jumps, RATE = speed of both." },
-        { "TONE",     "24 dB/oct LOW CUT, 12 dB/oct HIGH CUT and MID BOOST on the effect signal only." },
-        { "SWARM",    "Stereo multi-voice ensemble. DEEP doubles the voices with feedback for a dense, detuned cloud." },
-        { "FLOW",     "Rhythmic gate. HARD = stutter, off = smooth tremolo. SYNC locks to host tempo using DIV." },
-        { "OUTPUT",   "MIX blends dry and effect (equal-power, latency aligned). DRIVE = 4x oversampled tube saturation. VOLUME = output level." },
-        { "TIPS",     "Double-click resets a control. Hold Shift for fine adjustment. Drag the bottom-right corner to resize the window." },
+        { "NOISE",    "Hold +1 OCT / +2 OCT (or latch them) for a violent Whammy-style shift. RISE = glide time in and out. "
+                      "PANIC = detuned dissonance, CHAOS = random pitch jumps, SPEED = all-pass feedback + ring-mod-like AM. DOWN flips to drop-tune." },
+        { "RAINBOW",  "Harmony voices: PITCH (-12..+12 st, SNAP for semitones), PRIMARY / SECONDARY (octave of primary) levels, TONE. "
+                      "TRACKING low = lag and tone clusters. MAGIC = regeneration up to self-oscillation; the MAGIC switch slams it to max." },
+        { "SWARM",    "Stereo ensemble chorus. DEEP = 8 voices with feedback." },
+        { "FUZZ",     "Two-stage fuzz. GATE starves it into sputtering velcro. POST places it after the pitch effects (off = before)." },
+        { "FLOW",     "Rhythmic gate: HARD = stutter, off = tremolo. SYNC locks to the host tempo (DIV)." },
+        { "SWITCHES", "Header selector: MOMENTARY (active while held) or LATCH (click on / click off). All switches can be MIDI-learned in your DAW." },
+        { "TIPS",     "Double-click resets a control, Shift = fine adjustment, drag the corner to resize." },
     };
 
     for (const auto& item : items)
