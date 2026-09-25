@@ -761,8 +761,8 @@ void InfoOverlay::paint (juce::Graphics& g)
     {
         { "STING",    "Hold +1 OCT / +2 OCT (or latch them) for a violent octave. RISE = glide in, FALL = glide back on release. ANGER = detuned dissonance, "
                       "FRENZY = random pitch jumps, BUZZ = all-pass feedback + ring-mod-like AM, MIX = dry / octave blend. DIVE = shift down." },
-        { "RAW",      "STING and HIVE: vintage lo-fi pitch engine like the original pedals - crossfading taps, cheap converters: warbly, "
-                      "grainy, dark. Off = clean modern engine. In HIVE, TRACKING sets how slow and laggy the RAW engine is." },
+        { "RAW",      "STING and HIVE: lo-fi pedal character on top of the in-tune shifter - cheap converters and a slow pitch warble "
+                      "(deeper at low TRACKING in HIVE). Off = clean. HIVE runs in parallel: it harmonises the note you play, not the octave." },
         { "HIVE",     "Harmony voices: PITCH (-12..+12 st, SNAP = semitones), DRONE = main voice, QUEEN = its octave, TONE. TRACKING low = lag "
                       "and tone clusters. TRAILS = repeats that climb / fall by PITCH each time, TIME = their spacing (SYNC = tempo)." },
         { "VENOM",    "The VENOM footswitch pushes the TRAILS into self-oscillation - even with HIVE or the plug-in off. "

@@ -79,6 +79,7 @@ void SwarmnessAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBl
     dryDelay.setDelay ((float) latency);
     dryBuffer.setSize (2, maxBlockSize, false, false, true);
     inputGainTrack.assign ((size_t) maxBlockSize, 1.0f);
+    hiveBuffer.setSize (2, maxBlockSize, false, false, true);
 
     auto init = [sampleRate] (juce::SmoothedValue<float>& s, double seconds, float value)
     {
@@ -191,6 +192,11 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     fuzzPre.setParams (fuzzOn && ! fuzzIsPost, fuzzSettings);
     fuzzPre.process (audio, numChannels, numSamples);
 
+    // STING and HIVE run in parallel from the same (played) signal, so HIVE harmonises the note
+    // you play - not the STING octave - and the TRAILS never pick up the octave.
+    for (int ch = 0; ch < numChannels; ++ch)
+        hiveBuffer.copyFrom (ch, 0, audio[ch], numSamples);
+
     // ---- NOISE (footswitch octaves)
     {
         const float dir = on (p.noiseDown) ? -1.0f : 1.0f;
@@ -212,7 +218,10 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
             repeatSeconds = ParamChoices::divisionInBeats ((int) p.rbDiv->load()) * 60.0 / transport.bpm;
         rainbow.setParams (on (p.rbOn) || magicHeld, pitch, pct (p.rbPrimary), pct (p.rbSecondary), pct (p.rbTone),
                            pct (p.rbTracking), pct (p.rbMagic), (float) repeatSeconds, magicHeld, on (p.rbRaw));
-        rainbow.process (audio, numChannels, numSamples);
+        float* hive[2] = { hiveBuffer.getWritePointer (0), hiveBuffer.getWritePointer (1) };
+        rainbow.process (hive, numChannels, numSamples);
+        for (int ch = 0; ch < numChannels; ++ch)
+            juce::FloatVectorOperations::add (audio[ch], hive[ch], numSamples);
     }
 
     // ---- SWARM

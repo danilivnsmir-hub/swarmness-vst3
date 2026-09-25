@@ -1,3 +1,4 @@
+#include <algorithm>
 // Offline, headless verification of the Swarmness DSP.
 // Build target: SwarmnessTests   (run via `ctest` or directly)
 //
@@ -295,6 +296,62 @@ namespace
         return den > 0.0 ? num / den : 0.0;
     }
 
+    /** Mean instantaneous frequency from Schmitt-triggered zero crossings (robust to warble / AM). */
+    static double crossingFrequency (const juce::AudioBuffer<float>& b, double sr, int start, int n)
+    {
+        const float hyst = 0.25f * b.getMagnitude (0, start, n) * 0.2f;
+        int first = -1, last = -1, count = 0;
+        bool high = b.getSample (0, start) > 0.0f;
+        for (int i = start + 1; i < start + n; ++i)
+        {
+            const float v = b.getSample (0, i);
+            if (! high && v > hyst)
+            {
+                high = true;
+                if (first < 0) first = i; else ++count;
+                last = i;
+            }
+            else if (high && v < -hyst)
+                high = false;
+        }
+        return count > 0 ? count * sr / (double) (last - first) : 0.0;
+    }
+
+    /** Median of per-frame autocorrelation pitch (robust to the RAW engine's crossfade nulls). */
+    static double framePitch (const juce::AudioBuffer<float>& b, double sr, double expected, int start, int n)
+    {
+        const int frame = 4096, hop = 2048;
+        const int minLag = (int) (sr / (expected * 1.5)), maxLag = (int) (sr / (expected / 1.5));
+        std::vector<double> pitches;
+        const float* x = b.getReadPointer (0);
+        for (int f0 = start; f0 + frame + maxLag < start + n; f0 += hop)
+        {
+            double best = -1.0; int bestLag = 0;
+            std::vector<double> r ((size_t) (maxLag + 2), 0.0);
+            for (int lag = minLag - 1; lag <= maxLag + 1; ++lag)
+            {
+                double num = 0.0, e1 = 0.0, e2 = 0.0;
+                for (int i = 0; i < frame; ++i)
+                {
+                    num += (double) x[f0 + i] * x[f0 + i + lag];
+                    e1  += (double) x[f0 + i] * x[f0 + i];
+                    e2  += (double) x[f0 + i + lag] * x[f0 + i + lag];
+                }
+                r[(size_t) lag] = (e1 > 0 && e2 > 0) ? num / std::sqrt (e1 * e2) : 0.0;
+            }
+            for (int lag = minLag; lag <= maxLag; ++lag)
+                if (r[(size_t) lag] > best) { best = r[(size_t) lag]; bestLag = lag; }
+            if (best < 0.5) continue;
+            const double a = r[(size_t) bestLag - 1], c = r[(size_t) bestLag + 1], m = r[(size_t) bestLag];
+            const double denom = a - 2.0 * m + c;
+            const double shift = std::abs (denom) > 1e-12 ? 0.5 * (a - c) / denom : 0.0;
+            pitches.push_back (sr / (bestLag + shift));
+        }
+        if (pitches.empty()) return 0.0;
+        std::sort (pitches.begin(), pitches.end());
+        return pitches[pitches.size() / 2];
+    }
+
     void testNoiseOctaves()
     {
         std::printf ("\nNOISE footswitches: pitch accuracy (220 Hz sine, no Panic/Chaos/Speed)\n");
@@ -314,9 +371,9 @@ namespace
             auto input = makeSine (sr, 48000 * 2, 220.0);
             auto out = render (p, input, sr, 256);
             double purity = 0.0;
-            const double f = raw ? spectralCentroid (out, sr, c.expected, 48000, 48000) : dominantFrequency (out, sr, 48000, purity);
+            const double f = raw ? framePitch (out, sr, c.expected, 48000, 48000) : dominantFrequency (out, sr, 48000, purity);
             const double cents = 1200.0 * std::log2 (f / c.expected);
-            check (std::abs (cents) < (raw ? 25.0 : 5.0), juce::String::formatted ("%s %s %s: %.2f Hz (%+.1f cents), spurious %.1f dB",
+            check (std::abs (cents) < (raw ? 20.0 : 5.0), juce::String::formatted ("%s %s %s: %.2f Hz (%+.1f cents), spurious %.1f dB",
                                                                     raw ? "RAW   " : "modern", c.sw, c.down ? "down" : "up  ", f, cents, purity));
         }
     }
@@ -394,9 +451,9 @@ namespace
                     voices.setSample (ch, i, out.getSample (ch, i) - input.getSample (ch, i - lat));
             double purity = 0.0;
             const double expected = 220.0 * std::pow (2.0, pitch / 12.0);
-            const double f = raw ? spectralCentroid (voices, sr, expected, 48000, 48000) : dominantFrequency (voices, sr, 48000, purity);
+            const double f = raw ? framePitch (voices, sr, expected, 48000, 48000) : dominantFrequency (voices, sr, 48000, purity);
             const double cents = 1200.0 * std::log2 (f / expected);
-            check (std::abs (cents) < (raw ? 25.0 : 5.0),
+            check (std::abs (cents) < (raw ? 20.0 : 5.0),
                    juce::String::formatted ("%s pitch %+.0f st: %.2f Hz (%+.1f cents)", raw ? "RAW   " : "modern", pitch, f, cents));
         }
     }
@@ -564,6 +621,56 @@ namespace
                 const float db = juce::Decibels::gainToDecibels (rms, -200.0f);
                 check (db < noiseDb - 3.0f || db < -100.0f,
                        juce::String::formatted ("%-16s input noise %4.0f dBFS -> output %6.1f dBFS", preset, noiseDb, db));
+            }
+        }
+    }
+
+    /** Time (ms) until the output first reaches half of its steady-state level after a sine starts. */
+    static double onsetMs (const juce::AudioBuffer<float>& out, double sr, int startSample)
+    {
+        const int n = out.getNumSamples();
+        const float steady = out.getRMSLevel (0, n - (int) (0.3 * sr), (int) (0.25 * sr));
+        const int win = (int) (0.004 * sr);
+        for (int i = startSample; i + win < n; i += win / 2)
+            if (out.getRMSLevel (0, i, win) > 0.5f * steady)
+                return 1000.0 * (i - startSample) / sr;
+        return -1.0;
+    }
+
+    void reportLag()
+    {
+        std::printf ("\nPitch engines: onset lag vs. the dry note (220 Hz sine starting at 0.5 s)\n");
+        const double sr = 48000.0;
+        auto input = makeSine (sr, 48000 * 2, 220.0, 0.3f);
+        for (int ch = 0; ch < 2; ++ch)
+            input.clear (ch, 0, 24000);
+        for (bool raw : { false, true })
+        {
+            for (const char* sw : { ParamIDs::oct1, ParamIDs::oct2 })
+            {
+                SwarmnessAudioProcessor p;
+                resetToInit (p);
+                setParam (p, ParamIDs::stingRaw, raw ? 1.0f : 0.0f);
+                setParam (p, ParamIDs::rise, 0.0f);
+                setParam (p, sw, 1.0f);
+                auto out = render (p, input, sr, 256);
+                std::printf ("    STING %s %s: %.1f ms\n", raw ? "RAW   " : "modern", sw, onsetMs (out, sr, 24000 + p.getLatencySamples()));
+            }
+            for (float tracking : { 100.0f, 80.0f, 30.0f })
+            {
+                SwarmnessAudioProcessor p;
+                resetToInit (p);
+                setParam (p, ParamIDs::rbRaw, raw ? 1.0f : 0.0f);
+                setParam (p, ParamIDs::rbOn, 1.0f);
+                setParam (p, ParamIDs::rbPitch, 7.0f);
+                setParam (p, ParamIDs::rbPrimary, 100.0f);
+                setParam (p, ParamIDs::rbTracking, tracking);
+                auto out = render (p, input, sr, 256);
+                const int lat = p.getLatencySamples();
+                for (int ch = 0; ch < 2; ++ch)
+                    for (int i = lat; i < out.getNumSamples(); ++i)
+                        out.setSample (ch, i, out.getSample (ch, i) - input.getSample (ch, i - lat));
+                std::printf ("    HIVE  %s tracking %3.0f%%: %.1f ms\n", raw ? "RAW   " : "modern", tracking, onsetMs (out, sr, 24000 + lat));
             }
         }
     }
@@ -766,6 +873,7 @@ int main (int argc, char** argv)
     testFuzzLevel();
     testGlareOctave();
     testTrails();
+    reportLag();
     testFuzzIdleNoise();
     testInputSensitivity();
     testSwarmBounded();

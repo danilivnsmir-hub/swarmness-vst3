@@ -92,7 +92,7 @@ private:
 
     juce::AudioParameterBool* bypassParam = nullptr;
 
-    // DSP chain: [fuzz pre] -> noise -> rainbow -> swarm -> [fuzz post] -> flow (each stage has its own blend)
+    // DSP chain: [fuzz pre] -> (noise || rainbow voices) -> swarm -> [fuzz post] -> flow (each stage has its own blend)
     FuzzStage    fuzzPre, fuzzPost;
     NoiseStage   noise;
     RainbowStage rainbow;
@@ -100,7 +100,7 @@ private:
     FlowGate     flow;
 
     juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::None> dryDelay { 1 };
-    juce::AudioBuffer<float> dryBuffer;
+    juce::AudioBuffer<float> dryBuffer, hiveBuffer;
     std::vector<float> inputGainTrack;     // per-sample INPUT gain of the current block
     juce::SmoothedValue<float> inputGainSmoothed, outputGainSmoothed, bypassSmoothed;
 

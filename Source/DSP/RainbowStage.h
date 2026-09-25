@@ -1,11 +1,14 @@
 #pragma once
 
 #include "DSPUtils.h"
-#include "VintageShifter.h"
+#include "PitchVoice.h"
 #include <array>
 #include <vector>
 
 /**
+ * process() replaces the buffer with the harmony VOICES ONLY (built from the played note);
+ * the processor mixes them in parallel with the STING path, so intervals never stack.
+ *
  * HIVE (internally "rainbow"): two harmony voices with regeneration, inspired by
  * EarthQuaker's Rainbow Machine - but with one job per control, so it behaves predictably.
  *
@@ -24,9 +27,8 @@
  * Spiral ceiling: the loop is band-limited (steep low-pass / high-pass), so a trail that
  * climbs or falls past the useful range fades out instead of turning into a squeal or rumble.
  *
- * RAW (default): the voices run on a vintage crossfading shifter with FV-1-class converter
- * emulation (32 kHz, dark, slightly gritty); TRACKING then sets the crossfade window, like the
- * original. Off: the clean, splice-aligned modern engine.
+ * RAW (default): FV-1-era character on top of the in-tune shifter - a slow random pitch warble
+ * (deeper at low TRACKING), rougher splices and cheap-converter emulation. Off: clean engine.
  *
  * Naturalness: each voice drifts a few cents on its own slow random walk, DRONE sits slightly
  * left and QUEEN slightly right, and up-shifted voices are darkened in proportion to the
@@ -44,7 +46,7 @@ public:
         for (auto* v : { &primary, &secondary })
         {
             v->prepare (sr, 2);
-            v->setLoFi (32000.0f, 14.0f, 11000.0f);   // FV-1-class converters: 32 kHz, dark
+            v->setLoFi (26000.0f, 13.0f, 10000.0f);   // shared RAW voicing with STING
         }
 
         const int maxLag = (int) std::ceil (sr * 0.2) + 8;
@@ -108,11 +110,10 @@ public:
     {
         primary  .setRaw (rawEngine);
         secondary.setRaw (rawEngine);
-        // RAW: TRACKING sets the crossfade rate like the original pedal's window
-        // (high = tight and chorusy, low = slow, laggy, audible repeats)
-        const float rate = 2.0f + 6.0f * tracking01;
-        primary  .setVintageModulationRate (rate);
-        secondary.setVintageModulationRate (rate * 1.15f);
+        // RAW: the Rainbow-Machine-style warble - deeper and slower as TRACKING goes down
+        primary  .setRawCharacter (7.0f + 10.0f * (1.0f - tracking01), 4.0f, 0.5f);
+        secondary.setRawCharacter (9.0f + 12.0f * (1.0f - tracking01), 3.3f, 0.5f);
+
         onSmoothed.setTargetValue (on ? 1.0f : 0.0f);
         pitch = pitchSemis;
         primLevel.setTargetValue (primary01);
@@ -127,8 +128,9 @@ public:
         loopDelayTarget = (float) (juce::jlimit (0.02, kMaxRepeatSeconds - 0.01, (double) repeatSeconds) * sampleRate);
 
         // TRAILS: loop gain below one -> even, predictable decay. The footswitch goes past one.
-        loopGain.setTargetValue (magicHeld ? 1.45f : 0.9f * std::pow (juce::jlimit (0.0f, 1.0f, trails01), 0.8f));
-        resonanceSmoothed.setTargetValue (magicHeld ? 0.75f : 0.0f);
+        // VENOM: just past unity, so the trails swell and sustain instead of shrieking
+        loopGain.setTargetValue (magicHeld ? 1.3f : 0.9f * std::pow (juce::jlimit (0.0f, 1.0f, trails01), 0.8f));
+        resonanceSmoothed.setTargetValue (magicHeld ? 0.5f : 0.0f);
     }
 
     bool isActive() const noexcept { return onSmoothed.getCurrentValue() > 0.0f || onSmoothed.isSmoothing(); }
@@ -140,6 +142,8 @@ public:
             // Keep the loop quiet so re-engaging starts clean.
             if (! loopCleared)
                 clearLoop();
+            for (int ch = 0; ch < juce::jmin (numChannels, 2); ++ch)
+                juce::FloatVectorOperations::clear (audio[ch], numSamples);
             return;
         }
 
@@ -233,7 +237,8 @@ public:
                     const float banded = loopHp[(size_t) ch].process (loopLp[(size_t) ch].process (lt));
                     loopBuf[(size_t) ch][(size_t) ((loopWrite + i) & loopMask)] = dc[(size_t) ch].process (banded);
 
-                    audio[ch][start + i] += on * 0.9f * std::tanh (z * (1.0f / 0.9f));
+                    // The stage outputs the voices only; the processor adds them to the STING path.
+                    audio[ch][start + i] = on * 0.9f * std::tanh (z * (1.0f / 0.9f));
                 }
             }
 

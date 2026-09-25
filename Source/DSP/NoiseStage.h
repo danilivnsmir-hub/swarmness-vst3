@@ -1,7 +1,7 @@
 #pragma once
 
 #include "DSPUtils.h"
-#include "VintageShifter.h"
+#include "PitchVoice.h"
 #include <array>
 
 /**
@@ -107,9 +107,9 @@ private:
  * While no footswitch is held (and the pitch has returned home) the stage passes the input.
  * When engaged the output is MIX shifted (100% = like the pedal).
  *
- * RAW (default): a vintage crossfading shifter with cheap-converter emulation - grainy, buzzy,
- * warbly octaves like the pedal. Off: the clean, splice-aligned modern engine with attack
- * restoration and anti-chipmunk filtering.
+ * RAW (default): a slight pitch warble and cheap-converter emulation - grainy,
+ * lo-fi octaves like the pedal (still in tune and tight on the pick). Off: the clean engine with
+ * anti-chipmunk filtering. Both engines use attack restoration.
  */
 class NoiseStage
 {
@@ -122,8 +122,8 @@ public:
         for (auto* v : { &mainVoice, &panicVoice })
         {
             v->prepare (sr, 2);
-            v->setVintageModulationRate (11.0f);     // fairly fast crossfading: buzzy, grainy octaves
-            v->setLoFi (22050.0f, 12.0f, 8500.0f);   // cheap converters
+            v->setRawCharacter (5.0f, 7.0f, 0.0f);   // RAW: slight warble; splices stay tight (footswitch attack)
+            v->setLoFi (26000.0f, 13.0f, 10000.0f);  // cheap converters (shared RAW voicing with HIVE)
         }
         speedStage.prepare (sr);
         panicBuffer.setSize (2, juce::jmax (maxBlockSize, kControlBlock), false, false, true);
@@ -260,13 +260,13 @@ public:
                 }
             }
 
-            if (active && ! mainVoice.isRaw())
+            if (active)
             {
-                // (modern engine only - RAW keeps the pedal's own artefacts)
                 // Anti-chipmunk: darken up-shifts in proportion to the shift
+                // (modern engine only - in RAW the converter emulation does the darkening)
                 const float ratio = std::pow (2.0f, juce::jmax (0.0f, mainSemis) / 12.0f);
                 const float lpHz = 16000.0f / std::pow (ratio, 0.9f);
-                const float lpCoeff = std::exp (-swarm::kTwoPi * lpHz / (float) sampleRate);
+                const float lpCoeff = mainVoice.isRaw() ? 0.0f : std::exp (-swarm::kTwoPi * lpHz / (float) sampleRate);
 
                 for (int i = 0; i < n; ++i)
                 {
