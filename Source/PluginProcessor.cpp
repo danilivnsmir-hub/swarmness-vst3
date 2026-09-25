@@ -145,6 +145,11 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     }
 
     // ---- FUZZ (pre)
+    // Footswitches behave like real momentary pedals: holding one always engages its effect,
+    // even while the plug-in is bypassed (ON off) or the RAINBOW section is switched off.
+    const bool magicHeld = on (p.magicHold);
+    const bool anySwitchHeld = on (p.oct1) || on (p.oct2) || magicHeld;
+
     const bool fuzzOn = on (p.fuzzOn), fuzzIsPost = on (p.fuzzPost);
     fuzzPre.setParams (fuzzOn && ! fuzzIsPost, pct (p.fuzz), pct (p.fuzzTone), pct (p.fuzzGate));
     fuzzPre.process (audio, numChannels, numSamples);
@@ -165,8 +170,8 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
         float pitch = p.rbPitch->load();
         if (on (p.rbSnap))
             pitch = std::round (pitch);
-        rainbow.setParams (on (p.rbOn), pitch, pct (p.rbPrimary), pct (p.rbSecondary), pct (p.rbTone),
-                           pct (p.rbTracking), pct (p.rbMagic), on (p.magicHold));
+        rainbow.setParams (on (p.rbOn) || magicHeld, pitch, pct (p.rbPrimary), pct (p.rbSecondary), pct (p.rbTone),
+                           pct (p.rbTracking), pct (p.rbMagic), magicHeld);
         rainbow.process (audio, numChannels, numSamples);
     }
 
@@ -218,7 +223,8 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
 
     // ---- OUTPUT gain + bypass crossfade
     outputGainSmoothed.setTargetValue (juce::Decibels::decibelsToGain (p.output->load()));
-    bypassSmoothed.setTargetValue (on (p.bypass) ? 1.0f : 0.0f);
+    // (the NOISE return glide after releasing a footswitch is allowed to finish, too)
+    bypassSmoothed.setTargetValue (on (p.bypass) && ! anySwitchHeld && ! noise.isEngaged() ? 1.0f : 0.0f);
 
     for (int i = 0; i < numSamples; ++i)
     {

@@ -97,10 +97,10 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     addAndMakeVisible (volumeKnob);
 
     // Footswitches
-    oct1Switch  .setTooltip ("+1 octave (hold, or click in LATCH mode)");
-    oct2Switch  .setTooltip ("+2 octaves (hold, or click in LATCH mode)");
-    magicSwitch .setTooltip ("Slams MAGIC to self-oscillation (needs RAINBOW on)");
-    bypassSwitch.setTooltip ("Plug-in on / bypass (host-synced, latency compensated)");
+    oct1Switch  .setTooltip ("+1 octave (hold, or click in LATCH mode) - works even while the plug-in is bypassed");
+    oct2Switch  .setTooltip ("+2 octaves (hold, or click in LATCH mode) - works even while the plug-in is bypassed");
+    magicSwitch .setTooltip ("Slams MAGIC to self-oscillation - works even with RAINBOW or the plug-in switched off");
+    bypassSwitch.setTooltip ("Plug-in on / bypass. The octave and MAGIC footswitches still work while bypassed, like momentary pedals");
     for (auto* c : std::initializer_list<juce::Component*> { &oct1Switch, &oct2Switch, &magicSwitch, &bypassSwitch, &inMeter, &outMeter })
         addAndMakeVisible (c);
 
@@ -308,7 +308,7 @@ void MainPanel::tick()
     const std::array<bool, 5> states { noiseOn, paramOn (ParamIDs::rbOn), paramOn (ParamIDs::swarmOn),
                                        paramOn (ParamIDs::fuzzOn), paramOn (ParamIDs::flowOn) };
 
-    setSectionDimmed ({ &snapToggle, &pitchKnob, &primaryKnob, &secondaryKnob, &toneKnob, &trackingKnob, &magicKnob, &magicSwitch }, ! states[1]);
+    setSectionDimmed ({ &snapToggle, &pitchKnob, &primaryKnob, &secondaryKnob, &toneKnob, &trackingKnob, &magicKnob }, ! states[1]);
     setSectionDimmed ({ &deepToggle, &swarmDepthKnob, &swarmRateKnob, &swarmMixKnob }, ! states[2]);
     setSectionDimmed ({ &postToggle, &fuzzKnob, &fuzzToneKnob, &fuzzGateKnob }, ! states[3]);
     setSectionDimmed ({ &hardToggle, &syncToggle, &flowAmountKnob, &flowSpeedKnob, &flowDivKnob }, ! states[4]);

@@ -191,13 +191,41 @@ namespace
         SwarmnessAudioProcessor p;
         p.getPresetManager().loadPreset ("Self Destruct");
         setParam (p, ParamIDs::bypass, 1.0f);
-        setParam (p, ParamIDs::oct1, 1.0f);
         const double sr = 48000.0;
         auto input = makeGuitar (sr, 48000);
         auto out = render (p, input, sr, 256);
         const int latency = p.getLatencySamples();
         const double db = nullDb (out, input, latency, 4096, input.getNumSamples());
         check (db < -120.0, juce::String::formatted ("bypass null %.1f dB (latency %d samples)", db, latency));
+    }
+
+    void testFootswitchesOverrideBypass()
+    {
+        std::printf ("\nFootswitches work like momentary pedals (even when bypassed / RAINBOW off)\n");
+        const double sr = 48000.0;
+        {
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            setParam (p, ParamIDs::rise, 0.0f);
+            setParam (p, ParamIDs::bypass, 1.0f);
+            setParam (p, ParamIDs::oct1, 1.0f);
+            auto input = makeSine (sr, 48000 * 2, 220.0);
+            auto out = render (p, input, sr, 256);
+            double purity = 0.0;
+            const double f = dominantFrequency (out, sr, 48000, purity);
+            check (std::abs (1200.0 * std::log2 (f / 440.0)) < 5.0,
+                   juce::String::formatted ("bypassed + hold +1 OCT: %.2f Hz (expected 440)", f));
+        }
+        {
+            SwarmnessAudioProcessor p;
+            resetToInit (p);                     // RAINBOW off
+            setParam (p, ParamIDs::bypass, 1.0f);
+            setParam (p, ParamIDs::magicHold, 1.0f);
+            auto input = makeGuitar (sr, 48000);
+            auto out = render (p, input, sr, 256);
+            const double db = nullDb (out, input, p.getLatencySamples(), 12000, input.getNumSamples());
+            check (db > -20.0, juce::String::formatted ("bypassed + RAINBOW off + hold MAGIC: effect audible (residual %.1f dB)", db));
+        }
     }
 
     void testDryAlignment()
@@ -456,6 +484,7 @@ int main (int argc, char** argv)
     std::printf ("Swarmness DSP tests\n");
     testPresetsStable();
     testBypassNull();
+    testFootswitchesOverrideBypass();
     testDryAlignment();
     testCleanPathTransparency();
     testNoiseOctaves();
