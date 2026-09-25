@@ -190,5 +190,6 @@ jobs:
           tag_name: ${{ inputs.release_tag || github.ref_name }}
           target_commitish: ${{ github.sha }}
           name: Swarmness ${{ inputs.release_tag || github.ref_name }}
+          prerelease: ${{ contains(inputs.release_tag || github.ref_name, '-') }}
           files: dist/*
           generate_release_notes: true
