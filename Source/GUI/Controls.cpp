@@ -275,10 +275,19 @@ void Footswitch::mouseUp (const juce::MouseEvent&)
     repaint();
 }
 
+void Footswitch::setLitExternally (bool shouldBeLit)
+{
+    if (shouldBeLit != externallyLit)
+    {
+        externallyLit = shouldBeLit;
+        repaint();
+    }
+}
+
 void Footswitch::paint (juce::Graphics& g)
 {
     auto r = getLocalBounds().toFloat();
-    const bool lit = inverse ? ! value : value;
+    const bool lit = (inverse ? ! value : value) || externallyLit;
 
     // LED
     const auto led = juce::Rectangle<float> (10.0f, 10.0f).withCentre ({ r.getCentreX(), r.getY() + 8.0f });
@@ -321,6 +330,42 @@ void Footswitch::paint (juce::Graphics& g)
     g.drawEllipse (inner, 1.0f);
     g.setColour (juce::Colours::white.withAlpha (0.35f));
     g.drawEllipse (inner.reduced (size * 0.07f), 0.8f);
+}
+
+//==============================================================================
+MiniSwitch::MiniSwitch (const juce::String& caption) : juce::ToggleButton (caption)
+{
+    setClickingTogglesState (true);
+    setMouseCursor (juce::MouseCursor::PointingHandCursor);
+}
+
+void MiniSwitch::paintButton (juce::Graphics& g, bool isMouseOver, bool)
+{
+    auto r = getLocalBounds().toFloat();
+    const bool on = getToggleState();
+
+    auto text = r.removeFromBottom (14.0f);
+    g.setFont (font (11.5f, true));
+    g.setColour (on ? Colours::accentBright : Colours::textDim);
+    g.drawText (getButtonText(), text, juce::Justification::centred, false);
+
+    // Hex nut + slot
+    const auto slot = r.withSizeKeepingCentre (14.0f, juce::jmin (30.0f, r.getHeight() - 2.0f));
+    const auto c = slot.getCentre();
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff55585f), c.x, slot.getY(),
+                                             juce::Colour (0xff1c1d21), c.x, slot.getBottom(), false));
+    g.fillRoundedRectangle (slot, 7.0f);
+    g.setColour (isMouseOver ? Colours::textFaint : juce::Colours::black.withAlpha (0.6f));
+    g.drawRoundedRectangle (slot, 7.0f, 1.0f);
+
+    // Lever: up = on
+    const float leverY = on ? slot.getY() + 7.0f : slot.getBottom() - 7.0f;
+    const auto knob = juce::Rectangle<float> (10.0f, 10.0f).withCentre ({ c.x, leverY });
+    g.setColour (juce::Colours::black.withAlpha (0.45f));
+    g.drawLine (c.x, c.y, c.x, leverY, 3.0f);
+    g.setGradientFill (juce::ColourGradient (on ? Colours::accentBright : juce::Colour (0xffd8dadf), knob.getX(), knob.getY(),
+                                             on ? Colours::accentDeep : juce::Colour (0xff6a6d74), knob.getRight(), knob.getBottom(), false));
+    g.fillEllipse (knob);
 }
 
 //==============================================================================
@@ -654,15 +699,16 @@ void InfoOverlay::paint (juce::Graphics& g)
     struct Item { const char* title; const char* body; };
     static const Item items[] =
     {
-        { "NOISE",    "Hold +1 OCT / +2 OCT (or latch them) for a violent Whammy-style shift. RISE = glide time in and out. "
-                      "PANIC = detuned dissonance, CHAOS = random pitch jumps, SPEED = all-pass feedback + ring-mod-like AM. DOWN flips to drop-tune." },
-        { "RAINBOW",  "Harmony voices: PITCH (-12..+12 st, SNAP for semitones), PRIMARY / SECONDARY (octave of primary) levels, TONE. "
-                      "TRACKING low = lag and tone clusters. MAGIC = regeneration up to self-oscillation; the MAGIC switch slams it to max." },
+        { "STING",    "Hold +1 OCT / +2 OCT (or latch them) for a violent octave. RISE = glide in and out. ANGER = detuned dissonance, "
+                      "FRENZY = random pitch jumps, BUZZ = all-pass feedback + ring-mod-like AM. DIVE = shift down (drop-tune)." },
+        { "HIVE",     "Harmony voices: PITCH (-12..+12 st, SNAP = semitones), DRONE = main voice, QUEEN = its octave, TONE. "
+                      "TRACKING low = lag and tone clusters. VENOM = regeneration up to self-oscillation." },
+        { "VENOM",    "The VENOM footswitch slams the regeneration to max - even with HIVE or the plug-in off. "
+                      "LINK mini switches next to the octaves make VENOM engage +1 / +2 OCT too." },
         { "SWARM",    "Stereo ensemble chorus. DEEP = 8 voices with feedback." },
-        { "FUZZ",     "Two-stage fuzz. GATE starves it into sputtering velcro. POST places it after the pitch effects (off = before)." },
-        { "FLOW",     "Rhythmic gate: HARD = stutter, off = tremolo. SYNC locks to the host tempo (DIV)." },
-        { "SWITCHES", "Header selector: MOMENTARY (active while held) or LATCH (click on / click off). All switches can be MIDI-learned in your DAW." },
-        { "TIPS",     "Double-click resets a control, Shift = fine adjustment, drag the corner to resize." },
+        { "SMOKE",    "Two-stage fuzz. GATE starves it into sputtering velcro. POST places it after the pitch effects (off = before)." },
+        { "WINGS",    "Rhythmic gate: HARD = stutter, off = tremolo. SYNC locks to the host tempo (DIV)." },
+        { "SWITCHES", "MOMENTARY = active while held, LATCH = click on / off. Footswitches work even while bypassed. MIDI-learn them in your DAW." },
     };
 
     for (const auto& item : items)

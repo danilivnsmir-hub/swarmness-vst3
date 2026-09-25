@@ -104,14 +104,26 @@ public:
     void mouseDown (const juce::MouseEvent&) override;
     void mouseUp (const juce::MouseEvent&) override;
 
+    /** Lights the LED although the parameter is off (e.g. engaged through a LINK switch). */
+    void setLitExternally (bool shouldBeLit);
+
 private:
     juce::String caption;
     juce::Colour ledColour;
-    bool inverse = false, value = false, pressed = false, holding = false;
+    bool inverse = false, value = false, pressed = false, holding = false, externallyLit = false;
     std::function<bool()> momentary;
     juce::ParameterAttachment attachment;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Footswitch)
+};
+
+//==============================================================================
+/** Miniature toggle switch (bat lever) with a tiny caption, e.g. the LINK switches. */
+class MiniSwitch : public juce::ToggleButton
+{
+public:
+    explicit MiniSwitch (const juce::String& caption);
+    void paintButton (juce::Graphics&, bool isMouseOver, bool isDown) override;
 };
 
 //==============================================================================

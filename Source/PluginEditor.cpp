@@ -20,7 +20,7 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
       switchModeSelector (param (state, ParamIDs::switchMode), { "MOMENTARY", "LATCH" }),
       oct1Switch   (param (state, ParamIDs::oct1),      "+1 OCT", Colours::accent,  false, [this] { return footswitchesMomentary(); }),
       oct2Switch   (param (state, ParamIDs::oct2),      "+2 OCT", Colours::accent,  false, [this] { return footswitchesMomentary(); }),
-      magicSwitch  (param (state, ParamIDs::magicHold), "MAGIC",  juce::Colour (0xffb46bff), false, [this] { return footswitchesMomentary(); }),
+      magicSwitch  (param (state, ParamIDs::magicHold), "VENOM",  juce::Colour (0xffb46bff), false, [this] { return footswitchesMomentary(); }),
       bypassSwitch (param (state, ParamIDs::bypass),    "ON",     Colours::ledRed,  true,  nullptr)
 {
     using namespace ParamIDs;
@@ -41,23 +41,23 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     infoButton.onClick = [this] { infoOverlay.setVisible (true); infoOverlay.toFront (false); };
 
     // NOISE
-    attachButton (downToggle, noiseDown, "Footswitches shift DOWN (drop-tune) instead of up");
+    attachButton (downToggle, noiseDown, "DIVE: the octave footswitches shift DOWN (drop-tune) instead of up");
     riseKnob .attach (state, rise,  "Time to glide into the octave (and back when released)");
-    panicKnob.attach (state, panic, "Detunes the shifted signal against a second voice: dissonance, beating, sour clusters");
-    chaosKnob.attach (state, chaos, "Random pitch movement away from the octave - wider and faster as you turn it up");
-    speedKnob.attach (state, speed, "All-pass feedback + amplitude modulation: slow phasing -> metallic ring-mod shrieks");
+    panicKnob.attach (state, panic, "ANGER: detunes the shifted signal against a second voice - dissonance, beating, sour clusters");
+    chaosKnob.attach (state, chaos, "FRENZY: random pitch jumps around the octave - wider and faster as you turn it up");
+    speedKnob.attach (state, speed, "BUZZ: all-pass feedback + amplitude modulation - slow phasing up to metallic ring-mod shrieks");
     for (auto* c : std::initializer_list<juce::Component*> { &riseKnob, &panicKnob, &chaosKnob, &speedKnob, &pitchScope })
         addAndMakeVisible (c);
 
     // RAINBOW
-    attachButton (rainbowPower, rbOn, "Rainbow harmony section on/off");
+    attachButton (rainbowPower, rbOn, "HIVE harmony section on/off (the VENOM footswitch engages it by itself)");
     attachButton (snapToggle, rbSnap, "Snap PITCH to semitones (off = atonal in-between intervals)");
     pitchKnob    .attach (state, rbPitch,     "Primary voice interval, -12..+12 semitones");
-    primaryKnob  .attach (state, rbPrimary,   "Primary voice level");
-    secondaryKnob.attach (state, rbSecondary, "Secondary voice: one octave from the primary (above for up-shifts, below for down)");
+    primaryKnob  .attach (state, rbPrimary,   "DRONE: level of the main harmony voice");
+    secondaryKnob.attach (state, rbSecondary, "QUEEN: a voice one octave from the DRONE (above for up-shifts, below for down)");
     toneKnob     .attach (state, rbTone,      "Brightness of the voices and of the regeneration loop");
     trackingKnob .attach (state, rbTracking,  "High = tight harmonies. Low = lag, long repeating grains and tone clusters");
-    magicKnob    .attach (state, rbMagic,     "Regeneration: trails, resonance, cascading pitch spirals and self-oscillation");
+    magicKnob    .attach (state, rbMagic,     "VENOM: regeneration - trails, resonance, cascading pitch spirals and self-oscillation");
     for (auto* c : std::initializer_list<juce::Component*> { &pitchKnob, &primaryKnob, &secondaryKnob, &toneKnob, &trackingKnob, &magicKnob })
         addAndMakeVisible (c);
 
@@ -71,7 +71,7 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
         addAndMakeVisible (c);
 
     // FUZZ
-    attachButton (fuzzPower, fuzzOn,   "Fuzz on/off");
+    attachButton (fuzzPower, fuzzOn,   "SMOKE fuzz on/off");
     attachButton (postToggle, fuzzPost, "POST: fuzz after the pitch effects. Off: fuzz before them (glitchier tracking)");
     fuzzKnob    .attach (state, fuzz,     "Fuzz gain");
     fuzzToneKnob.attach (state, fuzzTone, "Dark <-> scooped <-> bright");
@@ -80,7 +80,7 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
         addAndMakeVisible (c);
 
     // FLOW
-    attachButton (flowPower,  flowOn,   "Flow gate on/off");
+    attachButton (flowPower,  flowOn,   "WINGS gate on/off");
     attachButton (hardToggle, flowHard, "Hard stutter gate (off = smooth tremolo)");
     attachButton (syncToggle, flowSync, "Sync to host tempo");
     flowAmountKnob.attach (state, flowAmount, "Gate depth");
@@ -99,8 +99,10 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     // Footswitches
     oct1Switch  .setTooltip ("+1 octave (hold, or click in LATCH mode) - works even while the plug-in is bypassed");
     oct2Switch  .setTooltip ("+2 octaves (hold, or click in LATCH mode) - works even while the plug-in is bypassed");
-    magicSwitch .setTooltip ("Slams MAGIC to self-oscillation - works even with RAINBOW or the plug-in switched off");
-    bypassSwitch.setTooltip ("Plug-in on / bypass. The octave and MAGIC footswitches still work while bypassed, like momentary pedals");
+    magicSwitch .setTooltip ("VENOM: slams the regeneration into self-oscillation - works even with HIVE or the plug-in switched off. LINK switches bring the octaves along");
+    bypassSwitch.setTooltip ("Plug-in on / bypass. The octave and VENOM footswitches still work while bypassed, like momentary pedals");
+    attachButton (link1Switch, linkOct1, "LINK: pressing VENOM also engages +1 OCT");
+    attachButton (link2Switch, linkOct2, "LINK: pressing VENOM also engages +2 OCT");
     for (auto* c : std::initializer_list<juce::Component*> { &oct1Switch, &oct2Switch, &magicSwitch, &bypassSwitch, &inMeter, &outMeter })
         addAndMakeVisible (c);
 
@@ -204,17 +206,17 @@ void MainPanel::resized()
 
     // FLOW
     flowPower.setBounds (powerFor (flowArea));
-    syncToggle.setBounds (pillFor (flowArea, 0).withWidth (56));
-    hardToggle.setBounds (pillFor (flowArea, 1).withWidth (56).translated (6, 0));
+    syncToggle.setBounds ((int) flowArea.getRight() - 44 - 54,  (int) flowArea.getY() + 9, 54, 24);
+    hardToggle.setBounds ((int) flowArea.getRight() - 44 - 112, (int) flowArea.getY() + 9, 54, 24);
     threeKnobs (flowArea, { &flowAmountKnob, &flowSpeedKnob });
     flowDivKnob.setBounds (flowSpeedKnob.getBounds());
 
     // OUTPUT
     threeKnobs (outputArea, { &mixKnob, &volumeKnob });
 
-    // Footer: footswitches centred, meters at the sides
+    // Footer: footswitches centred (LINK mini switches beside the octaves), meters at the sides
     {
-        const int fy = 552, fw = 92, fh = 118, spacing = 118;
+        const int fy = 552, fw = 92, fh = 118, spacing = 136;
         const int total = spacing * 3 + fw;
         int x = (baseWidth - total) / 2;
         for (auto* f : { &oct1Switch, &oct2Switch, &magicSwitch, &bypassSwitch })
@@ -222,8 +224,10 @@ void MainPanel::resized()
             f->setBounds (x, fy, fw, fh);
             x += spacing;
         }
-        inMeter .setBounds (16, 600, 230, 26);
-        outMeter.setBounds (baseWidth - 16 - 230, 600, 230, 26);
+        link1Switch.setBounds (oct1Switch.getRight() + 2, fy + 34, 38, 50);
+        link2Switch.setBounds (oct2Switch.getRight() + 2, fy + 34, 38, 50);
+        inMeter .setBounds (16, 600, 200, 26);
+        outMeter.setBounds (baseWidth - 16 - 200, 600, 200, 26);
     }
 
     infoOverlay.setBounds (getLocalBounds());
@@ -262,7 +266,7 @@ void MainPanel::paintBackdrop (juce::Graphics& g)
 
             g.setFont (font (13.0f, true));
             g.setColour (Colours::textDim);
-            g.drawText ("NOISE / RAINBOW / SWARM", juce::Rectangle<float> (24.0f + lw, 22.0f, 190.0f, 20.0f),
+            g.drawText ("STING / HIVE / SWARM", juce::Rectangle<float> (24.0f + lw, 22.0f, 190.0f, 20.0f),
                         juce::Justification::centredLeft, false);
         }
     }
@@ -272,16 +276,16 @@ void MainPanel::paintBackdrop (juce::Graphics& g)
 
     auto titleRow = [] (juce::Rectangle<float> a) { return a.reduced (16.0f, 0.0f).withTrimmedTop (8.0f).withHeight (26.0f); };
 
-    drawSectionTitle (g, titleRow (noiseArea),   "NOISE",   lastSectionStates[0]);
-    drawSectionTitle (g, titleRow (rainbowArea), "RAINBOW", lastSectionStates[1]);
+    drawSectionTitle (g, titleRow (noiseArea),   "STING",   lastSectionStates[0]);
+    drawSectionTitle (g, titleRow (rainbowArea), "HIVE",    lastSectionStates[1]);
     drawSectionTitle (g, titleRow (swarmArea),   "SWARM",   lastSectionStates[2]);
-    drawSectionTitle (g, titleRow (fuzzArea),    "FUZZ",    lastSectionStates[3]);
-    drawSectionTitle (g, titleRow (flowArea),    "FLOW",    lastSectionStates[4]);
+    drawSectionTitle (g, titleRow (fuzzArea),    "SMOKE",   lastSectionStates[3]);
+    drawSectionTitle (g, titleRow (flowArea),    "WINGS",   lastSectionStates[4]);
     drawSectionTitle (g, titleRow (outputArea),  "OUTPUT",  true);
 
     g.setFont (font (12.5f, true));
     g.setColour (Colours::textFaint);
-    g.drawText ("hold the footswitches below", titleRow (noiseArea).withTrimmedLeft (86.0f),
+    g.drawText ("hold the footswitches below", titleRow (noiseArea).withTrimmedLeft (80.0f),
                 juce::Justification::centredLeft, false);
 
     g.setFont (font (13.0f));
@@ -297,6 +301,11 @@ void MainPanel::tick()
     outMeter.update (meters.output[0].exchange (0.0f), meters.output[1].exchange (0.0f));
 
     const bool noiseOn = meters.noiseEngaged.load();
+
+    // Octave LEDs also light when the VENOM footswitch drags them in through LINK.
+    const bool venom = paramOn (ParamIDs::magicHold);
+    oct1Switch.setLitExternally (venom && paramOn (ParamIDs::linkOct1));
+    oct2Switch.setLitExternally (venom && paramOn (ParamIDs::linkOct2));
     pitchScope.push (meters.pitchSemitones.load(), noiseOn);
 
     presetBar.refresh();

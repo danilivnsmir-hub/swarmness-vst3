@@ -5,11 +5,12 @@
 /**
  * Central definition of every automatable parameter.
  *
- * Signal flow:  [FUZZ pre] -> NOISE -> RAINBOW -> SWARM -> [FUZZ post] -> FLOW -> MIX / OUTPUT
+ * Signal flow:  [SMOKE pre] -> STING -> HIVE -> SWARM -> [SMOKE post] -> MIX -> WINGS -> OUTPUT
+ * (internal IDs keep the original DSP names: noise = STING, rainbow/rb = HIVE, fuzz = SMOKE, flow = WINGS)
  */
 namespace ParamIDs
 {
-    // NOISE (Tallon Electric "The Noise" inspired): momentary octave footswitches + mangling
+    // STING: momentary octave footswitches + mangling (ANGER = panic, FRENZY = chaos, BUZZ = speed, DIVE = down)
     inline constexpr const char* oct1        = "oct1";         // footswitch: +1 octave
     inline constexpr const char* oct2        = "oct2";         // footswitch: +2 octaves
     inline constexpr const char* noiseDown   = "noiseDown";    // footswitches shift down instead of up
@@ -18,7 +19,7 @@ namespace ParamIDs
     inline constexpr const char* chaos       = "chaos";
     inline constexpr const char* speed       = "speed";
 
-    // RAINBOW (EarthQuaker "Rainbow Machine" inspired): harmony voices with regeneration
+    // HIVE: harmony voices with regeneration (DRONE = primary, QUEEN = secondary, VENOM = magic)
     inline constexpr const char* rbOn        = "rbOn";
     inline constexpr const char* rbPitch     = "rbPitch";
     inline constexpr const char* rbSnap      = "rbSnap";
@@ -28,6 +29,8 @@ namespace ParamIDs
     inline constexpr const char* rbTracking  = "rbTracking";
     inline constexpr const char* rbMagic     = "rbMagic";
     inline constexpr const char* magicHold   = "magicHold";    // footswitch: magic to self-oscillation
+    inline constexpr const char* linkOct1    = "linkOct1";     // mini switch: MAGIC footswitch also engages +1 OCT
+    inline constexpr const char* linkOct2    = "linkOct2";     // mini switch: MAGIC footswitch also engages +2 OCT
 
     // SWARM (chorus)
     inline constexpr const char* swarmOn     = "swarmOn";
@@ -36,14 +39,14 @@ namespace ParamIDs
     inline constexpr const char* swarmDepth  = "swarmDepth";
     inline constexpr const char* swarmMix    = "swarmMix";
 
-    // FUZZ
+    // SMOKE (fuzz)
     inline constexpr const char* fuzzOn      = "fuzzOn";
     inline constexpr const char* fuzzPost    = "fuzzPost";     // false = before the pitch stages
     inline constexpr const char* fuzz        = "fuzz";
     inline constexpr const char* fuzzTone    = "fuzzTone";
     inline constexpr const char* fuzzGate    = "fuzzGate";
 
-    // FLOW (rhythmic gate)
+    // WINGS (rhythmic gate)
     inline constexpr const char* flowOn      = "flowOn";
     inline constexpr const char* flowHard    = "flowHard";
     inline constexpr const char* flowSync    = "flowSync";

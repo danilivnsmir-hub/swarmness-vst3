@@ -34,6 +34,7 @@ SwarmnessAudioProcessor::SwarmnessAudioProcessor()
     p.rbOn = get (id::rbOn);             p.rbPitch = get (id::rbPitch);         p.rbSnap = get (id::rbSnap);
     p.rbPrimary = get (id::rbPrimary);   p.rbSecondary = get (id::rbSecondary); p.rbTone = get (id::rbTone);
     p.rbTracking = get (id::rbTracking); p.rbMagic = get (id::rbMagic);         p.magicHold = get (id::magicHold);
+    p.linkOct1 = get (id::linkOct1);     p.linkOct2 = get (id::linkOct2);
     p.swarmOn = get (id::swarmOn);       p.swarmDeep = get (id::swarmDeep);     p.swarmRate = get (id::swarmRate);
     p.swarmDepth = get (id::swarmDepth); p.swarmMix = get (id::swarmMix);
     p.fuzzOn = get (id::fuzzOn);         p.fuzzPost = get (id::fuzzPost);       p.fuzz = get (id::fuzz);
@@ -148,7 +149,10 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     // Footswitches behave like real momentary pedals: holding one always engages its effect,
     // even while the plug-in is bypassed (ON off) or the RAINBOW section is switched off.
     const bool magicHeld = on (p.magicHold);
-    const bool anySwitchHeld = on (p.oct1) || on (p.oct2) || magicHeld;
+    // LINK mini switches: the VENOM (magic) footswitch can drag the octaves in with it.
+    const bool oct1Held = on (p.oct1) || (magicHeld && on (p.linkOct1));
+    const bool oct2Held = on (p.oct2) || (magicHeld && on (p.linkOct2));
+    const bool anySwitchHeld = oct1Held || oct2Held || magicHeld;
 
     const bool fuzzOn = on (p.fuzzOn), fuzzIsPost = on (p.fuzzPost);
     fuzzPre.setParams (fuzzOn && ! fuzzIsPost, pct (p.fuzz), pct (p.fuzzTone), pct (p.fuzzGate));
@@ -157,7 +161,7 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     // ---- NOISE (footswitch octaves)
     {
         const float dir = on (p.noiseDown) ? -1.0f : 1.0f;
-        const float interval = on (p.oct2) ? 24.0f : (on (p.oct1) ? 12.0f : 0.0f);
+        const float interval = oct2Held ? 24.0f : (oct1Held ? 12.0f : 0.0f);
         noise.setParams (p.rise->load(), pct (p.panic), pct (p.chaos), pct (p.speed));
         noise.setInterval (dir * interval);
         noise.process (audio, numChannels, numSamples);

@@ -189,7 +189,7 @@ namespace
     {
         std::printf ("\nBypass is sample-accurate and latency compensated\n");
         SwarmnessAudioProcessor p;
-        p.getPresetManager().loadPreset ("Self Destruct");
+        p.getPresetManager().loadPreset ("Hive Collapse");
         setParam (p, ParamIDs::bypass, 1.0f);
         const double sr = 48000.0;
         auto input = makeGuitar (sr, 48000);
@@ -228,11 +228,28 @@ namespace
         }
     }
 
+    void testVenomLink()
+    {
+        std::printf ("\nLINK: the VENOM footswitch drags the linked octave in\n");
+        SwarmnessAudioProcessor p;
+        resetToInit (p);
+        setParam (p, ParamIDs::rise, 0.0f);
+        setParam (p, ParamIDs::rbPrimary, 0.0f);     // hear only the STING octave
+        setParam (p, ParamIDs::linkOct1, 1.0f);
+        setParam (p, ParamIDs::magicHold, 1.0f);
+        const double sr = 48000.0;
+        auto input = makeSine (sr, 48000 * 2, 220.0);
+        auto out = render (p, input, sr, 256);
+        double purity = 0.0;
+        const double f = dominantFrequency (out, sr, 48000, purity);
+        check (std::abs (1200.0 * std::log2 (f / 440.0)) < 5.0, juce::String::formatted ("hold VENOM with LINK +1: %.2f Hz (expected 440)", f));
+    }
+
     void testDryAlignment()
     {
         std::printf ("\nMix 0%% returns the dry signal aligned with the reported latency\n");
         SwarmnessAudioProcessor p;
-        p.getPresetManager().loadPreset ("Whale Song");
+        p.getPresetManager().loadPreset ("Drowning Hive");
         setParam (p, ParamIDs::mix, 0.0f);
         const double sr = 44100.0;
         auto input = makeGuitar (sr, 44100);
@@ -326,7 +343,7 @@ namespace
     {
         std::printf ("\nMAGIC at maximum + switch held: self-oscillates but stays bounded\n");
         SwarmnessAudioProcessor p;
-        p.getPresetManager().loadPreset ("Self Destruct");
+        p.getPresetManager().loadPreset ("Hive Collapse");
         setParam (p, ParamIDs::fuzzOn, 0.0f);
         const double sr = 48000.0;
         auto input = makeGuitar (sr, 48000 * 6);
@@ -361,7 +378,7 @@ namespace
     {
         std::printf ("\nState save / restore\n");
         SwarmnessAudioProcessor a;
-        a.getPresetManager().loadPreset ("Pixie Trails");
+        a.getPresetManager().loadPreset ("Honey Trails");
         setParam (a, ParamIDs::fuzz, 42.0f);
         setParam (a, ParamIDs::oct1, 1.0f);   // momentary switch left down
         juce::MemoryBlock mb;
@@ -373,7 +390,7 @@ namespace
         check (std::abs (value (ParamIDs::fuzz) - 42.0f) < 0.05f && std::abs (value (ParamIDs::rbMagic) - 45.0f) < 0.05f,
                "parameters restored");
         check (value (ParamIDs::oct1) < 0.5f, "momentary footswitch not restored as held");
-        check (b.getPresetManager().getCurrentPresetName() == "Pixie Trails", "preset name restored");
+        check (b.getPresetManager().getCurrentPresetName() == "Honey Trails", "preset name restored");
     }
 
     void testPresetDirtyTracking()
@@ -381,11 +398,11 @@ namespace
         std::printf ("\nPreset dirty tracking\n");
         SwarmnessAudioProcessor p;
         auto& pm = p.getPresetManager();
-        pm.loadPreset ("Chaos Engine");
+        pm.loadPreset ("Frenzy");
         check (! pm.isDirty(), "clean after load");
         setParam (p, ParamIDs::mix, 12.0f);
         check (pm.isDirty(), "dirty after edit");
-        pm.loadPreset ("Chaos Engine");
+        pm.loadPreset ("Frenzy");
         setParam (p, ParamIDs::oct2, 1.0f);
         setParam (p, ParamIDs::bypass, 1.0f);
         check (! pm.isDirty(), "footswitches / bypass do not affect preset state");
@@ -395,7 +412,7 @@ namespace
     {
         std::printf ("\nPerformance (48 kHz, 128-sample blocks)\n");
         SwarmnessAudioProcessor p;
-        p.getPresetManager().loadPreset ("Self Destruct");
+        p.getPresetManager().loadPreset ("Hive Collapse");
         setParam (p, ParamIDs::panic, 80.0f);
         setParam (p, ParamIDs::chaos, 50.0f);
         setParam (p, ParamIDs::speed, 50.0f);
@@ -485,6 +502,7 @@ int main (int argc, char** argv)
     testPresetsStable();
     testBypassNull();
     testFootswitchesOverrideBypass();
+    testVenomLink();
     testDryAlignment();
     testCleanPathTransparency();
     testNoiseOctaves();

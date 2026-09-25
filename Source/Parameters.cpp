@@ -53,36 +53,38 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     Layout layout;
 
     // ------------------------------------------------------------------ NOISE
-    auto noise = std::make_unique<Group> ("noise", "Noise", "|");
+    auto noise = std::make_unique<Group> ("noise", "Sting", "|");
     noise->addChild (toggle (oct1, "+1 Octave", false));
     noise->addChild (toggle (oct2, "+2 Octaves", false));
-    noise->addChild (toggle (noiseDown, "Noise Down", false));
+    noise->addChild (toggle (noiseDown, "Sting Dive", false));
     noise->addChild (std::make_unique<juce::AudioParameterFloat> (
         pid (rise), "Rise", skewedRange (0.0f, 2000.0f, 250.0f, 1.0f), 30.0f,
         Attr().withLabel ("ms").withStringFromValueFunction ([] (float v, int)
         {
             return v >= 1000.0f ? juce::String (v / 1000.0f, 2) + " s" : juce::String (juce::roundToInt (v)) + " ms";
         })));
-    noise->addChild (percent (panic, "Panic", 0.0f));
-    noise->addChild (percent (chaos, "Chaos", 0.0f));
-    noise->addChild (percent (speed, "Speed", 0.0f));
+    noise->addChild (percent (panic, "Anger", 0.0f));
+    noise->addChild (percent (chaos, "Frenzy", 0.0f));
+    noise->addChild (percent (speed, "Buzz", 0.0f));
 
     // ---------------------------------------------------------------- RAINBOW
-    auto rainbow = std::make_unique<Group> ("rainbow", "Rainbow", "|");
-    rainbow->addChild (toggle (rbOn, "Rainbow On", false));
+    auto rainbow = std::make_unique<Group> ("rainbow", "Hive", "|");
+    rainbow->addChild (toggle (rbOn, "Hive On", false));
     rainbow->addChild (std::make_unique<juce::AudioParameterFloat> (
-        pid (rbPitch), "Rainbow Pitch", juce::NormalisableRange<float> (-12.0f, 12.0f, 0.01f), 7.0f,
+        pid (rbPitch), "Hive Pitch", juce::NormalisableRange<float> (-12.0f, 12.0f, 0.01f), 7.0f,
         Attr().withLabel ("st").withStringFromValueFunction ([] (float v, int)
         {
             return (v > 0.005f ? "+" : "") + juce::String (v, 2) + " st";
         })));
-    rainbow->addChild (toggle (rbSnap, "Rainbow Snap", true));
-    rainbow->addChild (percent (rbPrimary, "Primary", 60.0f));
-    rainbow->addChild (percent (rbSecondary, "Secondary", 0.0f));
-    rainbow->addChild (percent (rbTone, "Rainbow Tone", 60.0f));
-    rainbow->addChild (percent (rbTracking, "Tracking", 80.0f));
-    rainbow->addChild (percent (rbMagic, "Magic", 0.0f));
-    rainbow->addChild (toggle (magicHold, "Magic Switch", false));
+    rainbow->addChild (toggle (rbSnap, "Hive Snap", true));
+    rainbow->addChild (percent (rbPrimary, "Drone", 60.0f));
+    rainbow->addChild (percent (rbSecondary, "Queen", 0.0f));
+    rainbow->addChild (percent (rbTone, "Hive Tone", 60.0f));
+    rainbow->addChild (percent (rbTracking, "Hive Tracking", 80.0f));
+    rainbow->addChild (percent (rbMagic, "Venom", 0.0f));
+    rainbow->addChild (toggle (magicHold, "Venom Switch", false));
+    rainbow->addChild (toggle (linkOct1, "Venom Links +1 Oct", false));
+    rainbow->addChild (toggle (linkOct2, "Venom Links +2 Oct", false));
 
     // ------------------------------------------------------------------ SWARM
     auto swarm = std::make_unique<Group> ("swarm", "Swarm", "|");
@@ -94,22 +96,22 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     swarm->addChild (percent (swarmMix, "Swarm Mix", 50.0f));
 
     // ------------------------------------------------------------------- FUZZ
-    auto fz = std::make_unique<Group> ("fuzz", "Fuzz", "|");
-    fz->addChild (toggle (fuzzOn, "Fuzz On", false));
-    fz->addChild (toggle (fuzzPost, "Fuzz Post", false));
-    fz->addChild (percent (fuzz, "Fuzz", 60.0f));
-    fz->addChild (percent (fuzzTone, "Fuzz Tone", 50.0f));
-    fz->addChild (percent (fuzzGate, "Fuzz Gate", 0.0f));
+    auto fz = std::make_unique<Group> ("fuzz", "Smoke", "|");
+    fz->addChild (toggle (fuzzOn, "Smoke On", false));
+    fz->addChild (toggle (fuzzPost, "Smoke Post", false));
+    fz->addChild (percent (fuzz, "Smoke Fuzz", 60.0f));
+    fz->addChild (percent (fuzzTone, "Smoke Tone", 50.0f));
+    fz->addChild (percent (fuzzGate, "Smoke Gate", 0.0f));
 
     // ------------------------------------------------------------------- FLOW
-    auto flow = std::make_unique<Group> ("flow", "Flow", "|");
-    flow->addChild (toggle (flowOn, "Flow On", false));
-    flow->addChild (toggle (flowHard, "Flow Hard", true));
-    flow->addChild (toggle (flowSync, "Flow Sync", false));
-    flow->addChild (percent (flowAmount, "Flow Amount", 100.0f));
-    flow->addChild (std::make_unique<juce::AudioParameterFloat> (pid (flowSpeed), "Flow Speed",
+    auto flow = std::make_unique<Group> ("flow", "Wings", "|");
+    flow->addChild (toggle (flowOn, "Wings On", false));
+    flow->addChild (toggle (flowHard, "Wings Hard", true));
+    flow->addChild (toggle (flowSync, "Wings Sync", false));
+    flow->addChild (percent (flowAmount, "Wings Amount", 100.0f));
+    flow->addChild (std::make_unique<juce::AudioParameterFloat> (pid (flowSpeed), "Wings Speed",
                                                                  skewedRange (0.5f, 30.0f, 5.0f, 0.01f), 8.0f, hzAttr()));
-    flow->addChild (std::make_unique<juce::AudioParameterChoice> (pid (flowDiv), "Flow Division", ParamChoices::divisions, 4));
+    flow->addChild (std::make_unique<juce::AudioParameterChoice> (pid (flowDiv), "Wings Division", ParamChoices::divisions, 4));
 
     // ----------------------------------------------------------------- OUTPUT
     auto out = std::make_unique<Group> ("output", "Output", "|");

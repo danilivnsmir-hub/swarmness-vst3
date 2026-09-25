@@ -45,28 +45,28 @@ private:
     SegmentedChoice switchModeSelector;
     juce::TextButton infoButton { "?" };
 
-    // NOISE
-    PillToggle downToggle { "DOWN" };
-    Knob riseKnob { "RISE" }, panicKnob { "PANIC" }, chaosKnob { "CHAOS" }, speedKnob { "SPEED" };
+    // STING (internally "noise")
+    PillToggle downToggle { "DIVE" };
+    Knob riseKnob { "RISE" }, panicKnob { "ANGER" }, chaosKnob { "FRENZY" }, speedKnob { "BUZZ" };
     PitchScope pitchScope;
 
-    // RAINBOW
+    // HIVE (internally "rainbow")
     PowerButton rainbowPower;
     PillToggle snapToggle { "SNAP" };
-    Knob pitchKnob { "PITCH", true }, primaryKnob { "PRIMARY" }, secondaryKnob { "SECONDARY" };
-    Knob toneKnob { "TONE" }, trackingKnob { "TRACKING" }, magicKnob { "MAGIC" };
+    Knob pitchKnob { "PITCH", true }, primaryKnob { "DRONE" }, secondaryKnob { "QUEEN" };
+    Knob toneKnob { "TONE" }, trackingKnob { "TRACKING" }, magicKnob { "VENOM" };
 
     // SWARM
     PowerButton swarmPower;
     PillToggle deepToggle { "DEEP" };
     Knob swarmDepthKnob { "DEPTH" }, swarmRateKnob { "RATE" }, swarmMixKnob { "MIX" };
 
-    // FUZZ
+    // SMOKE (fuzz)
     PowerButton fuzzPower;
     PillToggle postToggle { "POST" };
     Knob fuzzKnob { "FUZZ" }, fuzzToneKnob { "TONE" }, fuzzGateKnob { "GATE" };
 
-    // FLOW
+    // WINGS (gate)
     PowerButton flowPower;
     PillToggle hardToggle { "HARD" }, syncToggle { "SYNC" };
     Knob flowAmountKnob { "AMOUNT" }, flowSpeedKnob { "SPEED" }, flowDivKnob { "DIV" };
@@ -76,6 +76,7 @@ private:
 
     // Footswitches
     Footswitch oct1Switch, oct2Switch, magicSwitch, bypassSwitch;
+    MiniSwitch link1Switch { "LINK" }, link2Switch { "LINK" };
     LevelMeter inMeter { "IN" }, outMeter { "OUT" };
 
     InfoOverlay infoOverlay;

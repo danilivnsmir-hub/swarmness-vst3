@@ -29,72 +29,74 @@ void PresetManager::initialiseFactoryPresets()
 {
     using namespace ParamIDs;
 
-    // Presets store the sound; the footswitches (+1 / +2 OCT, MAGIC) are played live.
-    // Flow division indices: 3 = 1/8, 4 = 1/16, 5 = 1/32, 7 = 1/8T
-    const juce::String basics ("Basics"), noiseCat ("Noise - hold +1/+2 OCT"), rainbowCat ("Rainbow"),
-                       texture ("Fuzz, Swarm & Flow"), combo ("Full Chaos");
+    // Presets store the sound; the footswitches (+1 / +2 OCT, VENOM) are played live.
+    // Internal IDs: noise* = STING, rb* = HIVE, fuzz* = SMOKE, flow* = WINGS, panic = ANGER,
+    // chaos = FRENZY, speed = BUZZ, noiseDown = DIVE, rbPrimary = DRONE, rbSecondary = QUEEN, rbMagic = VENOM.
+    // Wings division indices: 3 = 1/8, 4 = 1/16, 5 = 1/32
+    const juce::String basics ("Basics"), stingCat ("Sting - hold +1/+2 OCT"), hiveCat ("Hive"),
+                       texture ("Smoke, Swarm & Wings"), attack ("Swarm Attack");
 
     factoryPresets = {
         // ---------------------------------------------------------------- basics
         { "Init", basics, "Everything off: the plug-in is transparent. Start here.", {} },
-        { "Whammy Classic", basics, "Clean octave shifter. Hold +1 OCT / +2 OCT for a pure Whammy-style jump.",
+        { "Clean Sting", basics, "Pure octave shifter. Hold +1 OCT / +2 OCT for a clean, instant jump.",
           { { rise, 0 } } },
         { "Slow Rise", basics, "Hold a footswitch and the pitch sweeps up over ~1 s; release and it sweeps back down.",
           { { rise, 950 } } },
 
-        // ----------------------------------------------------------------- NOISE
-        { "The Noise", noiseCat, "The all-rounder: a bit of every NOISE knob plus pre-fuzz. Hold +2 OCT for the full shriek.",
+        // ----------------------------------------------------------------- STING
+        { "Killer Bee", stingCat, "The all-rounder: a bit of ANGER, FRENZY and BUZZ plus SMOKE in front. Hold +2 OCT for the full shriek.",
           { { rise, 30 }, { panic, 45 }, { chaos, 30 }, { speed, 25 }, { fuzzOn, 1 }, { fuzz, 55 }, { fuzzTone, 55 } } },
-        { "Panic Attack", noiseCat, "PANIC only: the octave is torn into two detuned voices - sour, beating dissonance.",
+        { "Angry Hive", stingCat, "ANGER only: the octave is torn into two detuned voices - sour, beating dissonance.",
           { { rise, 15 }, { panic, 85 } } },
-        { "Chaos Engine", noiseCat, "CHAOS only: the pitch jumps randomly around the octave, faster and wider than your picking.",
+        { "Frenzy", stingCat, "FRENZY only: the pitch jumps randomly around the octave, faster than your picking.",
           { { rise, 10 }, { chaos, 75 } } },
-        { "Seasick", noiseCat, "Low SPEED: slow all-pass phasing and wobble on a slightly detuned octave.",
+        { "Lazy Buzz", stingCat, "Low BUZZ: slow phasing and wobble on a slightly angry octave.",
           { { rise, 120 }, { speed, 22 }, { panic, 25 } } },
-        { "Ring Mod Hell", noiseCat, "High SPEED: all-pass feedback and AM turn the octave into metallic ring-mod noise.",
+        { "Hornet Buzz", stingCat, "High BUZZ: all-pass feedback and AM turn the octave into metallic ring-mod noise.",
           { { rise, 0 }, { speed, 92 } } },
-        { "Drop Tune Dive", noiseCat, "DOWN mode with a long RISE: hold for a sub-octave dive, release to climb back. Fuzz after.",
+        { "Dive Bomb", stingCat, "DIVE with a long RISE: hold for a sub-octave dive, release to climb back. SMOKE after.",
           { { noiseDown, 1 }, { rise, 450 }, { panic, 15 }, { fuzzOn, 1 }, { fuzzPost, 1 }, { fuzz, 55 }, { fuzzTone, 35 } } },
 
-        // --------------------------------------------------------------- RAINBOW
-        { "Harmony Fifth", rainbowCat, "Tight, clean harmony: a fifth above plus its octave. No regeneration.",
+        // ------------------------------------------------------------------ HIVE
+        { "Harmony Fifth", hiveCat, "Tight, clean harmony: a fifth above (DRONE) plus its octave (QUEEN). No VENOM.",
           { { rbOn, 1 }, { rbPitch, 7 }, { rbPrimary, 60 }, { rbSecondary, 25 }, { rbTracking, 95 }, { rbTone, 70 } } },
-        { "Atonal Detune", rainbowCat, "SNAP off: a quarter-tone-flat double. Instantly wrong in the best way.",
+        { "Atonal Detune", hiveCat, "SNAP off: a quarter-tone-flat double. Instantly wrong in the best way.",
           { { rbOn, 1 }, { rbSnap, 0 }, { rbPitch, -0.4f }, { rbPrimary, 85 }, { rbTracking, 100 }, { rbTone, 65 } } },
-        { "Tone Clusters", rainbowCat, "Low TRACKING: the harmony lags and repeats grains, smearing into rhythmic clusters.",
+        { "Tone Clusters", hiveCat, "Low TRACKING: the harmony lags and repeats grains, smearing into rhythmic clusters.",
           { { rbOn, 1 }, { rbPitch, 5 }, { rbPrimary, 70 }, { rbSecondary, 20 }, { rbTracking, 8 }, { rbMagic, 20 }, { rbTone, 55 } } },
-        { "Pixie Trails", rainbowCat, "MAGIC mid-way: every repeat climbs another fifth - glittering ascending trails.",
+        { "Honey Trails", hiveCat, "VENOM mid-way: every repeat climbs another fifth - glittering ascending trails.",
           { { rbOn, 1 }, { rbPitch, 7 }, { rbPrimary, 55 }, { rbTracking, 75 }, { rbMagic, 45 }, { rbTone, 55 } } },
-        { "Descending Spiral", rainbowCat, "Negative PITCH with regeneration: notes fall away in a spiral of fourths.",
+        { "Descending Spiral", hiveCat, "Negative PITCH with VENOM: notes fall away in a spiral of fourths.",
           { { rbOn, 1 }, { rbPitch, -5 }, { rbPrimary, 65 }, { rbTracking, 70 }, { rbMagic, 60 }, { rbTone, 40 } } },
-        { "Whale Song", rainbowCat, "Atonal down-shift, loose tracking and heavy MAGIC through the deep chorus: moaning, gurgling.",
+        { "Drowning Hive", hiveCat, "Atonal down-shift, loose tracking and heavy VENOM through the deep SWARM: moaning, gurgling.",
           { { rbOn, 1 }, { rbSnap, 0 }, { rbPitch, -1.7f }, { rbPrimary, 70 }, { rbSecondary, 30 }, { rbTracking, 35 },
             { rbMagic, 80 }, { rbTone, 30 }, { swarmOn, 1 }, { swarmDeep, 1 }, { swarmMix, 40 } } },
-        { "Self-Oscillator", rainbowCat, "MAGIC on the edge. Hold the MAGIC footswitch and it takes off into squalls on its own.",
-          { { rbOn, 1 }, { rbPitch, 12 }, { rbPrimary, 50 }, { rbTracking, 60 }, { rbMagic, 92 }, { rbTone, 60 } } },
+        { "Venom Overload", hiveCat, "VENOM on the edge. Hold the VENOM footswitch: it takes off into squalls and drags +1 OCT in (LINK).",
+          { { rbOn, 1 }, { rbPitch, 12 }, { rbPrimary, 50 }, { rbTracking, 60 }, { rbMagic, 92 }, { rbTone, 60 }, { linkOct1, 1 } } },
 
         // ------------------------------------------------------------- textures
-        { "Swarm Cloud", texture, "DEEP chorus over a barely-detuned double: wide, seasick, huge.",
+        { "Swarm Cloud", texture, "DEEP SWARM over a barely-detuned double: wide, seasick, huge.",
           { { rbOn, 1 }, { rbSnap, 0 }, { rbPitch, 0.2f }, { rbPrimary, 40 }, { rbTracking, 90 },
             { swarmOn, 1 }, { swarmDeep, 1 }, { swarmDepth, 75 }, { swarmRate, 0.35f }, { swarmMix, 60 } } },
-        { "Velcro Fuzz", texture, "Fuzz with GATE: the notes sputter and tear apart as they decay.",
+        { "Smoked Out", texture, "SMOKE with GATE: the notes sputter and tear apart as they decay.",
           { { fuzzOn, 1 }, { fuzz, 85 }, { fuzzGate, 75 }, { fuzzTone, 45 } } },
-        { "Stutter Breakdown", texture, "Tempo-synced 1/16 hard gate on pre-fuzz. Hold +1 OCT for detuned stabs.",
+        { "Wing Beat Breakdown", texture, "Tempo-synced 1/16 hard WINGS gate on SMOKE. Hold +1 OCT for angry stabs.",
           { { rise, 0 }, { panic, 30 }, { fuzzOn, 1 }, { fuzz, 65 }, { flowOn, 1 }, { flowSync, 1 }, { flowDiv, 4 }, { flowHard, 1 } } },
-        { "Tremolo Ghost", texture, "Smooth tremolo, a quiet octave-up voice with trails and chorus - eerie clean parts.",
+        { "Ghost Swarm", texture, "Smooth WINGS tremolo, a quiet octave-up DRONE with trails and SWARM - eerie clean parts.",
           { { rbOn, 1 }, { rbPitch, 12 }, { rbPrimary, 30 }, { rbMagic, 25 }, { rbTracking, 85 }, { rbTone, 45 },
             { swarmOn, 1 }, { swarmMix, 35 }, { flowOn, 1 }, { flowHard, 0 }, { flowSpeed, 5.5f }, { flowAmount, 70 } } },
 
-        // ------------------------------------------------------------ full chaos
-        { "Alpha Scream", combo, "Hot pre-fuzz into a panicked, chaotic octave. Hold +2 OCT for the scream.",
+        // ---------------------------------------------------------- swarm attack
+        { "Queen Scream", attack, "Hot SMOKE into an angry, frenzied octave. Hold +2 OCT for the scream.",
           { { rise, 15 }, { panic, 50 }, { chaos, 15 }, { speed, 20 }, { fuzzOn, 1 }, { fuzz, 80 }, { fuzzTone, 65 } } },
-        { "Broken Radio", combo, "Atonal loose harmony, dark post-fuzz and tremolo: a dying transmission.",
+        { "Broken Radio", attack, "Atonal loose HIVE, dark SMOKE after it and WINGS tremolo: a dying transmission.",
           { { rbOn, 1 }, { rbSnap, 0 }, { rbPitch, -2.6f }, { rbPrimary, 80 }, { rbTracking, 15 }, { rbTone, 30 },
             { fuzzOn, 1 }, { fuzzPost, 1 }, { fuzz, 45 }, { fuzzTone, 20 },
             { flowOn, 1 }, { flowHard, 0 }, { flowSpeed, 6.0f }, { flowAmount, 60 } } },
-        { "Self Destruct", combo, "Everything at once: max MAGIC octave spirals into gated post-fuzz. Hold MAGIC and +2 OCT.",
+        { "Hive Collapse", attack, "Everything at once. One stomp on VENOM: +2 OCT (LINK), max regeneration and gated SMOKE.",
           { { panic, 40 }, { chaos, 40 }, { rbOn, 1 }, { rbPitch, 12 }, { rbPrimary, 60 }, { rbMagic, 100 }, { rbTracking, 55 },
-            { fuzzOn, 1 }, { fuzzPost, 1 }, { fuzz, 90 }, { fuzzGate, 30 } } },
+            { fuzzOn, 1 }, { fuzzPost, 1 }, { fuzz, 90 }, { fuzzGate, 30 }, { linkOct2, 1 } } },
     };
 }
 
