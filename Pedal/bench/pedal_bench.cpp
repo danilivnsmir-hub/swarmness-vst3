@@ -94,7 +94,7 @@ int main (int argc, char** argv)
         const auto list = scenarios();
         const auto& sc = list[(size_t) std::atoi (argv[2]) % list.size()];
         const double load = runScenario (sc, std::atoi (argv[3]), std::atoi (argv[4]), nullptr);
-        std::printf ("%s: %.2f%%\n", sc.name, load);
+        std::printf ("%s: %.2f%% avg, worst block %.1f%%\n", sc.name, load, gPeakBlock);
         return 0;
     }
 

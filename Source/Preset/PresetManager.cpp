@@ -29,11 +29,11 @@ void PresetManager::initialiseFactoryPresets()
 {
     using namespace ParamIDs;
 
-    // Presets store the sound; the footswitches (+1 / +2 OCT, VENOM) are played live.
-    // Internal IDs: noise* = STING, rb* = HIVE, fuzz* = SMOKE, flow* = WINGS, panic = ANGER,
-    // chaos = FRENZY, speed = BUZZ, noiseDown = DIVE, rbPrimary = DRONE, rbSecondary = QUEEN, rbMagic = TRAILS.
+    // Presets store the sound; the footswitches (SHIFT A / B, VENOM) are played live.
+    // Internal IDs: rb* = HIVE, stingMix = SHIFT BLEND, fuzz* = SMOKE, flow* = WINGS, panic = ANGER,
+    // chaos = FRENZY, speed = BUZZ, rbPrimary = DRONE, rbSecondary = QUEEN, rbMagic = TRAILS.
     // Wings division indices: 3 = 1/8, 4 = 1/16, 5 = 1/32
-    const juce::String basics ("Basics"), stingCat ("Sting - hold +1/+2 OCT"), hiveCat ("Hive"),
+    const juce::String basics ("Basics"), stingCat ("Shift - hold SHIFT A / B"), hiveCat ("Hive Voices & Trails"),
                        texture ("Smoke, Swarm & Wings"), attack ("Swarm Attack"), space ("Chain, EQ & Crypt");
     // Chain slots (lower = earlier). Defaults: SMOKE 10, PITCH 20, SWARM 30, WINGS 40, COMB 50, CARVE 60, CRYPT 70.
     const juce::String slotCrypt (Chain::slotIds[Chain::crypt]), slotCarve (Chain::slotIds[Chain::carve]),
@@ -42,15 +42,15 @@ void PresetManager::initialiseFactoryPresets()
     factoryPresets = {
         // ---------------------------------------------------------------- basics
         { "Init", basics, "Everything off: the plug-in is transparent. Start here.", {} },
-        { "Clean Sting", basics, "Pure octave shifter on the clean modern engine (RAW off). Hold +1 OCT / +2 OCT for a clean, instant jump.",
-          { { rise, 0 }, { fall, 0 }, { stingRaw, 0 } } },
-        { "Sting Doubler", basics, "STING MIX at 50%: hold a footswitch and the octave is added on top of your dry note instead of replacing it.",
+        { "Clean Shift", basics, "Pure octave shifter on the clean modern engine (RAW off). Hold SHIFT A (+1 oct) / SHIFT B (+2 oct) for a clean, instant jump.",
+          { { rise, 0 }, { fall, 0 }, { rbRaw, 0 } } },
+        { "Shift Doubler", basics, "SHIFT BLEND at 50%: hold a footswitch and the octave is added on top of your dry note instead of replacing it.",
           { { rise, 0 }, { fall, 0 }, { stingMix, 50 } } },
         { "Slow Rise", basics, "RISE and FALL: hold a footswitch and the pitch sweeps up over ~1 s; release and it slides back down over ~1.5 s.",
           { { rise, 950 }, { fall, 1500 } } },
 
-        // ----------------------------------------------------------------- STING
-        { "Killer Bee", stingCat, "The all-rounder: a bit of ANGER, FRENZY and BUZZ plus SMOKE in front. Hold +2 OCT for the full shriek.",
+        // ----------------------------------------------------------------- SHIFT + MANGLE
+        { "Killer Bee", stingCat, "The all-rounder: a bit of ANGER, FRENZY and BUZZ plus SMOKE in front. Hold SHIFT B (+2 oct) for the full shriek.",
           { { rise, 30 }, { panic, 45 }, { chaos, 30 }, { speed, 25 }, { fuzzOn, 1 }, { fuzz, 60 }, { fuzzTone, 55 }, { fuzzScoop, 50 } } },
         { "Angry Hive", stingCat, "ANGER only: the octave is torn into two detuned voices - sour, beating dissonance.",
           { { rise, 15 }, { panic, 85 } } },
@@ -60,8 +60,8 @@ void PresetManager::initialiseFactoryPresets()
           { { rise, 120 }, { fall, 400 }, { speed, 22 }, { panic, 25 } } },
         { "Hornet Buzz", stingCat, "High BUZZ: all-pass feedback and AM turn the octave into metallic ring-mod noise.",
           { { rise, 0 }, { fall, 0 }, { speed, 92 } } },
-        { "Dive Bomb", stingCat, "DIVE with a long RISE and a snappy FALL: hold for a slow sub-octave dive, release to snap back. SMOKE after SWARM in the chain.",
-          { { noiseDown, 1 }, { rise, 450 }, { fall, 60 }, { panic, 15 }, { fuzzOn, 1 }, { slotSmoke, 35 }, { fuzzVoice, 0 }, { fuzz, 70 }, { fuzzTone, 35 }, { fuzzScoop, 30 } } },
+        { "Dive Bomb", stingCat, "SHIFT A = -1 oct, SHIFT B = -2 oct with a long RISE and a snappy FALL: hold for a slow dive, release to snap back. SMOKE after SWARM in the chain.",
+          { { shiftA, -12 }, { shiftB, -24 }, { rise, 450 }, { fall, 60 }, { panic, 15 }, { fuzzOn, 1 }, { slotSmoke, 35 }, { fuzzVoice, 0 }, { fuzz, 70 }, { fuzzTone, 35 }, { fuzzScoop, 30 } } },
 
         // ------------------------------------------------------------------ HIVE
         { "Harmony Fifth", hiveCat, "Tight, clean harmony on the modern engine (RAW off): a fifth above (DRONE) plus its octave (QUEEN).",
@@ -79,7 +79,17 @@ void PresetManager::initialiseFactoryPresets()
         { "Drowning Hive", hiveCat, "Atonal down-shift, loose tracking and long TRAILS through the deep SWARM: moaning, gurgling.",
           { { rbOn, 1 }, { rbSnap, 0 }, { rbPitch, -1.7f }, { rbPrimary, 70 }, { rbSecondary, 30 }, { rbTracking, 35 },
             { rbMagic, 85 }, { rbTime, 320 }, { rbTone, 30 }, { swarmOn, 1 }, { swarmDeep, 1 }, { swarmMix, 40 } } },
-        { "Venom Overload", hiveCat, "Long octave TRAILS. Hold the VENOM footswitch: it takes off into self-oscillating squalls and drags +1 OCT in (LINK).",
+        { "Bounce Trill", hiveCat, "PATTERN BOUNCE: the repeats flip between a fifth up and your note - a trill that stays in key and fades out.",
+          { { rbOn, 1 }, { rbPitch, 7 }, { rbPrimary, 60 }, { rbTracking, 85 }, { rbMagic, 70 }, { hivePattern, 1 }, { rbTime, 150 }, { rbTone, 60 } } },
+        { "Scatter Swarm", hiveCat, "PATTERN SCATTER: every repeat jumps to a random chord tone of the fifth, octaves up and down - glitch arpeggios. Add FRENZY for pure chaos.",
+          { { rbOn, 1 }, { rbPitch, 7 }, { rbPrimary, 55 }, { rbTracking, 80 }, { rbMagic, 75 }, { hivePattern, 2 }, { rbSync, 1 }, { rbDiv, 4 }, { rbTone, 60 } } },
+        { "Reverse Hive", hiveCat, "PATTERN REVERSE: an octave voice whose repeats play backwards - ghostly swells that breathe in before every note.",
+          { { rbOn, 1 }, { rbPitch, 12 }, { rbPrimary, 55 }, { rbTracking, 85 }, { rbMagic, 65 }, { hivePattern, 3 }, { rbTime, 380 }, { rbTone, 50 }, { rbMix, 60 } } },
+        { "Bloom", hiveCat, "PATTERN BLOOM: the repeats are diffused and drift apart - a fifth that swells into a cloud instead of a ladder.",
+          { { rbOn, 1 }, { rbPitch, 7 }, { rbPrimary, 50 }, { rbSecondary, 20 }, { rbTracking, 90 }, { rbMagic, 70 }, { hivePattern, 4 }, { rbTime, 260 }, { rbTone, 45 } } },
+        { "Angry Voices", hiveCat, "MANGLE on the voices too: ANGER and FRENZY sour and scatter the harmony and its trails - one character for the whole block.",
+          { { rbOn, 1 }, { rbPitch, 5 }, { rbPrimary, 65 }, { rbSecondary, 25 }, { rbTracking, 70 }, { rbMagic, 40 }, { panic, 45 }, { chaos, 25 } } },
+        { "Venom Overload", hiveCat, "Long octave TRAILS. Hold the VENOM footswitch: it takes off into self-oscillating squalls and drags SHIFT A in (LINK).",
           { { rbOn, 1 }, { rbPitch, 12 }, { rbPrimary, 50 }, { rbTracking, 60 }, { rbMagic, 92 }, { rbTone, 60 }, { linkOct1, 1 } } },
 
         // ------------------------------------------------------------- textures
@@ -97,20 +107,20 @@ void PresetManager::initialiseFactoryPresets()
           { { fuzzOn, 1 }, { fuzzVoice, 2 }, { fuzz, 75 }, { fuzzTone, 60 }, { fuzzScoop, 30 }, { fuzzGlare, 70 }, { fuzzSag, 15 } } },
         { "Smoked Out", texture, "SMOKE with GATE and heavy SAG: a dying battery - notes sag, bloom, then sputter and tear apart as they decay.",
           { { fuzzOn, 1 }, { fuzz, 85 }, { fuzzGate, 75 }, { fuzzTone, 45 }, { fuzzScoop, 50 }, { fuzzSag, 90 } } },
-        { "Wing Beat Breakdown", texture, "Tempo-synced 1/16 hard WINGS gate on SMOKE. Hold +1 OCT for angry stabs.",
+        { "Wing Beat Breakdown", texture, "Tempo-synced 1/16 hard WINGS gate on SMOKE. Hold SHIFT A for angry stabs.",
           { { rise, 0 }, { fall, 0 }, { panic, 30 }, { fuzzOn, 1 }, { fuzzVoice, 0 }, { fuzz, 80 }, { fuzzScoop, 60 }, { fuzzBlend, 15 }, { flowOn, 1 }, { flowSync, 1 }, { flowDiv, 4 }, { flowHard, 1 } } },
         { "Ghost Swarm", texture, "Smooth WINGS tremolo, a quiet octave-up DRONE with trails and SWARM - eerie clean parts.",
           { { rbOn, 1 }, { rbPitch, 12 }, { rbPrimary, 30 }, { rbMagic, 35 }, { rbTime, 300 }, { rbTracking, 85 }, { rbTone, 45 },
             { swarmOn, 1 }, { swarmMix, 35 }, { flowOn, 1 }, { flowHard, 0 }, { flowSpeed, 5.5f }, { flowAmount, 70 } } },
 
         // ---------------------------------------------------------- swarm attack
-        { "Queen Scream", attack, "Hot SMOKE into an angry, frenzied octave. Hold +2 OCT for the scream.",
+        { "Queen Scream", attack, "Hot SMOKE into an angry, frenzied octave. Hold SHIFT B for the scream.",
           { { rise, 15 }, { panic, 50 }, { chaos, 15 }, { speed, 20 }, { fuzzOn, 1 }, { fuzzVoice, 2 }, { fuzz, 85 }, { fuzzTone, 60 }, { fuzzGlare, 35 } } },
         { "Broken Radio", attack, "Atonal loose HIVE, dark SMOKE after it and WINGS tremolo: a dying transmission.",
           { { rbOn, 1 }, { rbSnap, 0 }, { rbPitch, -2.6f }, { rbPrimary, 80 }, { rbTracking, 15 }, { rbTone, 30 },
             { fuzzOn, 1 }, { slotSmoke, 35 }, { fuzz, 45 }, { fuzzTone, 20 },
             { flowOn, 1 }, { flowHard, 0 }, { flowSpeed, 6.0f }, { flowAmount, 60 } } },
-        { "Hive Collapse", attack, "Everything at once. One stomp on VENOM: +2 OCT (LINK), self-oscillating HIVE and gated SMOKE.",
+        { "Hive Collapse", attack, "Everything at once. One stomp on VENOM: SHIFT B (LINK), self-oscillating HIVE and gated SMOKE.",
           { { panic, 40 }, { chaos, 40 }, { rbOn, 1 }, { rbPitch, 12 }, { rbPrimary, 60 }, { rbMagic, 100 }, { rbTracking, 55 },
             { fuzzOn, 1 }, { slotSmoke, 35 }, { fuzz, 90 }, { fuzzScoop, 60 }, { fuzzGlare, 40 }, { fuzzGate, 30 }, { linkOct2, 1 } } },
 
@@ -331,12 +341,34 @@ bool PresetManager::fromJson (const juce::var& json, juce::String& name, ValueMa
     for (const auto& prop : params->getProperties())
         if (prop.value.isDouble() || prop.value.isInt() || prop.value.isInt64() || prop.value.isBool())
             values[prop.name.toString()] = (float) (double) prop.value;
-    migrate (values);
+    migrateLegacyValues (values);
     return true;
 }
 
-void PresetManager::migrate (ValueMap& values)
+void PresetManager::migrateLegacyValues (ValueMap& values)
 {
+    using namespace ParamIDs;
+    auto has = [&values] (const char* id) { return values.find (id) != values.end(); };
+    auto get = [&values] (const char* id, float def) { auto it = values.find (id); return it != values.end() ? it->second : def; };
+
+    // Beta.19 and older: STING (DIVE, own RAW / DETUNE) + HIVE -> one HIVE block
+    if (! has (shiftA) && ! has (shiftB))
+    {
+        if (get (noiseDownLegacy, 0.0f) > 0.5f)
+        {
+            values[shiftA] = -12.0f;
+            values[shiftB] = -24.0f;
+        }
+        const bool voicesWereOn = get (rbOn, 0.0f) > 0.5f;
+        if (! voicesWereOn && has (stingRawLegacy))
+            values[rbRaw] = get (stingRawLegacy, 1.0f);
+        if (std::abs (get (rbDetune, 0.0f)) < 0.05f && has (stingDetuneLegacy))
+            values[rbDetune] = get (stingDetuneLegacy, 0.0f);
+    }
+    values.erase (noiseDownLegacy);
+    values.erase (stingRawLegacy);
+    values.erase (stingDetuneLegacy);
+
     // Before the reorderable chain, SMOKE had a PRE / POST switch.
     if (auto it = values.find (ParamIDs::fuzzPostLegacy); it != values.end())
     {

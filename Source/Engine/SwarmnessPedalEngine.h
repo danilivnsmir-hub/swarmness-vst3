@@ -3,7 +3,7 @@
 /**
  * SWARMNESS pedal engine: the "destructive pitch-delay" pedal.
  *
- *     IN -> INPUT -> PITCH (STING octaves || HIVE harmonies + TRAILS) -> SWARM (chorus / detune) -> VOLUME -> OUT
+ *     IN -> INPUT -> HIVE (SHIFT + VOICES + TRAILS + MANGLE) -> SWARM (chorus) -> VOLUME -> OUT
  *
  * Pure C++17: compiles with the plug-in (JUCE) or stand-alone with SWARM_NO_JUCE for pedal
  * hardware (Daisy / STM32H7, Raspberry Pi / Linux ARM, ...). It uses the exact same DSP classes
@@ -12,7 +12,7 @@
  * Real-time rules: prepare() allocates; setParams() / process() never allocate or lock.
  */
 
-#include "../DSP/PitchBlock.h"
+#include "../DSP/HiveBlock.h"
 #include "../DSP/SwarmChorus.h"
 
 namespace swarmness
@@ -20,10 +20,10 @@ namespace swarmness
     struct PedalParams
     {
         // Footswitches (momentary or latched by the pedal's firmware)
-        bool oct1 = false, oct2 = false, venom = false, bypass = false;
-        bool linkOct1 = false, linkOct2 = false;   // VENOM drags the octaves in
+        bool shiftA = false, shiftB = false, venom = false, bypass = false;
+        bool linkA = false, linkB = false;   // VENOM drags the SHIFTs in
 
-        PitchBlock::Settings pitch;                // STING + HIVE (see PitchBlock.h)
+        HiveBlock::Settings hive;                  // see HiveBlock.h
 
         // SWARM
         bool swarmOn = false, swarmDeep = false;
@@ -39,7 +39,7 @@ namespace swarmness
         {
             sr = sampleRate;
             maxBlock = sw::jlimit (1, kTrack, maxBlockSize);
-            pitch.prepare (sr, maxBlock);
+            hive.prepare (sr, maxBlock);
             swarm.prepare (sr);
             dry.setSize (2, maxBlock, false, false, true);
             inGain.reset (sr, 0.03);
@@ -52,14 +52,14 @@ namespace swarmness
 
         void reset()
         {
-            pitch.reset();
+            hive.reset();
             swarm.reset();
         }
 
         void setParams (const PedalParams& p) noexcept { params = p; }
 
-        /** Live transposition of STING (for an LED / display). */
-        float getStingSemitones() const noexcept { return pitch.getStingSemitones(); }
+        /** Live SHIFT transposition (for an LED / display). */
+        float getShiftSemitones() const noexcept { return hive.getShiftSemitones(); }
 
         /**
          * In-place processing. numChannels = 1 (mono pedal) or 2 (stereo out: pass the guitar in
@@ -96,18 +96,18 @@ namespace swarmness
             }
 
             // Footswitches work even while bypassed, like momentary pedals
-            auto s = p.pitch;
-            s.oct1 = p.oct1 || (p.venom && p.linkOct1);
-            s.oct2 = p.oct2 || (p.venom && p.linkOct2);
+            auto s = p.hive;
+            s.shiftA = p.shiftA || (p.venom && p.linkA);
+            s.shiftB = p.shiftB || (p.venom && p.linkB);
             s.venom = p.venom;
-            pitch.setParams (s);
-            pitch.process (audio, numChannels, n);
+            hive.setParams (s);
+            hive.process (audio, numChannels, n);
 
             swarm.setParams (p.swarmRateHz, p.swarmDepth, p.swarmOn ? p.swarmMix : 0.0f, p.swarmDeep);
             swarm.process (audio, numChannels, n);
 
-            const bool anyHeld = s.oct1 || s.oct2 || s.venom;
-            bypassMix.setTargetValue (p.bypass && ! anyHeld && ! pitch.isStingEngaged() ? 1.0f : 0.0f);
+            const bool anyHeld = s.shiftA || s.shiftB || s.venom;
+            bypassMix.setTargetValue (p.bypass && ! anyHeld && ! hive.isShiftEngaged() ? 1.0f : 0.0f);
             outGain.setTargetValue (dbToGain (p.outputDb));
 
             for (int i = 0; i < n; ++i)
@@ -130,7 +130,7 @@ namespace swarmness
         double sr = 48000.0;
         int maxBlock = 64;
         PedalParams params;
-        PitchBlock pitch;
+        HiveBlock hive;
         SwarmChorus swarm;
         sw::AudioBuffer<float> dry;
         std::array<float, kTrack> inTrack {};

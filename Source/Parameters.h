@@ -8,43 +8,51 @@
  * Central definition of every automatable parameter.
  *
  * Signal flow: INPUT -> a reorderable chain of blocks (see Chain below) -> OUTPUT.
- * PITCH = STING (footswitch octaves) in parallel with HIVE (harmony voices).
- * (internal IDs keep the original DSP names: noise = STING, rainbow/rb = HIVE, fuzz = SMOKE, flow = WINGS,
+ * HIVE = SHIFT (footswitches) + VOICES + TRAILS + MANGLE, see DSP/HiveBlock.h.
+ * (internal IDs keep older names: rb = HIVE, fuzz = SMOKE, flow = WINGS,
  *  geq = COMB graphic EQ, peq = CARVE parametric EQ, rev = CRYPT reverb)
  */
 namespace ParamIDs
 {
-    // STING: momentary octave footswitches + mangling (ANGER = panic, FRENZY = chaos, BUZZ = speed, DIVE = down)
-    inline constexpr const char* oct1        = "oct1";         // footswitch: +1 octave
-    inline constexpr const char* oct2        = "oct2";         // footswitch: +2 octaves
-    inline constexpr const char* noiseDown   = "noiseDown";    // footswitches shift down instead of up
+    // HIVE - one block, four sections (IDs keep their original names so sessions / MIDI stay valid)
+    // SHIFT: footswitches SHIFT A / SHIFT B (oct1 / oct2) transpose the played signal
+    inline constexpr const char* oct1        = "oct1";         // footswitch: SHIFT A
+    inline constexpr const char* oct2        = "oct2";         // footswitch: SHIFT B
+    inline constexpr const char* shiftA      = "shiftA";       // SHIFT A interval, semitones
+    inline constexpr const char* shiftB      = "shiftB";       // SHIFT B interval, semitones
     inline constexpr const char* rise        = "rise";         // glide into the interval (footswitch down)
     inline constexpr const char* fall        = "fall";         // glide back home (footswitch released)
-    inline constexpr const char* panic       = "panic";
-    inline constexpr const char* chaos       = "chaos";
-    inline constexpr const char* speed       = "speed";
-    inline constexpr const char* stingMix    = "stingMix";
-    inline constexpr const char* stingDetune = "stingDetune";  // fine offset of the octave, cents
-    inline constexpr const char* stingRaw    = "stingRaw";     // vintage lo-fi shifter engine     // dry / shifted blend while a footswitch is down
-
-    // HIVE: harmony voices with regeneration (DRONE = primary, QUEEN = secondary, TRAILS = magic; the VENOM footswitch = magicHold)
-    inline constexpr const char* rbOn        = "rbOn";
-    inline constexpr const char* rbPitch     = "rbPitch";
+    inline constexpr const char* stingMix    = "stingMix";     // SHIFT BLEND: dry / shifted while a footswitch is down
+    // VOICES
+    inline constexpr const char* rbOn        = "rbOn";         // voices on
+    inline constexpr const char* rbPitch     = "rbPitch";      // DRONE interval
     inline constexpr const char* rbSnap      = "rbSnap";
-    inline constexpr const char* rbRaw       = "rbRaw";        // vintage lo-fi shifter engine
-    inline constexpr const char* rbPrimary   = "rbPrimary";
-    inline constexpr const char* rbSecondary = "rbSecondary";
-    inline constexpr const char* rbTone      = "rbTone";
+    inline constexpr const char* rbPrimary   = "rbPrimary";    // DRONE level
+    inline constexpr const char* rbSecondary = "rbSecondary";  // QUEEN level
     inline constexpr const char* rbTracking  = "rbTracking";
-    inline constexpr const char* rbDetune    = "rbDetune";     // cents: DRONE up, QUEEN down (width)
-    inline constexpr const char* rbMix       = "rbMix";        // dry / HIVE voices (50% = both full, 100% = voices only)
-    inline constexpr const char* rbMagic     = "rbMagic";      // TRAILS: regeneration (repeats climb / fall by PITCH)
+    inline constexpr const char* hiveFollow  = "hiveFollow";   // voices harmonise the shifted note
+    // TRAILS
+    inline constexpr const char* rbMagic     = "rbMagic";      // TRAILS: regeneration
+    inline constexpr const char* hivePattern = "hivePattern";  // LADDER / BOUNCE / SCATTER / REVERSE / BLOOM
     inline constexpr const char* rbTime      = "rbTime";       // time between repeats (free)
     inline constexpr const char* rbSync      = "rbSync";       // repeats locked to the host tempo
     inline constexpr const char* rbDiv       = "rbDiv";        // repeat time (tempo division)
-    inline constexpr const char* magicHold   = "magicHold";    // footswitch: magic to self-oscillation
-    inline constexpr const char* linkOct1    = "linkOct1";     // mini switch: MAGIC footswitch also engages +1 OCT
-    inline constexpr const char* linkOct2    = "linkOct2";     // mini switch: MAGIC footswitch also engages +2 OCT
+    inline constexpr const char* rbTone      = "rbTone";
+    inline constexpr const char* magicHold   = "magicHold";    // footswitch: VENOM (self-oscillation)
+    inline constexpr const char* linkOct1    = "linkOct1";     // VENOM also engages SHIFT A
+    inline constexpr const char* linkOct2    = "linkOct2";     // VENOM also engages SHIFT B
+    // MANGLE (everything HIVE adds)
+    inline constexpr const char* panic       = "panic";        // ANGER
+    inline constexpr const char* chaos       = "chaos";        // FRENZY
+    inline constexpr const char* speed       = "speed";        // BUZZ
+    inline constexpr const char* rbRaw       = "rbRaw";        // RAW engine character
+    inline constexpr const char* rbDetune    = "rbDetune";     // cents: fine offset / spread
+    inline constexpr const char* rbMix       = "rbMix";        // dry / effect (50% = both full, 100% = effect only)
+
+    // Removed when STING and HIVE became one block (read for migration only)
+    inline constexpr const char* noiseDownLegacy   = "noiseDown";
+    inline constexpr const char* stingRawLegacy    = "stingRaw";
+    inline constexpr const char* stingDetuneLegacy = "stingDetune";
 
     // SWARM (chorus)
     inline constexpr const char* swarmOn     = "swarmOn";
@@ -129,6 +137,32 @@ namespace ParamChoices
     inline const juce::StringArray switchModes { "Momentary", "Latch" };
     inline const juce::StringArray fuzzVoices  { "Down", "Mid", "Up" };
     inline const juce::StringArray reverbTypes { "Room", "Plate", "Hall", "Abyss", "IR" };
+    inline const juce::StringArray hivePatterns { "Ladder", "Bounce", "Scatter", "Reverse", "Bloom" };
+
+    /** "+7 5th", "-1 oct", "+2 oct", "+19 5th+oct" ... */
+    inline juce::String intervalName (int st)
+    {
+        static const char* names[] = { "unison", "m2", "M2", "m3", "M3", "4th", "tritone", "5th", "m6", "M6", "m7", "M7" };
+        const int a = std::abs (st);
+        const juce::String sign = st < 0 ? "-" : "+";
+        if (a == 0)
+            return "0 unison";
+        if (a % 12 == 0)
+            return sign + juce::String (a / 12) + " oct";
+        return sign + juce::String (a) + " " + names[a % 12] + (a > 12 ? "+oct" : "");
+    }
+
+    /** Short footswitch caption: "+1 OCT", "-2 OCT", "+5TH", "-4TH", "+7 ST" ... */
+    inline juce::String shiftCaption (int st)
+    {
+        const int a = std::abs (st);
+        const juce::String sign = st < 0 ? "-" : "+";
+        if (a == 0) return "SHIFT";
+        if (a % 12 == 0) return sign + juce::String (a / 12) + " OCT";
+        if (a == 7) return sign + "5TH";
+        if (a == 5) return sign + "4TH";
+        return sign + juce::String (a) + " ST";
+    }
     inline const juce::StringArray divisions   { "1/1", "1/2", "1/4", "1/8", "1/16", "1/32",
                                                  "1/4T", "1/8T", "1/16T", "1/8D", "1/16D" };
 
@@ -166,8 +200,8 @@ namespace Chain
     inline constexpr int slotMax = 99;
     inline constexpr int legacyPostSmokeSlot = 35;   // old "SMOKE POST" = after SWARM, before WINGS
 
-    inline constexpr const char* names[numBlocks]     { "PITCH", "SMOKE", "SWARM", "WINGS", "COMB", "CARVE", "CRYPT" };
-    inline constexpr const char* subtitles[numBlocks] { "STING + HIVE", "FUZZ", "CHORUS", "TREMOLO", "GRAPHIC EQ", "PARAM EQ", "REVERB" };
+    inline constexpr const char* names[numBlocks]     { "HIVE", "SMOKE", "SWARM", "WINGS", "COMB", "CARVE", "CRYPT" };
+    inline constexpr const char* subtitles[numBlocks] { "PITCH DELAY", "FUZZ", "CHORUS", "TREMOLO", "GRAPHIC EQ", "PARAM EQ", "REVERB" };
 
     using Order = std::array<int, numBlocks>;
 

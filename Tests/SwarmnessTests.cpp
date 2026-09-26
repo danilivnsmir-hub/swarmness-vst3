@@ -208,7 +208,7 @@ namespace
         {
             SwarmnessAudioProcessor p;
             resetToInit (p);
-            setParam (p, ParamIDs::stingRaw, 0.0f);   // exact pitch check: modern engine
+            setParam (p, ParamIDs::rbRaw, 0.0f);   // exact pitch check: modern engine
             setParam (p, ParamIDs::rise, 0.0f);
             setParam (p, ParamIDs::bypass, 1.0f);
             setParam (p, ParamIDs::oct1, 1.0f);
@@ -236,7 +236,7 @@ namespace
         std::printf ("\nLINK: the VENOM footswitch drags the linked octave in\n");
         SwarmnessAudioProcessor p;
         resetToInit (p);
-        setParam (p, ParamIDs::stingRaw, 0.0f);
+        setParam (p, ParamIDs::rbRaw, 0.0f);
         setParam (p, ParamIDs::rise, 0.0f);
         setParam (p, ParamIDs::rbPrimary, 0.0f);     // hear only the STING octave
         setParam (p, ParamIDs::linkOct1, 1.0f);
@@ -364,9 +364,10 @@ namespace
         {
             SwarmnessAudioProcessor p;
             resetToInit (p);
-            setParam (p, ParamIDs::stingRaw, raw ? 1.0f : 0.0f);
+            setParam (p, ParamIDs::rbRaw, raw ? 1.0f : 0.0f);
             setParam (p, ParamIDs::rise, 0.0f);
-            setParam (p, ParamIDs::noiseDown, c.down ? 1.0f : 0.0f);
+            setParam (p, ParamIDs::shiftA, c.down ? -12.0f : 12.0f);
+            setParam (p, ParamIDs::shiftB, c.down ? -24.0f : 24.0f);
             setParam (p, c.sw, 1.0f);
             const double sr = 48000.0;
             auto input = makeSine (sr, 48000 * 2, 220.0);
@@ -556,7 +557,7 @@ namespace
             SwarmnessAudioProcessor p;
             resetToInit (p);
             setParam (p, ParamIDs::rbRaw, 0.0f);
-            setParam (p, ParamIDs::stingRaw, 0.0f);
+            setParam (p, ParamIDs::rbRaw, 0.0f);
             setParam (p, ParamIDs::rise, 0.0f);
             setParam (p, ParamIDs::rbOn, 1.0f);
             setParam (p, ParamIDs::rbPitch, 7.0f);
@@ -683,7 +684,7 @@ namespace
             {
                 SwarmnessAudioProcessor p;
                 resetToInit (p);
-                setParam (p, ParamIDs::stingRaw, raw ? 1.0f : 0.0f);
+                setParam (p, ParamIDs::rbRaw, raw ? 1.0f : 0.0f);
                 setParam (p, ParamIDs::rise, 0.0f);
                 setParam (p, sw, 1.0f);
                 auto out = render (p, input, sr, 256);
@@ -748,9 +749,9 @@ namespace
         std::printf ("\nDETUNE: fine offset of the STING octave\n");
         SwarmnessAudioProcessor p;
         resetToInit (p);
-        setParam (p, ParamIDs::stingRaw, 0.0f);
+        setParam (p, ParamIDs::rbRaw, 0.0f);
         setParam (p, ParamIDs::rise, 0.0f);
-        setParam (p, ParamIDs::stingDetune, -30.0f);
+        setParam (p, ParamIDs::rbDetune, -30.0f);
         setParam (p, ParamIDs::oct1, 1.0f);
         const double sr = 48000.0;
         auto out = render (p, makeSine (sr, 48000 * 2, 220.0), sr, 256);
@@ -1160,6 +1161,157 @@ namespace
         }
     }
 
+    //==========================================================================
+    // Unified HIVE block
+
+    /** Level (dB) of one frequency in a window, Goertzel. */
+    double toneDb (const juce::AudioBuffer<float>& b, double sr, double freq, int from, int length)
+    {
+        const double w = juce::MathConstants<double>::twoPi * freq / sr, c = 2.0 * std::cos (w);
+        double s1 = 0.0, s2 = 0.0;
+        for (int i = from; i < juce::jmin (b.getNumSamples(), from + length); ++i)
+        {
+            const double hann = 0.5 - 0.5 * std::cos (juce::MathConstants<double>::twoPi * (i - from) / length);
+            const double s0 = hann * b.getSample (0, i) + c * s1 - s2;
+            s2 = s1;
+            s1 = s0;
+        }
+        const double power = s1 * s1 + s2 * s2 - c * s1 * s2;
+        return 10.0 * std::log10 (power / ((double) length * length) + 1.0e-30);
+    }
+
+    /** One plucked 220 Hz note (0.12 s) followed by silence. */
+    juce::AudioBuffer<float> pluck (double sr, int numSamples)
+    {
+        juce::AudioBuffer<float> b (2, numSamples);
+        b.clear();
+        for (int i = 0; i < (int) (0.12 * sr); ++i)
+        {
+            const double t = i / sr;
+            const float v = (float) (0.3 * std::exp (-t * 6.0) * std::sin (juce::MathConstants<double>::twoPi * 220.0 * t));
+            b.setSample (0, i + 4800, v);
+            b.setSample (1, i + 4800, v);
+        }
+        return b;
+    }
+
+    void testHiveBlock()
+    {
+        std::printf ("\nHIVE: SHIFT intervals, FOLLOW, PATTERNs, migration\n");
+        const double sr = 48000.0;
+        {
+            // SHIFT A as a fifth, SHIFT B wins while both are held
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            setParam (p, ParamIDs::rbRaw, 0.0f);
+            setParam (p, ParamIDs::rise, 0.0f);
+            setParam (p, ParamIDs::shiftA, 7.0f);
+            setParam (p, ParamIDs::shiftB, -12.0f);
+            setParam (p, ParamIDs::oct1, 1.0f);
+            auto input = makeSine (sr, 48000 * 2, 220.0);
+            double purity = 0.0;
+            const double f1 = dominantFrequency (render (p, input, sr, 256), sr, 48000, purity);
+            check (std::abs (1200.0 * std::log2 (f1 / 329.628)) < 5.0, juce::String::formatted ("SHIFT A = +7 (fifth): %.2f Hz (expected 329.63)", f1));
+            setParam (p, ParamIDs::oct2, 1.0f);
+            const double f2 = dominantFrequency (render (p, input, sr, 256), sr, 48000, purity);
+            check (std::abs (1200.0 * std::log2 (f2 / 110.0)) < 5.0, juce::String::formatted ("A + B held: B wins (-12): %.2f Hz", f2));
+        }
+        {
+            // FOLLOW: the DRONE harmonises the shifted note
+            auto droneAt = [&] (bool follow)
+            {
+                SwarmnessAudioProcessor p;
+                resetToInit (p);
+                setParam (p, ParamIDs::rbRaw, 0.0f);
+                setParam (p, ParamIDs::rise, 0.0f);
+                setParam (p, ParamIDs::oct1, 1.0f);          // SHIFT A +12 -> 440
+                setParam (p, ParamIDs::rbOn, 1.0f);
+                setParam (p, ParamIDs::rbPitch, 7.0f);
+                setParam (p, ParamIDs::rbPrimary, 100.0f);
+                setParam (p, ParamIDs::rbTracking, 100.0f);
+                setParam (p, ParamIDs::hiveFollow, follow ? 1.0f : 0.0f);
+                auto out = render (p, makeSine (sr, 48000 * 2, 220.0), sr, 256);
+                return std::pair<double, double> { toneDb (out, sr, 329.63, 48000, 32768), toneDb (out, sr, 659.26, 48000, 32768) };
+            };
+            const auto off = droneAt (false), on = droneAt (true);
+            check (off.first > off.second + 10.0, juce::String::formatted ("FOLLOW off: DRONE on the played note (329.6 Hz %+.1f dB vs 659 Hz %+.1f dB)", off.first, off.second));
+            check (on.second > on.first + 10.0, juce::String::formatted ("FOLLOW on: DRONE on the shifted note (659 Hz %+.1f dB vs 329.6 Hz %+.1f dB)", on.second, on.first));
+        }
+        {
+            // PATTERNs: the first repeats of a plucked 220 Hz note, DRONE a fifth up
+            auto repeats = [&] (int pattern)
+            {
+                SwarmnessAudioProcessor p;
+                resetToInit (p);
+                setParam (p, ParamIDs::rbRaw, 0.0f);
+                setParam (p, ParamIDs::rbOn, 1.0f);
+                setParam (p, ParamIDs::rbPitch, 7.0f);
+                setParam (p, ParamIDs::rbPrimary, 100.0f);
+                setParam (p, ParamIDs::rbTracking, 100.0f);
+                setParam (p, ParamIDs::rbMix, 100.0f);
+                setParam (p, ParamIDs::rbMagic, 80.0f);
+                setParam (p, ParamIDs::rbTone, 100.0f);
+                setParam (p, ParamIDs::rbTime, 250.0f);
+                setParam (p, ParamIDs::hivePattern, (float) pattern);
+                return render (p, pluck (sr, (int) (sr * 2.5)), sr, 128);
+            };
+            // note at 0.1 s; repeat 1 around 0.35..0.45 s, repeat 2 around 0.6..0.7 s
+            const int r1 = (int) (0.37 * sr), r2 = (int) (0.62 * sr), len = 4096;
+            const auto ladder = repeats (0);
+            check (toneDb (ladder, sr, 493.88, r1, len) > toneDb (ladder, sr, 220.0, r1, len) + 6.0,
+                   juce::String::formatted ("LADDER: repeat 1 one more fifth up (494 Hz %+.1f dB vs 220 Hz %+.1f dB)",
+                                            toneDb (ladder, sr, 493.88, r1, len), toneDb (ladder, sr, 220.0, r1, len)));
+            const auto bounceOut = repeats (1);
+            const double b1note = toneDb (bounceOut, sr, 220.0, r1, len), b1up = toneDb (bounceOut, sr, 493.88, r1, len);
+            const double b2fifth = toneDb (bounceOut, sr, 329.63, r2, len), b2note = toneDb (bounceOut, sr, 220.0, r2, len);
+            check (b1note > b1up + 6.0 && b2fifth > b2note + 3.0,
+                   juce::String::formatted ("BOUNCE: repeat 1 back on the note (220 Hz %+.1f vs 494 Hz %+.1f dB), repeat 2 up again (330 Hz %+.1f vs 220 Hz %+.1f dB)",
+                                            b1note, b1up, b2fifth, b2note));
+            for (int pattern = 0; pattern < 5; ++pattern)
+            {
+                const auto out = pattern == 0 ? ladder : (pattern == 1 ? bounceOut : repeats (pattern));
+                const float tail = out.getRMSLevel (0, (int) (0.4 * sr), (int) (0.6 * sr));
+                const float end  = out.getRMSLevel (0, (int) (2.2 * sr), (int) (0.3 * sr));
+                check (allFinite (out) && out.getMagnitude (0, out.getNumSamples()) < 2.0f && tail > 1.0e-3f && end < tail,
+                       juce::String::formatted ("%s: repeats after the note (RMS %.4f), fading (%.5f later), bounded",
+                                                ParamChoices::hivePatterns[pattern].toRawUTF8(), tail, end));
+            }
+        }
+        {
+            // Old sessions / presets: DIVE -> negative SHIFT intervals, STING RAW / DETUNE -> shared
+            SwarmnessAudioProcessor a;
+            juce::MemoryBlock mb;
+            a.getStateInformation (mb);
+            auto xml = juce::AudioProcessor::getXmlFromBinary (mb.getData(), (int) mb.getSize());
+            for (auto* id : { ParamIDs::shiftA, ParamIDs::shiftB, ParamIDs::rbRaw, ParamIDs::rbDetune })
+                if (auto* e = xml->getChildByAttribute ("id", id))
+                    xml->removeChildElement (e, true);
+            auto addLegacy = [&xml] (const char* id, double v)
+            {
+                auto* e = xml->createNewChildElement ("PARAM");
+                e->setAttribute ("id", id);
+                e->setAttribute ("value", v);
+            };
+            addLegacy ("noiseDown", 1.0);
+            addLegacy ("stingRaw", 0.0);
+            addLegacy ("stingDetune", -20.0);
+            juce::MemoryBlock legacy;
+            juce::AudioProcessor::copyXmlToBinary (*xml, legacy);
+            SwarmnessAudioProcessor b;
+            b.setStateInformation (legacy.getData(), (int) legacy.getSize());
+            auto v = [&b] (const char* id) { return b.getAPVTS().getRawParameterValue (id)->load(); };
+            check (v (ParamIDs::shiftA) < -11.5f && v (ParamIDs::shiftB) < -23.5f && v (ParamIDs::rbRaw) < 0.5f && std::abs (v (ParamIDs::rbDetune) + 20.0f) < 0.1f,
+                   "old session: DIVE -> SHIFT -12 / -24, STING RAW off and DETUNE -20 ct carried over");
+
+            auto file = juce::File::createTempFile (".swpreset");
+            file.replaceWithText (R"({"name":"Legacy Dive","plugin":"Swarmness","parameters":{"noiseDown":1,"rise":400}})");
+            b.getPresetManager().importPreset (file);
+            check (v (ParamIDs::shiftA) < -11.5f && std::abs (v (ParamIDs::rise) - 400.0f) < 0.5f, "old user preset with DIVE imports as SHIFT -12");
+            b.getPresetManager().deleteUserPreset ("Legacy Dive");
+            file.deleteFile();
+        }
+    }
+
     void testGraphicEq()
     {
         std::printf ("\nCOMB graphic EQ\n");
@@ -1521,6 +1673,8 @@ int main (int argc, char** argv)
     {
         const juce::String which (argv[2]);
         if (which == "chain")   testChainOrder();
+        if (which == "hive")    testHiveBlock();
+        if (which == "magic")   testMagicBounded();
         if (which == "parallel") testParallelRouting();
         if (which == "comb")    testGraphicEq();
         if (which == "carve")   testParametricEq();
@@ -1556,6 +1710,7 @@ int main (int argc, char** argv)
     testStateRoundTrip();
     testPresetDirtyTracking();
     testPresetBanks();
+    testHiveBlock();
     testChainOrder();
     testParallelRouting();
     testGraphicEq();

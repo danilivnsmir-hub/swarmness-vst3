@@ -28,10 +28,10 @@ SwarmnessAudioProcessor::SwarmnessAudioProcessor()
     };
 
     namespace id = ParamIDs;
-    p.oct1 = get (id::oct1);             p.oct2 = get (id::oct2);               p.noiseDown = get (id::noiseDown);
+    p.oct1 = get (id::oct1);             p.oct2 = get (id::oct2);               p.shiftA = get (id::shiftA);  p.shiftB = get (id::shiftB);  p.hiveFollow = get (id::hiveFollow);  p.hivePattern = get (id::hivePattern);
     p.rise = get (id::rise);             p.panic = get (id::panic);             p.chaos = get (id::chaos);
     p.speed = get (id::speed);           p.fall = get (id::fall);               p.stingMix = get (id::stingMix);
-    p.stingRaw = get (id::stingRaw);     p.stingDetune = get (id::stingDetune); p.rbDetune = get (id::rbDetune);     p.rbRaw = get (id::rbRaw);
+    p.rbDetune = get (id::rbDetune);     p.rbRaw = get (id::rbRaw);
     p.rbOn = get (id::rbOn);             p.rbPitch = get (id::rbPitch);         p.rbSnap = get (id::rbSnap);
     p.rbPrimary = get (id::rbPrimary);   p.rbSecondary = get (id::rbSecondary); p.rbTone = get (id::rbTone);
     p.rbTracking = get (id::rbTracking); p.rbMagic = get (id::rbMagic);         p.magicHold = get (id::magicHold);
@@ -101,7 +101,7 @@ void SwarmnessAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBl
     maxBlockSize = juce::jmax (1, samplesPerBlock);
 
     fuzzStage.prepare (sampleRate, maxBlockSize);
-    pitchBlock.prepare (sampleRate, maxBlockSize);
+    hive.prepare (sampleRate, maxBlockSize);
     swarmChorus.prepare (sampleRate);
     flow .prepare (sampleRate);
     comb .prepare (sampleRate);
@@ -146,7 +146,7 @@ void SwarmnessAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBl
 void SwarmnessAudioProcessor::releaseResources()
 {
     fuzzStage.reset();
-    pitchBlock.reset();
+    hive.reset();
     swarmChorus.reset();
     comb.reset();
     carve.reset();
@@ -323,7 +323,7 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     // ---- OUTPUT gain + bypass crossfade
     outputGainSmoothed.setTargetValue (juce::Decibels::decibelsToGain (p.output->load()));
     // (the NOISE return glide after releasing a footswitch is allowed to finish, too)
-    bypassSmoothed.setTargetValue (on (p.bypass) && ! anySwitchHeld && ! pitchBlock.isStingEngaged() ? 1.0f : 0.0f);
+    bypassSmoothed.setTargetValue (on (p.bypass) && ! anySwitchHeld && ! hive.isShiftEngaged() ? 1.0f : 0.0f);
 
     for (int i = 0; i < numSamples; ++i)
     {
@@ -439,38 +439,41 @@ void SwarmnessAudioProcessor::processSmoke (float* const* audio, int numChannels
 
 void SwarmnessAudioProcessor::processPitch (const BlockContext& ctx, float* const* audio, int numChannels, int numSamples) noexcept
 {
-    PitchBlock::Settings s;
-    s.oct1 = ctx.oct1Held;
-    s.oct2 = ctx.oct2Held;
+    HiveBlock::Settings s;
+    s.shiftA = ctx.oct1Held;
+    s.shiftB = ctx.oct2Held;
     s.venom = ctx.magicHeld;
-    s.dive = on (p.noiseDown);
-    s.stingRaw = on (p.stingRaw);
+    s.shiftASemis = std::round (p.shiftA->load());
+    s.shiftBSemis = std::round (p.shiftB->load());
     s.riseMs = p.rise->load();
     s.fallMs = p.fall->load();
-    s.anger = pct (p.panic);
-    s.frenzy = pct (p.chaos);
-    s.buzz = pct (p.speed);
-    s.stingMix = pct (p.stingMix);
-    s.stingDetuneCents = p.stingDetune->load();
+    s.blend = pct (p.stingMix);
 
-    s.hiveOn = on (p.rbOn);
+    s.voicesOn = on (p.rbOn);
     s.snap = on (p.rbSnap);
-    s.hiveRaw = on (p.rbRaw);
+    s.follow = on (p.hiveFollow);
     s.pitchSemis = p.rbPitch->load();
     s.drone = pct (p.rbPrimary);
     s.queen = pct (p.rbSecondary);
-    s.tone = pct (p.rbTone);
     s.tracking = pct (p.rbTracking);
+
     s.trails = pct (p.rbMagic);
-    s.hiveMix = pct (p.rbMix);
-    s.hiveDetuneCents = p.rbDetune->load();
+    s.pattern = (int) p.hivePattern->load();
+    s.tone = pct (p.rbTone);
     s.repeatSeconds = on (p.rbSync) ? (float) (ParamChoices::divisionInBeats ((int) p.rbDiv->load()) * 60.0 / ctx.bpm)
                                     : p.rbTime->load() * 0.001f;
 
-    pitchBlock.setParams (s);
-    pitchBlock.process (audio, numChannels, numSamples);
-    meters.pitchSemitones.store (pitchBlock.getStingSemitones(), std::memory_order_relaxed);
-    meters.noiseEngaged.store (pitchBlock.isStingEngaged(), std::memory_order_relaxed);
+    s.anger = pct (p.panic);
+    s.frenzy = pct (p.chaos);
+    s.buzz = pct (p.speed);
+    s.raw = on (p.rbRaw);
+    s.detuneCents = p.rbDetune->load();
+    s.mix = pct (p.rbMix);
+
+    hive.setParams (s);
+    hive.process (audio, numChannels, numSamples);
+    meters.pitchSemitones.store (hive.getShiftSemitones(), std::memory_order_relaxed);
+    meters.noiseEngaged.store (hive.isShiftEngaged(), std::memory_order_relaxed);
 }
 
 void SwarmnessAudioProcessor::processWings (const BlockContext& ctx, float* const* audio, int numChannels, int numSamples) noexcept
@@ -730,6 +733,14 @@ void SwarmnessAudioProcessor::setStateInformation (const void* data, int sizeInB
                 midiMap[(size_t) t].number.store (v.fromFirstOccurrenceOf (":", false, false).getIntValue());
                 midiMap[(size_t) t].down.store (false);
             }
+            // Sessions from older betas: STING + HIVE became one HIVE block (DIVE, separate RAW / DETUNE).
+            std::map<juce::String, float> legacyValues;
+            for (const auto& child : tree)
+                if (child.hasType ("PARAM"))
+                    legacyValues[child.getProperty ("id").toString()] = (float) child.getProperty ("value", 0.0f);
+            const auto beforeMigration = legacyValues;
+            PresetManager::migrateLegacyValues (legacyValues);
+
             // Sessions from before the chain: SMOKE "POST" becomes SMOKE placed after SWARM.
             const auto legacyPost = tree.getChildWithProperty ("id", ParamIDs::fuzzPostLegacy);
             const bool migrateSmoke = legacyPost.isValid() && (float) legacyPost.getProperty ("value", 0.0f) > 0.5f
@@ -740,6 +751,11 @@ void SwarmnessAudioProcessor::setStateInformation (const void* data, int sizeInB
             if (migrateSmoke)
                 if (auto* slot = apvts.getParameter (Chain::slotIds[Chain::smoke]))
                     slot->setValueNotifyingHost (slot->convertTo0to1 ((float) Chain::legacyPostSmokeSlot));
+
+            for (const auto& [paramId, value] : legacyValues)
+                if (auto it = beforeMigration.find (paramId); it == beforeMigration.end() || std::abs (it->second - value) > 1.0e-6f)
+                    if (auto* param = apvts.getParameter (paramId))
+                        param->setValueNotifyingHost (param->convertTo0to1 (value));
 
             const auto irPath = tree.getProperty ("reverbIR").toString();
             if (irPath.isNotEmpty() && juce::File::isAbsolutePath (irPath) && juce::File (irPath).existsAsFile())

@@ -21,9 +21,10 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
       reverbPage (p),
       presetBar (p.getPresetManager()),
       switchModeSelector (param (state, ParamIDs::switchMode), { "MOMENTARY", "LATCH" }),
+      patternSelector (param (state, ParamIDs::hivePattern), { "LADDER", "BOUNCE", "SCATTER", "REVERSE", "BLOOM" }),
       fuzzVoiceSelector (param (state, ParamIDs::fuzzVoice), { "DOWN", "MID", "UP" }),
-      oct1Switch   (param (state, ParamIDs::oct1),      "+1 OCT", Colours::accent,  false, [this] { return footswitchesMomentary(); }),
-      oct2Switch   (param (state, ParamIDs::oct2),      "+2 OCT", Colours::accent,  false, [this] { return footswitchesMomentary(); }),
+      oct1Switch   (param (state, ParamIDs::oct1),      "SHIFT A", Colours::accent,  false, [this] { return footswitchesMomentary(); }),
+      oct2Switch   (param (state, ParamIDs::oct2),      "SHIFT B", Colours::accent,  false, [this] { return footswitchesMomentary(); }),
       magicSwitch  (param (state, ParamIDs::magicHold), "VENOM",  juce::Colour (0xffb46bff), false, [this] { return footswitchesMomentary(); }),
       bypassSwitch (param (state, ParamIDs::bypass),    "ON",     Colours::ledRed,  true,  nullptr)
 {
@@ -58,36 +59,41 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     infoButton.setTooltip ("Help");
     infoButton.onClick = [this] { infoOverlay.setVisible (true); infoOverlay.toFront (false); };
 
-    // NOISE
-    attachButton (fxPage, downToggle, noiseDown, "DIVE: the octave footswitches shift DOWN (drop-tune) instead of up");
-    attachButton (fxPage, stingRawToggle, stingRaw, "RAW: vintage lo-fi shifter like the pedal - grainy, buzzy octaves. Off = clean modern engine");
-    riseKnob .attach (state, rise,  "RISE: time to glide into the octave when a footswitch goes down");
-    fallKnob .attach (state, fall,  "FALL: time to glide back home when the footswitch is released");
-    panicKnob.attach (state, panic, "ANGER: detunes the shifted signal against a second voice - dissonance, beating, sour clusters");
-    chaosKnob.attach (state, chaos, "FRENZY: random pitch jumps around the octave - wider and faster as you turn it up");
-    speedKnob.attach (state, speed, "BUZZ: all-pass feedback + amplitude modulation - slow phasing up to metallic ring-mod shrieks");
-    stingMixKnob.attach (state, stingMix, "MIX: dry / shifted blend while a footswitch is down (100% = only the octave, like the pedal)");
-    stingDetuneKnob.attach (state, stingDetune, "DETUNE: fine offset of the octave, +-50 cents (a slightly sour octave is nastier)");
-    for (auto* c : std::initializer_list<juce::Component*> { &riseKnob, &fallKnob, &panicKnob, &chaosKnob, &speedKnob, &stingDetuneKnob, &stingMixKnob, &pitchScope })
-        fxPage.addAndMakeVisible (c);
-
-    // RAINBOW
-    attachButton (fxPage, rainbowPower, rbOn, "HIVE harmony section on/off (the VENOM footswitch engages it by itself)");
-    attachButton (fxPage, snapToggle, rbSnap, "Snap PITCH to semitones (off = atonal in-between intervals)");
-    pitchKnob    .attach (state, rbPitch,     "PITCH: DRONE interval, -12..+12 semitones (SNAP = whole semitones). Click the value to type it");
+    // HIVE - SHIFT
+    shiftAKnob.attach (state, shiftA, "SHIFT A: interval of the SHIFT A footswitch, -24..+24 semitones (octaves, fifths, fourths...)");
+    shiftBKnob.attach (state, shiftB, "SHIFT B: interval of the SHIFT B footswitch (it wins while both are held)");
+    riseKnob  .attach (state, rise,   "RISE: time to glide into the interval when a SHIFT footswitch goes down");
+    fallKnob  .attach (state, fall,   "FALL: time to glide back home when the footswitch is released");
+    blendKnob .attach (state, stingMix, "BLEND: how much the shifted note replaces your note while SHIFT is held (100% = only the shifted note, 50% = doubled)");
+    // VOICES
+    attachButton (fxPage, voicesPower, rbOn, "HIVE voices (DRONE / QUEEN + TRAILS) on/off - the VENOM footswitch engages them by itself");
+    attachButton (fxPage, snapToggle, rbSnap, "SNAP: PITCH in whole semitones (off = atonal in-between intervals)");
+    attachButton (fxPage, followToggle, hiveFollow, "FOLLOW: the voices harmonise the SHIFTed note instead of the note you play");
+    pitchKnob    .attach (state, rbPitch,     "PITCH: DRONE interval, -12..+12 semitones (SNAP = whole semitones). Also the step of the TRAILS");
     pitchKnob.setSnap ([this] (double v) { return paramOn (ParamIDs::rbSnap) ? std::round (v) : v; });
-    primaryKnob  .attach (state, rbPrimary,   "DRONE: level of the main harmony voice");
+    primaryKnob  .attach (state, rbPrimary,   "DRONE: level of the main harmony voice (and its trails)");
     secondaryKnob.attach (state, rbSecondary, "QUEEN: a voice one octave from the DRONE (above for up-shifts, below for down)");
-    toneKnob     .attach (state, rbTone,      "Brightness of the voices and of the regeneration loop");
     trackingKnob .attach (state, rbTracking,  "TRACKING: high = tight harmonies, low = lag, long repeating grains and tone clusters");
-    magicKnob    .attach (state, rbMagic,     "TRAILS: repeats of the DRONE, each shifted by PITCH again - even ladders that fade out (the VENOM footswitch pushes it into self-oscillation)");
-    rbTimeKnob   .attach (state, rbTime,      "TIME: time between the TRAILS repeats");
-    rbDetuneKnob .attach (state, rbDetune,    "DETUNE: spreads the voices, DRONE up and QUEEN down by up to 50 cents - doubling / width (works with SNAP)");
-    rbMixKnob    .attach (state, rbMix,       "MIX: dry / HIVE voices. 50% = both at full level, 100% = only the HIVE voices and trails (the STING octave still sounds)");
-    rbDivKnob    .attach (state, rbDiv,       "TIME as a tempo division (SYNC on)");
-    attachButton (fxPage, rbSyncToggle, rbSync, "SYNC: lock the TRAILS repeats to the host tempo");
-    attachButton (fxPage, rbRawToggle, rbRaw, "RAW: vintage FV-1-style shifter - warbly, dark, gritty voices; TRACKING sets its window. Off = clean modern engine");
-    for (auto* c : std::initializer_list<juce::Component*> { &pitchKnob, &primaryKnob, &secondaryKnob, &toneKnob, &trackingKnob, &magicKnob, &rbTimeKnob, &rbMixKnob, &rbDetuneKnob })
+    // TRAILS
+    magicKnob .attach (state, rbMagic, "TRAILS: repeats of the DRONE, moved by PITCH as the PATTERN says (the VENOM footswitch pushes them into self-oscillation)");
+    rbTimeKnob.attach (state, rbTime,  "TIME: time between the repeats");
+    rbDivKnob .attach (state, rbDiv,   "TIME as a tempo division (SYNC on)");
+    toneKnob  .attach (state, rbTone,  "TONE: brightness of the voices and the trails");
+    attachButton (fxPage, rbSyncToggle, rbSync, "SYNC: lock the repeats to the host tempo");
+    patternSelector.setTooltip ("PATTERN - how the repeats move: LADDER = one more PITCH step each time, BOUNCE = flip between the voice and your note, "
+                                "SCATTER = random chord tones, REVERSE = backwards repeats, BLOOM = diffused swelling cloud");
+    // MANGLE
+    panicKnob.attach (state, panic, "ANGER: sour second voices detuned against the shifted note and the harmonies - beating, dissonant clusters");
+    chaosKnob.attach (state, chaos, "FRENZY: random pitch jumps of everything HIVE adds - wider and faster as you turn it up");
+    speedKnob.attach (state, speed, "BUZZ: all-pass feedback + amplitude modulation on everything HIVE adds - slow phasing up to ring-mod shrieks");
+    rbDetuneKnob.attach (state, rbDetune, "DETUNE: +-50 cents - a sour SHIFT, and DRONE up / QUEEN down for width");
+    rbMixKnob.attach (state, rbMix, "MIX: dry / HIVE voices. 50% = both at full level, 100% = only the voices and trails (a held SHIFT still sounds)");
+    attachButton (fxPage, rbRawToggle, rbRaw, "RAW: cheap-pedal-DSP character for every HIVE voice - warble, rough splices, lo-fi converters. Off = clean modern engine");
+
+    for (auto* c : std::initializer_list<juce::Component*> { &shiftAKnob, &shiftBKnob, &riseKnob, &fallKnob, &blendKnob,
+                                                             &pitchKnob, &primaryKnob, &secondaryKnob, &trackingKnob,
+                                                             &magicKnob, &rbTimeKnob, &toneKnob, &patternSelector,
+                                                             &panicKnob, &chaosKnob, &speedKnob, &rbDetuneKnob, &rbMixKnob })
         fxPage.addAndMakeVisible (c);
     fxPage.addChildComponent (rbDivKnob);
 
@@ -134,8 +140,8 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     addAndMakeVisible (volumeKnob);
 
     // Footswitches
-    oct1Switch  .setTooltip ("+1 octave (hold, or click in LATCH mode) - works even while the plug-in is bypassed. Right-click: MIDI learn");
-    oct2Switch  .setTooltip ("+2 octaves (hold, or click in LATCH mode) - works even while the plug-in is bypassed. Right-click: MIDI learn");
+    oct1Switch  .setTooltip ("SHIFT A: transposes by the SHIFT A interval (hold, or click in LATCH mode) - works even while the plug-in is bypassed. Right-click: MIDI learn");
+    oct2Switch  .setTooltip ("SHIFT B: transposes by the SHIFT B interval (wins over A) - works even while the plug-in is bypassed. Right-click: MIDI learn");
     magicSwitch .setTooltip ("VENOM: slams the regeneration into self-oscillation - works even with HIVE or the plug-in switched off. LINK switches bring the octaves along. Right-click: MIDI learn");
     bypassSwitch.setTooltip ("Plug-in on / bypass. The octave and VENOM footswitches still work while bypassed, like momentary pedals. Right-click: MIDI learn");
     // MIDI learn: right-click a footswitch
@@ -159,8 +165,8 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
             };
         }
     }
-    attachButton (*this, link1Switch, linkOct1, "LINK: pressing VENOM also engages +1 OCT");
-    attachButton (*this, link2Switch, linkOct2, "LINK: pressing VENOM also engages +2 OCT");
+    attachButton (*this, link1Switch, linkOct1, "LINK: pressing VENOM also engages SHIFT A");
+    attachButton (*this, link2Switch, linkOct2, "LINK: pressing VENOM also engages SHIFT B");
     for (auto* c : std::initializer_list<juce::Component*> { &oct1Switch, &oct2Switch, &magicSwitch, &bypassSwitch, &inMeter, &outMeter })
         addAndMakeVisible (c);
 
@@ -238,8 +244,7 @@ void MainPanel::resized()
     fxPage.setBounds (getLocalBounds());
 
     // FX page section areas
-    noiseArea   = { 16.0f,  144.0f, 536.0f, 262.0f };
-    rainbowArea = { 564.0f, 144.0f, 520.0f, 262.0f };
+    hiveArea = { 16.0f, 144.0f, (float) baseWidth - 32.0f, 262.0f };
     const float rowY = 418.0f, rowH = 190.0f;
     swarmArea  = { 16.0f,  rowY, 250.0f, rowH };
     fuzzArea   = { 278.0f, rowY, 500.0f, rowH };
@@ -248,35 +253,50 @@ void MainPanel::resized()
     auto powerFor = [] (juce::Rectangle<float> a) { return juce::Rectangle<int> ((int) a.getRight() - 40, (int) a.getY() + 8, 26, 26); };
     auto pillFor  = [] (juce::Rectangle<float> a, int slot) { return juce::Rectangle<int> ((int) a.getRight() - 40 - 66 * (slot + 1), (int) a.getY() + 9, 60, 24); };
 
-    // NOISE
-    downToggle.setBounds ((int) noiseArea.getRight() - 16 - 70, (int) noiseArea.getY() + 9, 70, 24);
-    stingRawToggle.setBounds (downToggle.getX() - 6 - 64, (int) noiseArea.getY() + 9, 64, 24);
+    // HIVE: four sections side by side, two rows of knobs each
     {
-        const int y = (int) noiseArea.getY() + 44;
-        int x = (int) noiseArea.getX() + 10;
-        for (auto* k : { &riseKnob, &fallKnob, &panicKnob, &chaosKnob, &speedKnob, &stingDetuneKnob, &stingMixKnob })
+        const float widths[4] { 262.0f, 262.0f, 272.0f, 0.0f };
+        float x = hiveArea.getX();
+        for (int i = 0; i < 4; ++i)
         {
-            k->setBounds (x, y, 74, 106);
-            x += 74;
+            const float w = i < 3 ? widths[i] : hiveArea.getRight() - x;
+            hiveSections[(size_t) i] = { x, hiveArea.getY(), w, hiveArea.getHeight() };
+            x += w;
         }
-        pitchScope.setBounds ((int) noiseArea.getX() + 16, (int) noiseArea.getY() + 160, (int) noiseArea.getWidth() - 32, 88);
-    }
+        const int y1 = (int) hiveArea.getY() + 58, y2 = (int) hiveArea.getY() + 158, kw = 78, kh = 100;
+        auto row = [&] (juce::Rectangle<float> sec, int y, std::initializer_list<juce::Component*> comps, int slots = 3)
+        {
+            const int gap = ((int) sec.getWidth() - kw * slots) / (slots + 1);
+            int cx = (int) sec.getX() + gap;
+            for (auto* c : comps)
+            {
+                if (c != nullptr)
+                    c->setBounds (cx, y, kw, kh);
+                cx += kw + gap;
+            }
+        };
+        const auto& shiftSec = hiveSections[0];
+        const auto& voiceSec = hiveSections[1];
+        const auto& trailSec = hiveSections[2];
+        const auto& mangleSec = hiveSections[3];
 
-    // RAINBOW
-    rainbowPower.setBounds (powerFor (rainbowArea));
-    snapToggle.setBounds (pillFor (rainbowArea, 0));
-    rbSyncToggle.setBounds (pillFor (rainbowArea, 1));
-    rbRawToggle.setBounds (pillFor (rainbowArea, 2));
-    {
-        const int y1 = (int) rainbowArea.getY() + 40, y2 = (int) rainbowArea.getY() + 148;
-        int x0 = (int) rainbowArea.getX() + 12, i = 0;
-        for (auto* k : { &pitchKnob, &rbDetuneKnob, &primaryKnob, &secondaryKnob, &rbMixKnob })
-            k->setBounds (x0 + 100 * i++, y1, 96, 106);
-        x0 = (int) rainbowArea.getX() + 20;
-        i = 0;
-        for (auto* k : { &toneKnob, &trackingKnob, &magicKnob, &rbTimeKnob })
-            k->setBounds (x0 + 122 * i++, y2, 100, 106);
+        row (shiftSec, y1, { &shiftAKnob, &shiftBKnob }, 2);
+        row (shiftSec, y2, { &riseKnob, &fallKnob, &blendKnob });
+
+        voicesPower.setBounds ((int) voiceSec.getRight() - 40, (int) voiceSec.getY() + 36, 24, 24);
+        row (voiceSec, y1, { &pitchKnob, &primaryKnob, &secondaryKnob });
+        row (voiceSec, y2, { &trackingKnob, nullptr, nullptr });
+        snapToggle  .setBounds ((int) voiceSec.getX() + 112, y2 + 22, 64, 24);
+        followToggle.setBounds ((int) voiceSec.getX() + 182, y2 + 22, 72, 24);
+
+        rbSyncToggle.setBounds ((int) trailSec.getRight() - 12 - 60, (int) trailSec.getY() + 36, 60, 22);
+        row (trailSec, y1, { &magicKnob, &rbTimeKnob, &toneKnob });
         rbDivKnob.setBounds (rbTimeKnob.getBounds());
+        patternSelector.setBounds ((int) trailSec.getX() + 12, y2 + 30, (int) trailSec.getWidth() - 24, 26);
+
+        rbRawToggle.setBounds ((int) mangleSec.getRight() - 16 - 60, (int) mangleSec.getY() + 36, 60, 22);
+        row (mangleSec, y1, { &panicKnob, &chaosKnob, &speedKnob });
+        row (mangleSec, y2, { &rbDetuneKnob, &rbMixKnob }, 2);
     }
 
     auto threeKnobs = [] (juce::Rectangle<float> a, std::initializer_list<Knob*> knobs)
@@ -417,21 +437,38 @@ void MainPanel::paintBackdrop (juce::Graphics& g)
     if (currentPage != fxPageIndex)
         return;
 
-    for (auto a : { noiseArea, rainbowArea, swarmArea, fuzzArea, flowArea })
+    for (auto a : { hiveArea, swarmArea, fuzzArea, flowArea })
         drawPanel (g, a);
 
     auto titleRow = [] (juce::Rectangle<float> a) { return a.reduced (16.0f, 0.0f).withTrimmedTop (8.0f).withHeight (26.0f); };
 
-    drawSectionTitle (g, titleRow (noiseArea),   "STING",   lastSectionStates[0]);
-    drawSectionTitle (g, titleRow (rainbowArea), "HIVE",    lastSectionStates[1]);
+    drawSectionTitle (g, titleRow (hiveArea),    "HIVE",    lastSectionStates[0]);
+    g.setFont (font (12.5f, true));
+    g.setColour (Colours::textFaint);
+    g.drawText ("destructive pitch-delay  -  hold SHIFT A / B below, stomp VENOM", titleRow (hiveArea).withTrimmedLeft (86.0f),
+                juce::Justification::centredLeft, false);
+
+    // HIVE sections: small headings and separators
+    static const char* sectionNames[] { "SHIFT", "VOICES", "TRAILS", "MANGLE" };
+    for (size_t i = 0; i < hiveSections.size(); ++i)
+    {
+        const auto& sec = hiveSections[i];
+        if (i > 0)
+        {
+            g.setGradientFill (juce::ColourGradient (Colours::panelBorder.withAlpha (0.0f), sec.getX(), sec.getY() + 36.0f,
+                                                     Colours::panelBorder, sec.getX(), sec.getBottom() - 20.0f, false));
+            g.fillRect (juce::Rectangle<float> (sec.getX() - 0.5f, sec.getY() + 40.0f, 1.0f, sec.getHeight() - 52.0f));
+        }
+        const bool lit = i == 1 ? lastSectionStates[1] : lastSectionStates[0];
+        g.setFont (displayFont (16.0f));
+        g.setColour (lit ? Colours::accent : Colours::textDim);
+        g.drawText (sectionNames[i], juce::Rectangle<float> (sec.getX() + 16.0f, sec.getY() + 36.0f, 120.0f, 22.0f),
+                    juce::Justification::centredLeft, false);
+    }
     drawSectionTitle (g, titleRow (swarmArea),   "SWARM",   lastSectionStates[2]);
     drawSectionTitle (g, titleRow (fuzzArea),    "SMOKE",   lastSectionStates[3]);
     drawSectionTitle (g, titleRow (flowArea),    "WINGS",   lastSectionStates[4]);
 
-    g.setFont (font (12.5f, true));
-    g.setColour (Colours::textFaint);
-    g.drawText ("hold the footswitches below", titleRow (noiseArea).withTrimmedLeft (98.0f),
-                juce::Justification::centredLeft, false);
 }
 
 //==============================================================================
@@ -447,7 +484,17 @@ void MainPanel::tick()
     const bool venom = paramOn (ParamIDs::magicHold);
     oct1Switch.setLitExternally (venom && paramOn (ParamIDs::linkOct1));
     oct2Switch.setLitExternally (venom && paramOn (ParamIDs::linkOct2));
-    pitchScope.push (meters.pitchSemitones.load(), noiseOn);
+
+    // Footswitch captions follow the SHIFT intervals
+    const int a = juce::roundToInt (state.getRawParameterValue (ParamIDs::shiftA)->load());
+    const int b = juce::roundToInt (state.getRawParameterValue (ParamIDs::shiftB)->load());
+    if (a != lastShiftA || b != lastShiftB)
+    {
+        lastShiftA = a;
+        lastShiftB = b;
+        oct1Switch.setCaption (ParamChoices::shiftCaption (a));
+        oct2Switch.setCaption (ParamChoices::shiftCaption (b));
+    }
 
     presetBar.refresh();
     chainStrip.refresh();
@@ -466,11 +513,12 @@ void MainPanel::tick()
     rbTimeKnob.setVisible (! hiveSynced);
     rbDivKnob.setVisible (hiveSynced);
 
-    const std::array<bool, 5> states { noiseOn, paramOn (ParamIDs::rbOn), paramOn (ParamIDs::swarmOn),
+    const bool voicesOn = paramOn (ParamIDs::rbOn) || venom;
+    const std::array<bool, 5> states { noiseOn || voicesOn, voicesOn, paramOn (ParamIDs::swarmOn),
                                        paramOn (ParamIDs::fuzzOn), paramOn (ParamIDs::flowOn) };
 
-    setSectionDimmed ({ &snapToggle, &rbSyncToggle, &rbRawToggle, &pitchKnob, &primaryKnob, &secondaryKnob, &toneKnob, &trackingKnob,
-                        &magicKnob, &rbTimeKnob, &rbDivKnob, &rbMixKnob, &rbDetuneKnob }, ! states[1]);
+    setSectionDimmed ({ &snapToggle, &followToggle, &rbSyncToggle, &pitchKnob, &primaryKnob, &secondaryKnob, &toneKnob, &trackingKnob,
+                        &magicKnob, &rbTimeKnob, &rbDivKnob, &patternSelector }, ! states[1]);
     setSectionDimmed ({ &deepToggle, &swarmDepthKnob, &swarmRateKnob, &swarmMixKnob }, ! states[2]);
     setSectionDimmed ({ &fuzzVoiceSelector, &fuzzKnob, &fuzzToneKnob, &fuzzScoopKnob,
                         &fuzzGlareKnob, &fuzzGateKnob, &fuzzSagKnob, &fuzzBlendKnob }, ! states[3]);

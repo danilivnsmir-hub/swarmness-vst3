@@ -885,14 +885,12 @@ void InfoOverlay::paint (juce::Graphics& g)
     struct Item { const char* title; const char* body; };
     static const Item items[] =
     {
-        { "STING",    "Hold +1 OCT / +2 OCT (or latch them) for a violent octave. RISE = glide in, FALL = glide back on release. ANGER = detuned dissonance, "
-                      "FRENZY = random pitch jumps, BUZZ = all-pass feedback + ring-mod-like AM, DETUNE = +-50 ct, MIX = dry / octave blend. DIVE = shift down." },
-        { "RAW",      "STING and HIVE: lo-fi pedal character on top of the in-tune shifter - cheap converters and a slow pitch warble "
-                      "(deeper at low TRACKING in HIVE). Off = clean. HIVE runs in parallel: it harmonises the note you play, not the octave." },
-        { "HIVE",     "Harmony voices: PITCH (-12..+12 st, SNAP = semitones), DRONE = main voice, QUEEN = its octave, TONE. TRACKING low = lag "
-                      "and tone clusters. TRAILS = repeats climbing / falling by PITCH, TIME = their spacing (SYNC = tempo). MIX 100% = HIVE only." },
-        { "VENOM",    "The VENOM footswitch pushes the TRAILS into self-oscillation - even with HIVE or the plug-in off. "
-                      "LINK mini switches next to the octaves make VENOM engage +1 / +2 OCT too." },
+        { "HIVE",     "Destructive pitch-delay in four sections. SHIFT: hold SHIFT A / B (any interval, -24..+24 st) - RISE / FALL glide, BLEND = replace or double. "
+                      "VOICES: DRONE at PITCH and QUEEN (its octave), TRACKING tight..laggy, FOLLOW = harmonise the shifted note." },
+        { "TRAILS",   "Repeats of the DRONE; PATTERN: LADDER (one more PITCH step each), BOUNCE (voice <-> note trill), SCATTER (random chord tones), "
+                      "REVERSE (backwards), BLOOM (swelling cloud). TIME / SYNC, TONE. The VENOM footswitch = self-oscillation; LINK drags SHIFT A / B in." },
+        { "MANGLE",   "Acts on everything HIVE adds: ANGER = sour detuned voices, FRENZY = random pitch jumps, BUZZ = all-pass + ring-mod AM, "
+                      "RAW = cheap-pedal-DSP character, DETUNE = fine offset / width, MIX = dry vs voices (100% = voices only)." },
         { "SWARM",    "Stereo chorus with bucket-brigade colour. DEEP = 8 voices with feedback. MIX 50% = dry and chorus both full, 100% = vibrato." },
         { "SMOKE",    "Jumbo fuzz. VOICE: DOWN doom / MID / UP scream. SCOOP = mid cut, GLARE = gated octave-up, GATE = starved sputter, SAG = breathing "
                       "(the pick sags, the note blooms), BLEND = clean under the fuzz." },

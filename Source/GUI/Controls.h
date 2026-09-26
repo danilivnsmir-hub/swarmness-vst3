@@ -127,6 +127,9 @@ public:
     void mouseDown (const juce::MouseEvent&) override;
     void mouseUp (const juce::MouseEvent&) override;
 
+    /** Changes the printed caption (e.g. the SHIFT interval). */
+    void setCaption (const juce::String& c) { if (c != caption) { caption = c; repaint(); } }
+
     /** Lights the LED although the parameter is off (e.g. engaged through a LINK switch). */
     void setLitExternally (bool shouldBeLit);
 

@@ -50,31 +50,31 @@ namespace swarmness::bench
         list.push_back ({ "idle (nothing engaged)", idle });
 
         P oct = idle;
-        oct.oct1 = true;
-        list.push_back ({ "STING +1 OCT (RAW)", oct });
+        oct.shiftA = true;
+        list.push_back ({ "SHIFT A +1 OCT (RAW)", oct });
 
         P angry = idle;
-        angry.oct2 = true;
-        angry.pitch.anger = 0.8f; angry.pitch.frenzy = 0.5f; angry.pitch.buzz = 0.5f;
-        list.push_back ({ "STING +2 OCT + ANGER/FRENZY/BUZZ", angry });
+        angry.shiftB = true;
+        angry.hive.anger = 0.8f; angry.hive.frenzy = 0.5f; angry.hive.buzz = 0.5f;
+        list.push_back ({ "SHIFT B +2 OCT + ANGER/FRENZY/BUZZ", angry });
 
         P hive = idle;
-        hive.pitch.hiveOn = true; hive.pitch.drone = 0.6f; hive.pitch.queen = 0.4f; hive.pitch.trails = 0.6f;
-        list.push_back ({ "HIVE (RAW) DRONE+QUEEN, TRAILS 60%", hive });
+        hive.hive.voicesOn = true; hive.hive.drone = 0.6f; hive.hive.queen = 0.4f; hive.hive.trails = 0.6f;
+        list.push_back ({ "VOICES (RAW) DRONE+QUEEN, TRAILS 60%", hive });
 
         P hiveClean = hive;
-        hiveClean.pitch.hiveRaw = false;
-        list.push_back ({ "HIVE (clean engine) DRONE+QUEEN, TRAILS", hiveClean });
+        hiveClean.hive.raw = false;
+        list.push_back ({ "VOICES (clean engine) DRONE+QUEEN, TRAILS", hiveClean });
 
         P swarm = idle;
         swarm.swarmOn = true; swarm.swarmDeep = true; swarm.swarmDepth = 0.8f;
         list.push_back ({ "SWARM DEEP only", swarm });
 
         P worst = angry;
-        worst.pitch.hiveOn = true; worst.pitch.drone = 0.6f; worst.pitch.queen = 0.5f; worst.pitch.trails = 0.8f;
+        worst.hive.voicesOn = true; worst.hive.drone = 0.6f; worst.hive.queen = 0.5f; worst.hive.trails = 0.8f;
         worst.venom = true;
         worst.swarmOn = true; worst.swarmDeep = true; worst.swarmDepth = 0.8f;
-        list.push_back ({ "WORST CASE: STING +2 mangled + HIVE + VENOM + SWARM DEEP", worst });
+        list.push_back ({ "WORST CASE: SHIFT +2 mangled + VOICES + VENOM + SWARM DEEP", worst });
         return list;
     }
 

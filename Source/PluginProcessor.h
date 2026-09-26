@@ -2,7 +2,7 @@
 
 #include <JuceHeader.h>
 #include "Parameters.h"
-#include "DSP/PitchBlock.h"
+#include "DSP/HiveBlock.h"
 #include "DSP/FuzzStage.h"
 #include "DSP/SwarmChorus.h"
 #include "DSP/FlowGate.h"
@@ -118,9 +118,9 @@ private:
     // Parameters (cached raw pointers - lock-free reads on the audio thread)
     struct Params
     {
-        std::atomic<float>* oct1 {};       std::atomic<float>* oct2 {};        std::atomic<float>* noiseDown {};
+        std::atomic<float>* oct1 {};       std::atomic<float>* oct2 {};        std::atomic<float>* shiftA {};    std::atomic<float>* shiftB {};  std::atomic<float>* hiveFollow {}; std::atomic<float>* hivePattern {};
         std::atomic<float>* rise {};       std::atomic<float>* panic {};       std::atomic<float>* chaos {};
-        std::atomic<float>* speed {};      std::atomic<float>* fall {};        std::atomic<float>* stingMix {};    std::atomic<float>* stingRaw {};    std::atomic<float>* stingDetune {}; std::atomic<float>* rbDetune {};    std::atomic<float>* rbRaw {};
+        std::atomic<float>* speed {};      std::atomic<float>* fall {};        std::atomic<float>* stingMix {};    std::atomic<float>* rbDetune {};    std::atomic<float>* rbRaw {};
         std::atomic<float>* rbOn {};       std::atomic<float>* rbPitch {};     std::atomic<float>* rbSnap {};
         std::atomic<float>* rbPrimary {};  std::atomic<float>* rbSecondary {}; std::atomic<float>* rbTone {};
         std::atomic<float>* rbTracking {}; std::atomic<float>* rbMagic {};     std::atomic<float>* magicHold {};
@@ -164,7 +164,7 @@ private:
 
     // The blocks (each once; the order comes from the chain slot parameters)
     FuzzStage          fuzzStage;
-    PitchBlock         pitchBlock;   // STING || HIVE
+    HiveBlock          hive;          // SHIFT + VOICES + TRAILS + MANGLE
     SwarmChorus        swarmChorus;
     FlowGate           flow;
     swarm::GraphicEq    comb;

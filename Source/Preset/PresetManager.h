@@ -48,12 +48,16 @@ public:
 
     static juce::File getPresetsDirectory();
 
+    using ValueMap = std::map<juce::String, float>;
+
+    /** Brings values saved by older versions up to date (also used for restored sessions). */
+    static void migrateLegacyValues (ValueMap& values);
+
     /** Non-parameter data stored with user presets (the CRYPT impulse response path). */
     std::function<void (juce::DynamicObject&)> onSaveExtras;
     std::function<void (const juce::var&)> onLoadExtras;
 
 private:
-    using ValueMap = std::map<juce::String, float>;
 
     void initialiseFactoryPresets();
     void applyValues (const ValueMap& values, bool resetOthersToDefault);
@@ -64,7 +68,6 @@ private:
 
     juce::var toJson (const juce::String& name, const ValueMap& values) const;
     static bool fromJson (const juce::var& json, juce::String& name, ValueMap& values);
-    static void migrate (ValueMap& values);
 
     juce::AudioProcessorValueTreeState& apvts;
     struct FactoryPreset

@@ -63,10 +63,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     Layout layout;
 
     // ------------------------------------------------------------------ NOISE
-    auto noise = std::make_unique<Group> ("noise", "Sting", "|");
-    noise->addChild (toggle (oct1, "+1 Octave", false));
-    noise->addChild (toggle (oct2, "+2 Octaves", false));
-    noise->addChild (toggle (noiseDown, "Sting Dive", false));
+    auto hive = std::make_unique<Group> ("hive", "Hive", "|");
+    auto intervalParam = [] (const char* id, const juce::String& name, int def)
+    {
+        return std::make_unique<juce::AudioParameterInt> (
+            pid (id), name, -24, 24, def,
+            juce::AudioParameterIntAttributes().withLabel ("st").withStringFromValueFunction ([] (int v, int) { return ParamChoices::intervalName (v); }));
+    };
     auto glideTime = [] (const char* id, const juce::String& name)
     {
         return std::make_unique<juce::AudioParameterFloat> (
@@ -76,52 +79,57 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
                 return v >= 1000.0f ? juce::String (v / 1000.0f, 2) + " s" : juce::String (juce::roundToInt (v)) + " ms";
             }));
     };
-    noise->addChild (glideTime (rise, "Rise"));
-    noise->addChild (glideTime (fall, "Fall"));
-    noise->addChild (percent (panic, "Anger", 0.0f));
-    noise->addChild (percent (chaos, "Frenzy", 0.0f));
-    noise->addChild (percent (speed, "Buzz", 0.0f));
-    noise->addChild (percent (stingMix, "Sting Mix", 100.0f));
-    noise->addChild (cents (stingDetune, "Sting Detune"));
-    noise->addChild (toggle (stingRaw, "Sting Raw", true));
 
-    // ---------------------------------------------------------------- RAINBOW
-    auto rainbow = std::make_unique<Group> ("rainbow", "Hive", "|");
-    rainbow->addChild (toggle (rbOn, "Hive On", false));
-    rainbow->addChild (std::make_unique<juce::AudioParameterFloat> (
+    // SHIFT
+    hive->addChild (toggle (oct1, "Shift A (footswitch)", false));
+    hive->addChild (toggle (oct2, "Shift B (footswitch)", false));
+    hive->addChild (intervalParam (shiftA, "Shift A Interval", 12));
+    hive->addChild (intervalParam (shiftB, "Shift B Interval", 24));
+    hive->addChild (glideTime (rise, "Rise"));
+    hive->addChild (glideTime (fall, "Fall"));
+    hive->addChild (percent (stingMix, "Shift Blend", 100.0f));
+
+    // VOICES
+    hive->addChild (toggle (rbOn, "Hive Voices On", false));
+    hive->addChild (std::make_unique<juce::AudioParameterFloat> (
         pid (rbPitch), "Hive Pitch", juce::NormalisableRange<float> (-12.0f, 12.0f, 0.01f), 7.0f,
         Attr().withLabel ("st").withStringFromValueFunction ([] (float v, int)
         {
             // Whole semitones also show the interval name
-            static const char* names[] = { "unison", "m2", "M2", "m3", "M3", "4th", "tritone", "5th", "m6", "M6", "m7", "M7", "oct" };
             const float r = std::round (v);
             if (std::abs (v - r) < 0.005f)
-            {
-                const int st = (int) r;
-                return (st > 0 ? "+" : "") + juce::String (st) + " " + names[std::abs (st)];
-            }
+                return ParamChoices::intervalName ((int) r);
             return (v > 0.0f ? "+" : "") + juce::String (v, 2) + " st";
         })));
-    rainbow->addChild (toggle (rbSnap, "Hive Snap", true));
-    rainbow->addChild (toggle (rbRaw, "Hive Raw", true));
-    rainbow->addChild (percent (rbPrimary, "Drone", 60.0f));
-    rainbow->addChild (percent (rbSecondary, "Queen", 0.0f));
-    rainbow->addChild (percent (rbTone, "Hive Tone", 60.0f));
-    rainbow->addChild (percent (rbTracking, "Hive Tracking", 80.0f));
-    rainbow->addChild (cents (rbDetune, "Hive Detune"));
-    rainbow->addChild (percent (rbMix, "Hive Mix", 50.0f));
-    rainbow->addChild (percent (rbMagic, "Hive Trails", 0.0f));
-    rainbow->addChild (std::make_unique<juce::AudioParameterFloat> (
+    hive->addChild (toggle (rbSnap, "Hive Snap", true));
+    hive->addChild (percent (rbPrimary, "Drone", 60.0f));
+    hive->addChild (percent (rbSecondary, "Queen", 0.0f));
+    hive->addChild (percent (rbTracking, "Hive Tracking", 80.0f));
+    hive->addChild (toggle (hiveFollow, "Hive Follow Shift", false));
+
+    // TRAILS
+    hive->addChild (percent (rbMagic, "Hive Trails", 0.0f));
+    hive->addChild (std::make_unique<juce::AudioParameterChoice> (pid (hivePattern), "Hive Pattern", ParamChoices::hivePatterns, 0));
+    hive->addChild (std::make_unique<juce::AudioParameterFloat> (
         pid (rbTime), "Hive Time", skewedRange (40.0f, 1200.0f, 250.0f, 1.0f), 180.0f,
         Attr().withLabel ("ms").withStringFromValueFunction ([] (float v, int)
         {
             return v >= 1000.0f ? juce::String (v / 1000.0f, 2) + " s" : juce::String (juce::roundToInt (v)) + " ms";
         })));
-    rainbow->addChild (toggle (rbSync, "Hive Sync", false));
-    rainbow->addChild (std::make_unique<juce::AudioParameterChoice> (pid (rbDiv), "Hive Division", ParamChoices::divisions, 3));
-    rainbow->addChild (toggle (magicHold, "Venom Switch", false));
-    rainbow->addChild (toggle (linkOct1, "Venom Links +1 Oct", false));
-    rainbow->addChild (toggle (linkOct2, "Venom Links +2 Oct", false));
+    hive->addChild (toggle (rbSync, "Hive Sync", false));
+    hive->addChild (std::make_unique<juce::AudioParameterChoice> (pid (rbDiv), "Hive Division", ParamChoices::divisions, 3));
+    hive->addChild (percent (rbTone, "Hive Tone", 60.0f));
+    hive->addChild (toggle (magicHold, "Venom (footswitch)", false));
+    hive->addChild (toggle (linkOct1, "Venom Links Shift A", false));
+    hive->addChild (toggle (linkOct2, "Venom Links Shift B", false));
+
+    // MANGLE
+    hive->addChild (percent (panic, "Anger", 0.0f));
+    hive->addChild (percent (chaos, "Frenzy", 0.0f));
+    hive->addChild (percent (speed, "Buzz", 0.0f));
+    hive->addChild (toggle (rbRaw, "Hive Raw", true));
+    hive->addChild (cents (rbDetune, "Hive Detune"));
+    hive->addChild (percent (rbMix, "Hive Mix", 50.0f));
 
     // ------------------------------------------------------------------ SWARM
     auto swarm = std::make_unique<Group> ("swarm", "Swarm", "|");
@@ -263,7 +271,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     out->addChild (std::make_unique<juce::AudioParameterChoice> (pid (switchMode), "Footswitch Mode", ParamChoices::switchModes, 0));
     out->addChild (toggle (bypass, "Bypass", false));
 
-    layout.add (std::move (noise), std::move (rainbow), std::move (swarm), std::move (fz), std::move (flow),
+    layout.add (std::move (hive), std::move (swarm), std::move (fz), std::move (flow),
                 std::move (comb), std::move (carve), std::move (crypt), std::move (chain), std::move (out));
     return layout;
 }

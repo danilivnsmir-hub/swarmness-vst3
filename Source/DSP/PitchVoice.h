@@ -73,12 +73,12 @@ class PitchVoice
 public:
     static constexpr int kMaxChunk = 64;
 
-    void prepare (double sr, int numChannels)
+    void prepare (const ShiftRing& ring)
     {
-        sampleRate = sr;
-        shifter.prepare (sr, numChannels);
-        lofi.prepare (sr);
-        warbleSmoother.setTime (sr / kMaxChunk, 0.08);
+        sampleRate = ring.sampleRate;
+        shifter.prepare (ring);
+        lofi.prepare (sampleRate);
+        warbleSmoother.setTime (sampleRate / kMaxChunk, 0.08);
         rawMix = rawTarget ? 1.0f : 0.0f;
         applyTightness();
     }
@@ -105,7 +105,8 @@ public:
     }
     bool isRaw() const noexcept                      { return rawMix > 0.5f; }
 
-    void process (float* const* channels, int numChannels, int numSamples, float ratioStart, float ratioEnd) noexcept
+    /** Shifts the ring's chunk starting at 'base' into out (numSamples per channel). */
+    void process (float* const* out, int numChannels, int numSamples, int base, float ratioStart, float ratioEnd) noexcept
     {
         numChannels = sw::jmin (numChannels, 2);
         for (int start = 0; start < numSamples; start += kMaxChunk)
@@ -113,8 +114,8 @@ public:
             const int n = sw::jmin (kMaxChunk, numSamples - start);
             const float r0 = ratioStart + (ratioEnd - ratioStart) * (float) start / (float) numSamples;
             const float r1 = ratioStart + (ratioEnd - ratioStart) * (float) (start + n) / (float) numSamples;
-            float* sub[2] = { channels[0] + start, channels[numChannels > 1 ? 1 : 0] + start };
-            processChunk (sub, numChannels, n, r0, r1);
+            float* sub[2] = { out[0] + start, out[numChannels > 1 ? 1 : 0] + start };
+            processChunk (sub, numChannels, n, base + start, r0, r1);
         }
     }
 
@@ -124,7 +125,7 @@ private:
         shifter.setTightness (rawTarget ? tightness * (1.0f - 0.45f * roughness) : tightness);
     }
 
-    void processChunk (float* const* ch, int numChannels, int n, float r0, float r1) noexcept
+    void processChunk (float* const* ch, int numChannels, int n, int base, float r0, float r1) noexcept
     {
         const float step = (float) n / (float) (0.03 * sampleRate);
         const float mixStart = rawMix;
@@ -140,7 +141,7 @@ private:
         }
         const float cents = warbleSmoother.process (warbleTarget) * mixEnd;
         const float w = std::pow (2.0f, cents / 1200.0f);
-        shifter.process (ch, numChannels, n, r0 * lastWarble, r1 * w);
+        shifter.process (ch, numChannels, n, base, r0 * lastWarble, r1 * w);
         lastWarble = w;
 
         if (mixStart <= 0.0f && mixEnd <= 0.0f)

@@ -58,18 +58,16 @@ private:
     SegmentedChoice switchModeSelector;
     juce::TextButton infoButton { "?" };
 
-    // STING (internally "noise")
-    PillToggle downToggle { "DIVE" }, stingRawToggle { "RAW" };
-    Knob riseKnob { "RISE" }, fallKnob { "FALL" }, panicKnob { "ANGER" }, chaosKnob { "FRENZY" }, speedKnob { "BUZZ" };
-    Knob stingMixKnob { "MIX" }, stingDetuneKnob { "DETUNE", true };
-    PitchScope pitchScope;
-
-    // HIVE (internally "rainbow")
-    PowerButton rainbowPower;
-    PillToggle snapToggle { "SNAP" }, rbSyncToggle { "SYNC" }, rbRawToggle { "RAW" };
-    Knob pitchKnob { "PITCH", true }, primaryKnob { "DRONE" }, secondaryKnob { "QUEEN" }, rbMixKnob { "MIX" }, rbDetuneKnob { "DETUNE", true };
-    Knob toneKnob { "TONE" }, trackingKnob { "TRACKING" }, magicKnob { "TRAILS" };
-    Knob rbTimeKnob { "TIME" }, rbDivKnob { "DIV" };
+    // HIVE: SHIFT | VOICES | TRAILS | MANGLE
+    Knob shiftAKnob { "SHIFT A", true }, shiftBKnob { "SHIFT B", true }, riseKnob { "RISE" }, fallKnob { "FALL" }, blendKnob { "BLEND" };
+    PowerButton voicesPower;
+    PillToggle snapToggle { "SNAP" }, followToggle { "FOLLOW" };
+    Knob pitchKnob { "PITCH", true }, primaryKnob { "DRONE" }, secondaryKnob { "QUEEN" }, trackingKnob { "TRACKING" };
+    PillToggle rbSyncToggle { "SYNC" };
+    Knob magicKnob { "TRAILS" }, rbTimeKnob { "TIME" }, rbDivKnob { "DIV" }, toneKnob { "TONE" };
+    SegmentedChoice patternSelector;
+    PillToggle rbRawToggle { "RAW" };
+    Knob panicKnob { "ANGER" }, chaosKnob { "FRENZY" }, speedKnob { "BUZZ" }, rbDetuneKnob { "DETUNE", true }, rbMixKnob { "MIX" };
 
     // SWARM
     PowerButton swarmPower;
@@ -100,8 +98,10 @@ private:
     std::vector<std::unique_ptr<APVTS::ButtonAttachment>> buttonAttachments;
 
     // Section rectangles (base coordinates)
-    juce::Rectangle<float> noiseArea, rainbowArea, swarmArea, fuzzArea, flowArea, footswitchArea;
-    std::array<bool, 5> lastSectionStates {};
+    juce::Rectangle<float> hiveArea, swarmArea, fuzzArea, flowArea, footswitchArea;
+    std::array<juce::Rectangle<float>, 4> hiveSections;   // SHIFT, VOICES, TRAILS, MANGLE
+    std::array<bool, 5> lastSectionStates {};   // HIVE lit, VOICES on, SWARM, SMOKE, WINGS
+    int lastShiftA = 999, lastShiftB = 999;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainPanel)
 };
