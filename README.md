@@ -79,7 +79,7 @@ VST3 / AU / Standalone · Windows, macOS (Universal: Apple Silicon + Intel), Lin
 
 Общего MIX нет: у каждой секции свой баланс (MIX в STING, HIVE и SWARM, BLEND в SMOKE), поэтому фузз и хорус не разбавляются чистым сигналом.
 
-Приёмы: двойной клик — сброс ручки, **Shift** — точная настройка, уголок справа внизу — масштаб окна 70–200%, **?** — справка.
+Приёмы: клик по значению под ручкой — ввести точное число с клавиатуры, двойной клик — сброс ручки, **Shift** — точная настройка, уголок справа внизу — масштаб окна 70–200%, **?** — справка. **PITCH** в HIVE с включённым **SNAP** щёлкает по полутонам и подписывает интервал (+7 5th, −12 oct).
 
 ## Пресеты
 
@@ -165,4 +165,4 @@ packaging/                установщики Windows (Inno Setup) и macOS (
 
 ## Лицензии
 
-Шрифт Rajdhani — SIL Open Font License 1.1 (`Source/Assets/Fonts/OFL.txt`). Фреймворк JUCE — согласно лицензии JUCE.
+Шрифты Rajdhani (`Source/Assets/Fonts/OFL.txt`) и Metal Mania (`Source/Assets/Fonts/OFL-MetalMania.txt`) — SIL Open Font License 1.1. Фреймворк JUCE — согласно лицензии JUCE.

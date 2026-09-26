@@ -10,6 +10,7 @@ namespace
         s.setPopupDisplayEnabled (false, false, nullptr);
         // Hold Shift for fine adjustment.
         s.setVelocityModeParameters (0.35, 1, 0.0, true, juce::ModifierKeys::shiftModifier);
+        s.setMouseDragSensitivity (420);   // slower, more precise drags (default 250 px for the full range)
         s.setMouseCursor (juce::MouseCursor::PointingHandCursor);
     }
 
@@ -39,6 +40,44 @@ void Knob::attach (juce::AudioProcessorValueTreeState& state, const juce::String
     slider.setTooltip (tip);
 }
 
+void Knob::mouseDown (const juce::MouseEvent& e)
+{
+    if (e.y >= getHeight() - 20 && isEnabled())
+        showValueEditor();
+}
+
+void Knob::showValueEditor()
+{
+    valueEditor = std::make_unique<juce::TextEditor>();
+    auto* ed = valueEditor.get();
+    addAndMakeVisible (ed);
+    ed->setBounds (getLocalBounds().removeFromBottom (20).reduced (6, 0));
+    ed->setJustification (juce::Justification::centred);
+    ed->setFont (font (15.0f, true));
+    ed->setText (slider.getTextFromValue (slider.getValue()), false);
+    ed->selectAll();
+    ed->grabKeyboardFocus();
+
+    auto finish = [this] (bool apply)
+    {
+        if (valueEditor == nullptr) return;
+        if (apply)
+        {
+            const auto text = valueEditor->getText().trim();
+            if (text.isNotEmpty())
+                slider.setValue (slider.snapValue (slider.getValueFromText (text), juce::Slider::notDragging),
+                                 juce::sendNotificationSync);
+        }
+        juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<Knob> (this)]
+        {
+            if (safe != nullptr) safe->valueEditor.reset();
+        });
+    };
+    ed->onReturnKey = [finish] { finish (true); };
+    ed->onEscapeKey = [finish] { finish (false); };
+    ed->onFocusLost = [finish] { finish (true); };
+}
+
 void Knob::resized()
 {
     auto r = getLocalBounds();
@@ -51,8 +90,8 @@ void Knob::resized()
 void Knob::paint (juce::Graphics& g)
 {
     auto r = getLocalBounds().toFloat();
-    g.setFont (font (14.5f, true));
-    g.setColour (isEnabled() ? Colours::textDim : Colours::textFaint);
+    g.setFont (font (15.0f, true));
+    g.setColour (isEnabled() ? Colours::text.withAlpha (0.78f) : Colours::textFaint);
     g.drawText (caption, r.removeFromTop (18.0f), juce::Justification::centred, false);
 
     g.setFont (font (15.0f, true));
@@ -105,25 +144,24 @@ PowerButton::PowerButton()
 
 void PowerButton::paintButton (juce::Graphics& g, bool isMouseOver, bool)
 {
-    const auto r = getLocalBounds().toFloat().reduced (2.0f);
+    const auto r = getLocalBounds().toFloat().reduced (1.5f);
     const bool on = getToggleState();
     const auto c = r.getCentre();
     const float rad = juce::jmin (r.getWidth(), r.getHeight()) * 0.5f;
+    const auto hexR = juce::Rectangle<float> (rad * 2.0f, rad * 2.0f).withCentre (c);
 
     if (on)
     {
-        g.setColour (Colours::accent.withAlpha (0.22f));
-        g.fillEllipse (r.expanded (1.5f));
+        g.setColour (Colours::accent.withAlpha (0.3f));
+        g.fillPath (hexagon (hexR.expanded (2.0f), true));
     }
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff2e2319), c.x, hexR.getY(),
+                                             juce::Colour (0xff0d0907), c.x, hexR.getBottom(), false));
+    g.fillPath (hexagon (hexR.reduced (1.5f), true));
+    g.setColour (on ? Colours::accent : (isMouseOver ? Colours::textDim : Colours::panelBorder.brighter (0.3f)));
+    g.strokePath (hexagon (hexR.reduced (1.5f), true), juce::PathStrokeType (1.3f));
 
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff30333a), c.x, r.getY(),
-                                             juce::Colour (0xff141518), c.x, r.getBottom(), false));
-    g.fillEllipse (r.reduced (2.0f));
-    g.setColour (on ? Colours::accent : (isMouseOver ? Colours::textDim : Colours::panelBorder.brighter (0.2f)));
-    g.drawEllipse (r.reduced (2.0f), 1.3f);
-
-    // Power glyph
-    const float ir = rad * 0.42f;
+    const float ir = rad * 0.4f;
     juce::Path glyph;
     glyph.addCentredArc (c.x, c.y, ir, ir, 0.0f, juce::degreesToRadians (35.0f), juce::degreesToRadians (325.0f), true);
     glyph.startNewSubPath (c.x, c.y - ir * 1.25f);
@@ -143,24 +181,35 @@ void PillToggle::paintButton (juce::Graphics& g, bool isMouseOver, bool)
 {
     const auto r = getLocalBounds().toFloat().reduced (1.0f);
     const bool on = getToggleState();
+    const auto shape = hexCapsule (r);
 
-    g.setColour (on ? Colours::accent.withAlpha (0.14f) : Colours::inset);
-    g.fillRoundedRectangle (r, r.getHeight() * 0.5f);
-    g.setColour (on ? Colours::accent.withAlpha (0.8f) : (isMouseOver ? Colours::textFaint : Colours::panelBorder));
-    g.drawRoundedRectangle (r, r.getHeight() * 0.5f, 1.0f);
-
-    const auto led = juce::Rectangle<float> (7.0f, 7.0f).withCentre ({ r.getX() + r.getHeight() * 0.5f + 2.0f, r.getCentreY() });
     if (on)
     {
-        g.setColour (Colours::accent.withAlpha (0.35f));
-        g.fillEllipse (led.expanded (3.0f));
+        g.setGradientFill (honeyGradient (r, 0.28f));
+        g.fillPath (shape);
     }
-    g.setColour (on ? Colours::accentBright : Colours::textFaint.darker (0.3f));
-    g.fillEllipse (led);
+    else
+    {
+        g.setColour (Colours::inset);
+        g.fillPath (shape);
+    }
+    g.setColour (on ? Colours::accent.withAlpha (0.9f) : (isMouseOver ? Colours::textFaint : Colours::panelBorder.brighter (0.2f)));
+    g.strokePath (shape, juce::PathStrokeType (1.0f));
+
+    const auto led = juce::Rectangle<float> (8.0f, 7.0f).withCentre ({ r.getX() + r.getHeight() * 0.5f + 3.0f, r.getCentreY() });
+    if (on)
+    {
+        g.setColour (Colours::accent.withAlpha (0.4f));
+        g.fillPath (hexagon (led.expanded (3.0f)));
+        g.setGradientFill (honeyGradient (led));
+    }
+    else
+        g.setColour (Colours::textFaint.darker (0.3f));
+    g.fillPath (hexagon (led));
 
     g.setFont (font (14.0f, true));
     g.setColour (on ? Colours::text : Colours::textDim);
-    g.drawText (getButtonText(), r.withTrimmedLeft (r.getHeight() * 0.5f + 8.0f).withTrimmedRight (6.0f),
+    g.drawText (getButtonText(), r.withTrimmedLeft (r.getHeight() * 0.5f + 9.0f).withTrimmedRight (7.0f),
                 juce::Justification::centred, false);
 }
 
@@ -220,10 +269,11 @@ void SegmentedChoice::mouseExit (const juce::MouseEvent&)
 void SegmentedChoice::paint (juce::Graphics& g)
 {
     const auto r = getLocalBounds().toFloat().reduced (0.5f);
+    const auto outline = hexCapsule (r);
     g.setColour (Colours::inset);
-    g.fillRoundedRectangle (r, 6.0f);
-    g.setColour (Colours::panelBorder);
-    g.drawRoundedRectangle (r, 6.0f, 1.0f);
+    g.fillPath (outline);
+    g.setColour (Colours::panelBorder.brighter (0.2f));
+    g.strokePath (outline, juce::PathStrokeType (1.0f));
 
     const float w = r.getWidth() / (float) labels.size();
     for (int i = 0; i < labels.size(); ++i)
@@ -232,16 +282,19 @@ void SegmentedChoice::paint (juce::Graphics& g)
 
         if (i == selected)
         {
-            g.setColour (Colours::accent.withAlpha (0.25f));
-            g.fillRoundedRectangle (seg.expanded (1.0f), 5.0f);
-            g.setGradientFill (juce::ColourGradient (Colours::accentBright, seg.getX(), seg.getY(),
-                                                     Colours::accentDeep, seg.getX(), seg.getBottom(), false));
-            g.fillRoundedRectangle (seg, 4.0f);
+            juce::Graphics::ScopedSaveState save (g);
+            g.reduceClipRegion (hexCapsule (r.reduced (2.5f)));
+            g.setColour (Colours::accent.withAlpha (0.3f));
+            g.fillRect (seg.expanded (1.0f));
+            g.setGradientFill (honeyGradient (seg));
+            g.fillRect (seg);
         }
         else if (i == hovered)
         {
-            g.setColour (juce::Colours::white.withAlpha (0.05f));
-            g.fillRoundedRectangle (seg, 4.0f);
+            juce::Graphics::ScopedSaveState save (g);
+            g.reduceClipRegion (hexCapsule (r.reduced (2.5f)));
+            g.setColour (Colours::accent.withAlpha (0.08f));
+            g.fillRect (seg);
         }
 
         if (i > 0 && i != selected && i - 1 != selected)
@@ -308,47 +361,56 @@ void Footswitch::paint (juce::Graphics& g)
     auto r = getLocalBounds().toFloat();
     const bool lit = (inverse ? ! value : value) || externallyLit;
 
-    // LED
-    const auto led = juce::Rectangle<float> (10.0f, 10.0f).withCentre ({ r.getCentreX(), r.getY() + 8.0f });
+    // Hex LED jewel
+    const auto led = juce::Rectangle<float> (13.0f, 12.0f).withCentre ({ r.getCentreX(), r.getY() + 8.0f });
     r.removeFromTop (18.0f);
     if (lit)
     {
-        juce::ColourGradient glow (ledColour.withAlpha (0.65f), led.getCentre(),
-                                   ledColour.withAlpha (0.0f), led.getCentre().translated (15.0f, 0.0f), true);
+        juce::ColourGradient glow (ledColour.withAlpha (0.7f), led.getCentre(),
+                                   ledColour.withAlpha (0.0f), led.getCentre().translated (18.0f, 0.0f), true);
         g.setGradientFill (glow);
-        g.fillEllipse (led.expanded (11.0f));
+        g.fillEllipse (led.expanded (13.0f));
     }
-    g.setColour (lit ? ledColour : ledColour.withAlpha (0.18f));
-    g.fillEllipse (led);
-    g.setColour (juce::Colours::white.withAlpha (lit ? 0.55f : 0.12f));
-    g.fillEllipse (led.reduced (3.0f).translated (-1.0f, -1.0f));
+    g.setColour (lit ? ledColour : ledColour.withAlpha (0.16f));
+    g.fillPath (hexagon (led, true));
+    g.setColour (juce::Colours::black.withAlpha (0.6f));
+    g.strokePath (hexagon (led, true), juce::PathStrokeType (1.0f));
+    g.setColour (juce::Colours::white.withAlpha (lit ? 0.6f : 0.1f));
+    g.fillEllipse (led.reduced (4.0f).translated (-1.0f, -1.5f));
 
-    // Caption
-    auto text = r.removeFromBottom (18.0f);
-    g.setFont (font (14.5f, true));
-    g.setColour (lit ? Colours::text : Colours::textDim);
+    // Caption in the metal font
+    auto text = r.removeFromBottom (20.0f);
+    g.setFont (displayFont (19.0f));
+    g.setColour (juce::Colours::black.withAlpha (0.7f));
+    g.drawText (caption, text.translated (1.0f, 1.5f), juce::Justification::centred, false);
+    if (lit)
+        g.setGradientFill (honeyGradient (text.withSizeKeepingCentre (text.getWidth(), 16.0f)));
+    else
+        g.setColour (Colours::textDim);
     g.drawText (caption, text, juce::Justification::centred, false);
 
-    // Stomp
+    // Stomp: hex nut housing with a worn metal button
     const float size = juce::jmin (r.getWidth(), r.getHeight()) - 4.0f;
     auto outer = r.withSizeKeepingCentre (size, size);
     const auto c = outer.getCentre();
 
-    juce::Path ring; ring.addEllipse (outer);
-    juce::DropShadow (juce::Colours::black.withAlpha (0.75f), 10, { 0, 4 }).drawForPath (g, ring);
+    const auto nut = hexagon (outer, true);
+    juce::DropShadow (juce::Colours::black.withAlpha (0.85f), 12, { 0, 5 }).drawForPath (g, nut);
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff5a4a3a), c.x, outer.getY(),
+                                             juce::Colour (0xff120d0a), c.x, outer.getBottom(), false));
+    g.fillPath (nut);
+    g.setColour (lit ? ledColour.withAlpha (0.6f) : Colours::panelBorder.brighter (0.4f));
+    g.strokePath (nut, juce::PathStrokeType (1.2f));
 
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff5a5e66), c.x, outer.getY(),
-                                             juce::Colour (0xff1a1b1f), c.x, outer.getBottom(), false));
-    g.fillEllipse (outer);
-
-    auto inner = outer.reduced (size * 0.16f).translated (0.0f, pressed ? 1.5f : 0.0f);
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xffc9ccd2), inner.getX(), inner.getY(),
-                                             juce::Colour (0xff4a4d54), inner.getRight(), inner.getBottom(), false));
+    auto inner = outer.reduced (size * 0.2f).translated (0.0f, pressed ? 1.5f : 0.0f);
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xffd8cdb8), inner.getX(), inner.getY(),
+                                             juce::Colour (0xff4a4036), inner.getRight(), inner.getBottom(), false));
     g.fillEllipse (inner);
-    g.setColour (juce::Colours::black.withAlpha (0.5f));
+    g.setColour (juce::Colours::black.withAlpha (0.55f));
     g.drawEllipse (inner, 1.0f);
-    g.setColour (juce::Colours::white.withAlpha (0.35f));
-    g.drawEllipse (inner.reduced (size * 0.07f), 0.8f);
+    g.setColour (juce::Colours::white.withAlpha (0.3f));
+    g.drawEllipse (inner.reduced (size * 0.06f), 0.8f);
+    drawGrime (g, inner, 3.0f);
 }
 
 //==============================================================================
@@ -408,9 +470,9 @@ void LevelMeter::update (float left, float right)
 void LevelMeter::paint (juce::Graphics& g)
 {
     auto r = getLocalBounds().toFloat();
-    g.setFont (font (13.5f, true));
+    g.setFont (displayFont (17.0f));
     g.setColour (Colours::textDim);
-    g.drawText (caption, r.removeFromLeft (30.0f), juce::Justification::centredLeft, false);
+    g.drawText (caption, r.removeFromLeft (32.0f), juce::Justification::centredLeft, false);
 
     const float barH = juce::jmin (6.0f, (r.getHeight() - 4.0f) * 0.5f);
     const float zeroDb = juce::jmap (0.0f, -60.0f, 6.0f, 0.0f, 1.0f);
@@ -419,31 +481,35 @@ void LevelMeter::paint (juce::Graphics& g)
     {
         const float x0 = r.getX() + r.getWidth() * juce::jmap (zoneMin, -60.0f, 6.0f, 0.0f, 1.0f);
         const float x1 = r.getX() + r.getWidth() * juce::jmap (zoneMax, -60.0f, 6.0f, 0.0f, 1.0f);
-        g.setColour (Colours::meterLow.withAlpha (0.22f));
-        g.fillRoundedRectangle (juce::Rectangle<float> (x0, r.getCentreY() - barH - 4.0f, x1 - x0, 2.0f * barH + 8.0f), 2.0f);
+        g.setColour (Colours::accentBright.withAlpha (0.16f));
+        g.fillRect (juce::Rectangle<float> (x0, r.getCentreY() - barH - 4.0f, x1 - x0, 2.0f * barH + 8.0f));
     }
 
+    // Segmented honey bars
+    const float segW = 4.0f, gap = 1.5f;
+    const int segs = (int) (r.getWidth() / (segW + gap));
     for (size_t i = 0; i < 2; ++i)
     {
-        auto bar = juce::Rectangle<float> (r.getX(), r.getCentreY() - barH - 1.0f + (float) i * (barH + 2.0f), r.getWidth(), barH);
-        g.setColour (Colours::inset);
-        g.fillRoundedRectangle (bar, 2.0f);
-
-        auto filled = bar.withWidth (bar.getWidth() * juce::jlimit (0.0f, 1.0f, level[i]));
-        juce::ColourGradient grad (Colours::meterLow, bar.getX(), 0.0f, Colours::meterHigh, bar.getRight(), 0.0f, false);
-        grad.addColour (0.72, Colours::meterMid);
-        g.setGradientFill (grad);
-        g.fillRoundedRectangle (filled, 2.0f);
+        const float y = r.getCentreY() - barH - 1.0f + (float) i * (barH + 2.0f);
+        for (int s = 0; s < segs; ++s)
+        {
+            const float prop = (float) s / (float) segs;
+            const auto seg = juce::Rectangle<float> (r.getX() + (float) s * (segW + gap), y, segW, barH);
+            const bool litSeg = prop < level[i];
+            juce::Colour col = prop < 0.7f ? Colours::meterLow.interpolatedWith (Colours::meterMid, prop / 0.7f)
+                                           : (prop < zeroDb ? Colours::meterMid : Colours::meterHigh);
+            g.setColour (litSeg ? col : Colours::inset.brighter (0.15f));
+            g.fillRect (seg);
+        }
 
         if (hold[i] > 0.01f)
         {
-            const float hx = bar.getX() + bar.getWidth() * juce::jlimit (0.0f, 1.0f, hold[i]);
-            g.setColour (hold[i] >= zeroDb ? Colours::meterHigh : Colours::text.withAlpha (0.7f));
-            g.fillRect (juce::Rectangle<float> (2.0f, barH).withCentre ({ hx - 1.0f, bar.getCentreY() }));
+            const float hx = r.getX() + r.getWidth() * juce::jlimit (0.0f, 1.0f, hold[i]);
+            g.setColour (hold[i] >= zeroDb ? Colours::meterHigh : Colours::text.withAlpha (0.8f));
+            g.fillRect (juce::Rectangle<float> (2.0f, barH).withCentre ({ hx - 1.0f, y + barH * 0.5f }));
         }
     }
 
-    // 0 dB tick
     g.setColour (Colours::textFaint);
     const float zx = r.getX() + r.getWidth() * zeroDb;
     g.drawVerticalLine ((int) zx, r.getCentreY() - barH - 3.0f, r.getCentreY() + barH + 3.0f);
@@ -469,10 +535,16 @@ void PitchScope::push (float semitones, bool isActive)
 void PitchScope::paint (juce::Graphics& g)
 {
     const auto r = getLocalBounds().toFloat();
+    const auto frame = chamfered (r, 6.0f);
     g.setColour (Colours::inset);
-    g.fillRoundedRectangle (r, 6.0f);
-    g.setColour (Colours::panelBorder);
-    g.drawRoundedRectangle (r.reduced (0.5f), 6.0f, 1.0f);
+    g.fillPath (frame);
+    {
+        juce::Graphics::ScopedSaveState save (g);
+        g.reduceClipRegion (frame);
+        drawHoneycomb (g, r, 10.0f, Colours::accent.withAlpha (0.05f), 0.8f);
+    }
+    g.setColour (Colours::panelBorder.brighter (0.2f));
+    g.strokePath (frame, juce::PathStrokeType (1.0f));
 
     auto plot = r.reduced (8.0f, 8.0f).withTrimmedRight (44.0f);
     const float range = 26.0f;
@@ -502,9 +574,12 @@ void PitchScope::paint (juce::Graphics& g)
     }
 
     const auto col = active ? Colours::accent : Colours::textFaint;
-    g.setColour (col.withAlpha (0.18f));
-    g.strokePath (trace, juce::PathStrokeType (5.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-    g.setColour (col);
+    g.setColour (col.withAlpha (0.22f));
+    g.strokePath (trace, juce::PathStrokeType (6.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    if (active)
+        g.setGradientFill (honeyGradient (plot));
+    else
+        g.setColour (col);
     g.strokePath (trace, juce::PathStrokeType (1.8f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
     // Current value
@@ -751,9 +826,10 @@ void InfoOverlay::paint (juce::Graphics& g)
     Theme::drawPanel (g, r, 12.0f);
     r.reduce (28.0f, 20.0f);
 
-    g.setFont (font (26.0f, true));
-    g.setColour (Colours::accent);
-    g.drawText ("SWARMNESS  " + juce::String (JucePlugin_VersionString), r.removeFromTop (34.0f), juce::Justification::centredLeft, false);
+    g.setFont (displayFont (32.0f));
+    const auto titleArea = r.removeFromTop (34.0f);
+    g.setGradientFill (honeyGradient (titleArea));
+    g.drawText ("Swarmness  " + juce::String (JucePlugin_VersionString), titleArea, juce::Justification::centredLeft, false);
     r.removeFromTop (6.0f);
 
     struct Item { const char* title; const char* body; };
@@ -781,7 +857,7 @@ void InfoOverlay::paint (juce::Graphics& g)
     for (const auto& item : items)
     {
         auto row = r.removeFromTop (juce::jmin (50.0f, r.getHeight()));
-        g.setFont (font (16.0f, true));
+        g.setFont (displayFont (19.0f));
         g.setColour (Colours::accentBright);
         g.drawText (item.title, row.removeFromLeft (120.0f), juce::Justification::topLeft, false);
         g.setFont (font (16.0f));

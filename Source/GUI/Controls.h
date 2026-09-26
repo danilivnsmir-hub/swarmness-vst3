@@ -15,12 +15,25 @@ public:
     juce::Slider& getSlider() noexcept { return slider; }
     void attach (juce::AudioProcessorValueTreeState&, const juce::String& paramID, const juce::String& tooltip);
 
+    /** Optional value snapping while dragging (e.g. PITCH to whole semitones when SNAP is on). */
+    void setSnap (std::function<double (double)> fn) { slider.snapper = std::move (fn); }
+
     void paint (juce::Graphics&) override;
     void resized() override;
+    void mouseDown (const juce::MouseEvent&) override;     // click the value to type an exact number
 
 private:
+    struct SnappingSlider : public juce::Slider
+    {
+        std::function<double (double)> snapper;
+        double snapValue (double v, DragMode) override { return snapper != nullptr ? snapper (v) : v; }
+    };
+
+    void showValueEditor();
+
     juce::String caption;
-    juce::Slider slider;
+    SnappingSlider slider;
+    std::unique_ptr<juce::TextEditor> valueEditor;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Knob)

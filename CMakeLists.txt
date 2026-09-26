@@ -77,6 +77,8 @@ juce_add_binary_data(SwarmnessBinaryData
     NAMESPACE BinaryData
     SOURCES
         Source/Assets/header_logo.png
+        Source/Assets/emblem.png
+        Source/Assets/Fonts/MetalMania-Regular.ttf
         Source/Assets/Fonts/Rajdhani-Medium.ttf
         Source/Assets/Fonts/Rajdhani-Bold.ttf)
 

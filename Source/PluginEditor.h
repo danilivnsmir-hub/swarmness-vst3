@@ -37,7 +37,7 @@ private:
     SwarmnessAudioProcessor& processor;
     APVTS& state;
 
-    juce::Image logo;
+    juce::Image logo, emblem;
     Backdrop backdrop;
 
     // Header

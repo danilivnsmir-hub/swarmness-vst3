@@ -44,79 +44,95 @@ void SwarmLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int wi
     const float size   = juce::jmin (bounds.getWidth(), bounds.getHeight());
     const auto  centre = bounds.getCentre();
     const float radius = size * 0.5f - 2.0f;
-    const float arcRadius  = radius - 2.5f;
-    const float arcThick   = juce::jmax (2.5f, size * 0.055f);
-    const float bodyRadius = radius * 0.70f;
+    const float arcRadius  = radius - 3.0f;
+    const float arcThick   = juce::jmax (2.5f, size * 0.06f);
+    const float bodyRadius = radius * 0.68f;
 
     const bool bipolar = (bool) slider.getProperties().getWithDefault ("bipolar", false);
     const bool hover   = slider.isMouseOverOrDragging();
+    const bool enabled = slider.isEnabled();
     const float angle  = startAngle + sliderPos * (endAngle - startAngle);
+    auto polar = [&] (float r, float a) { return juce::Point<float> (centre.x + r * std::sin (a), centre.y - r * std::cos (a)); };
+
+    // --- Scale ticks (bone scratches)
+    for (int i = 0; i <= 10; ++i)
+    {
+        const float a = startAngle + (endAngle - startAngle) * (float) i / 10.0f;
+        const bool major = (i % 5) == 0;
+        g.setColour (Colours::textFaint.withAlpha (major ? 0.9f : 0.55f));
+        g.drawLine ({ polar (radius + 1.5f, a), polar (radius - (major ? 4.0f : 2.5f), a) }, major ? 1.4f : 1.0f);
+    }
 
     // --- Track
     juce::Path track;
-    track.addCentredArc (centre.x, centre.y, arcRadius, arcRadius, 0.0f, startAngle, endAngle, true);
+    track.addCentredArc (centre.x, centre.y, arcRadius - 3.0f, arcRadius - 3.0f, 0.0f, startAngle, endAngle, true);
     g.setColour (Colours::inset);
-    g.strokePath (track, juce::PathStrokeType (arcThick + 2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-    g.setColour (juce::Colours::white.withAlpha (0.06f));
-    g.strokePath (track, juce::PathStrokeType (arcThick, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    g.strokePath (track, juce::PathStrokeType (arcThick + 2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::butt));
+    g.setColour (Colours::accent.withAlpha (0.07f));
+    g.strokePath (track, juce::PathStrokeType (arcThick, juce::PathStrokeType::curved, juce::PathStrokeType::butt));
 
-    // --- Value arc
+    // --- Value arc: honey -> venom with glow
     const float from = bipolar ? (startAngle + endAngle) * 0.5f : startAngle;
-    if (std::abs (angle - from) > 0.001f)
+    if (std::abs (angle - from) > 0.001f && enabled)
     {
         juce::Path value;
-        value.addCentredArc (centre.x, centre.y, arcRadius, arcRadius, 0.0f,
+        value.addCentredArc (centre.x, centre.y, arcRadius - 3.0f, arcRadius - 3.0f, 0.0f,
                              juce::jmin (from, angle), juce::jmax (from, angle), true);
-
-        g.setColour (Colours::accent.withAlpha (hover ? 0.28f : 0.18f));
-        g.strokePath (value, juce::PathStrokeType (arcThick + 5.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-
-        g.setGradientFill (juce::ColourGradient (Colours::accentDeep, bounds.getBottomLeft(),
-                                                 Colours::accentBright, bounds.getTopRight(), false));
-        g.strokePath (value, juce::PathStrokeType (arcThick, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        g.setColour (Colours::accent.withAlpha (hover ? 0.35f : 0.22f));
+        g.strokePath (value, juce::PathStrokeType (arcThick + 6.0f, juce::PathStrokeType::curved, juce::PathStrokeType::butt));
+        juce::ColourGradient grad (Colours::accentDeep, bounds.getBottomLeft(), Colours::accentBright, bounds.getTopRight(), false);
+        grad.addColour (0.5, Colours::accent);
+        g.setGradientFill (grad);
+        g.strokePath (value, juce::PathStrokeType (arcThick, juce::PathStrokeType::curved, juce::PathStrokeType::butt));
     }
 
-    // --- Body shadow
-    {
-        juce::Path body;
-        body.addEllipse (juce::Rectangle<float> (bodyRadius * 2.0f, bodyRadius * 2.0f).withCentre (centre));
-        juce::DropShadow (juce::Colours::black.withAlpha (0.7f), (int) (size * 0.12f), { 0, (int) (size * 0.04f) })
-            .drawForPath (g, body);
-    }
-
-    // --- Body: brushed metal radial gradient
     const auto bodyRect = juce::Rectangle<float> (bodyRadius * 2.0f, bodyRadius * 2.0f).withCentre (centre);
+
+    // --- Body: charred iron
     {
-        juce::ColourGradient grad (juce::Colour (0xff3d4048), centre.x - bodyRadius * 0.4f, centre.y - bodyRadius * 0.6f,
-                                   juce::Colour (0xff15161a), centre.x + bodyRadius * 0.5f, centre.y + bodyRadius, true);
+        juce::Path body; body.addEllipse (bodyRect);
+        juce::DropShadow (juce::Colours::black.withAlpha (0.8f), (int) (size * 0.14f), { 0, (int) (size * 0.05f) }).drawForPath (g, body);
+
+        juce::ColourGradient grad (juce::Colour (0xff4a3a2c), centre.x - bodyRadius * 0.5f, centre.y - bodyRadius * 0.7f,
+                                   juce::Colour (0xff0d0907), centre.x + bodyRadius * 0.5f, centre.y + bodyRadius, true);
         g.setGradientFill (grad);
         g.fillEllipse (bodyRect);
-
-        // Rim
-        g.setGradientFill (juce::ColourGradient (juce::Colours::white.withAlpha (0.22f), bodyRect.getTopLeft(),
-                                                 juce::Colours::black.withAlpha (0.5f), bodyRect.getBottomRight(), false));
-        g.drawEllipse (bodyRect.reduced (0.5f), 1.2f);
-
-        // Machined inner cap
-        const auto cap = bodyRect.reduced (bodyRadius * 0.22f);
-        g.setGradientFill (juce::ColourGradient (juce::Colour (0xff2c2f36), cap.getX(), cap.getY(),
-                                                 juce::Colour (0xff1b1d22), cap.getX(), cap.getBottom(), false));
-        g.fillEllipse (cap);
-        g.setColour (juce::Colours::black.withAlpha (0.45f));
-        g.drawEllipse (cap, 1.0f);
+        g.setGradientFill (juce::ColourGradient (Colours::accent.withAlpha (hover ? 0.6f : 0.35f), bodyRect.getTopLeft(),
+                                                 juce::Colours::black.withAlpha (0.6f), bodyRect.getBottomRight(), false));
+        g.drawEllipse (bodyRect.reduced (0.6f), 1.3f);
     }
 
-    // --- Pointer
+    // --- Hex nut cap, turning with the value
     {
-        const float inner = bodyRadius * 0.28f;
-        const float outer = bodyRadius * 0.86f;
-        const juce::Point<float> a (centre.x + inner * std::sin (angle), centre.y - inner * std::cos (angle));
-        const juce::Point<float> b (centre.x + outer * std::sin (angle), centre.y - outer * std::cos (angle));
+        const auto capR = bodyRect.reduced (bodyRadius * 0.2f);
+        auto hex = hexagon (capR);
+        hex.applyTransform (juce::AffineTransform::rotation (angle, centre.x, centre.y));
+        g.setGradientFill (juce::ColourGradient (juce::Colour (0xff3a2c20), capR.getX(), capR.getY(),
+                                                 juce::Colour (0xff120d09), capR.getRight(), capR.getBottom(), false));
+        g.fillPath (hex);
+        g.setColour (juce::Colours::black.withAlpha (0.6f));
+        g.strokePath (hex, juce::PathStrokeType (1.2f));
+        g.setColour (Colours::accentBright.withAlpha (0.12f));
+        g.strokePath (hex, juce::PathStrokeType (0.6f), juce::AffineTransform::translation (-0.5f, -0.5f));
+    }
 
-        g.setColour (juce::Colours::black.withAlpha (0.5f));
-        g.drawLine ({ a.translated (0.0f, 1.0f), b.translated (0.0f, 1.0f) }, juce::jmax (2.0f, size * 0.045f));
-        g.setColour (hover ? Colours::accentBright : Colours::text);
-        g.drawLine ({ a, b }, juce::jmax (2.0f, size * 0.04f));
+    // --- Stinger pointer
+    {
+        const float tipR = bodyRadius * 0.95f, baseR = bodyRadius * 0.18f, halfW = juce::jmax (1.8f, size * 0.035f);
+        const auto tip = polar (tipR, angle);
+        const auto base = polar (baseR, angle);
+        const juce::Point<float> side (std::cos (angle) * halfW, std::sin (angle) * halfW);
+        juce::Path sting;
+        sting.startNewSubPath (base + side);
+        sting.lineTo (tip);
+        sting.lineTo (base - side);
+        sting.closeSubPath();
+
+        g.setColour (juce::Colours::black.withAlpha (0.55f));
+        g.fillPath (sting, juce::AffineTransform::translation (0.0f, 1.2f));
+        g.setGradientFill (juce::ColourGradient (enabled ? Colours::text : Colours::textFaint, base,
+                                                 enabled ? (hover ? Colours::accentBright : Colours::accent) : Colours::textFaint, tip, false));
+        g.fillPath (sting);
     }
 }
 
@@ -198,16 +214,17 @@ void SwarmLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& bu
 {
     auto r = button.getLocalBounds().toFloat().reduced (0.5f);
     const bool on = button.getToggleState();
+    const auto plate = chamfered (r, 5.0f);
 
-    auto base = on ? Colours::accent.withAlpha (0.22f) : Colours::panelHi;
-    if (isDown)           base = base.darker (0.2f);
-    else if (isMouseOver) base = base.brighter (0.12f);
+    auto base = on ? Colours::accent.withAlpha (0.25f) : Colours::panelHi;
+    if (isDown)           base = base.darker (0.3f);
+    else if (isMouseOver) base = base.brighter (0.15f);
 
-    g.setGradientFill (juce::ColourGradient (base.brighter (0.05f), r.getX(), r.getY(),
-                                             base.darker (0.15f), r.getX(), r.getBottom(), false));
-    g.fillRoundedRectangle (r, 5.0f);
-    g.setColour (on ? Colours::accent.withAlpha (0.8f) : (isMouseOver ? Colours::textFaint : Colours::panelBorder));
-    g.drawRoundedRectangle (r, 5.0f, 1.0f);
+    g.setGradientFill (juce::ColourGradient (base.brighter (0.08f), r.getX(), r.getY(),
+                                             base.darker (0.3f), r.getX(), r.getBottom(), false));
+    g.fillPath (plate);
+    g.setColour (on || isMouseOver ? Colours::accent.withAlpha (0.8f) : Colours::panelBorder.brighter (0.2f));
+    g.strokePath (plate, juce::PathStrokeType (1.0f));
 }
 
 juce::Font SwarmLookAndFeel::getTextButtonFont (juce::TextButton&, int buttonHeight)
@@ -227,7 +244,8 @@ void SwarmLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& butt
 void SwarmLookAndFeel::drawPopupMenuBackground (juce::Graphics& g, int width, int height)
 {
     g.fillAll (Colours::panel);
-    g.setColour (Colours::panelBorder);
+    drawHoneycomb (g, juce::Rectangle<float> ((float) width, (float) height), 14.0f, Colours::accent.withAlpha (0.035f), 1.0f);
+    g.setColour (Colours::accent.withAlpha (0.5f));
     g.drawRect (0, 0, width, height);
 }
 
@@ -239,9 +257,9 @@ juce::Font SwarmLookAndFeel::getPopupMenuFont()
 void SwarmLookAndFeel::drawPopupMenuSectionHeader (juce::Graphics& g, const juce::Rectangle<int>& area,
                                                    const juce::String& sectionName)
 {
-    g.setFont (font (14.0f, true));
+    g.setFont (displayFont (17.0f));
     g.setColour (Colours::accent);
-    g.drawText (sectionName.toUpperCase(), area.reduced (12, 0), juce::Justification::bottomLeft, true);
+    g.drawText (sectionName, area.reduced (12, 0), juce::Justification::bottomLeft, true);
 }
 
 void SwarmLookAndFeel::drawPopupMenuItem (juce::Graphics& g, const juce::Rectangle<int>& area, bool isSeparator,
@@ -295,9 +313,9 @@ void SwarmLookAndFeel::drawTooltip (juce::Graphics& g, const juce::String& text,
 {
     const auto r = juce::Rectangle<float> ((float) width, (float) height);
     g.setColour (Colours::panelHi);
-    g.fillRoundedRectangle (r, 4.0f);
-    g.setColour (Colours::accent.withAlpha (0.6f));
-    g.drawRoundedRectangle (r.reduced (0.5f), 4.0f, 1.0f);
+    g.fillPath (chamfered (r, 4.0f));
+    g.setColour (Colours::accent.withAlpha (0.7f));
+    g.strokePath (chamfered (r.reduced (0.5f), 4.0f), juce::PathStrokeType (1.0f));
     g.setColour (Colours::text);
     g.setFont (font (15.0f));
     g.drawFittedText (text, r.toNearestInt().reduced (8, 4), juce::Justification::centredLeft, 4);

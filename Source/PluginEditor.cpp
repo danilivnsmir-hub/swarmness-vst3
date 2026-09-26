@@ -27,6 +27,7 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     using namespace ParamIDs;
 
     logo = juce::ImageCache::getFromMemory (BinaryData::header_logo_png, BinaryData::header_logo_pngSize);
+    emblem = juce::ImageCache::getFromMemory (BinaryData::emblem_png, BinaryData::emblem_pngSize);
 
     backdrop.painter = [this] (juce::Graphics& g) { paintBackdrop (g); };
     backdrop.setInterceptsMouseClicks (false, false);
@@ -56,7 +57,8 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     // RAINBOW
     attachButton (rainbowPower, rbOn, "HIVE harmony section on/off (the VENOM footswitch engages it by itself)");
     attachButton (snapToggle, rbSnap, "Snap PITCH to semitones (off = atonal in-between intervals)");
-    pitchKnob    .attach (state, rbPitch,     "Primary voice interval, -12..+12 semitones");
+    pitchKnob    .attach (state, rbPitch,     "PITCH: DRONE interval, -12..+12 semitones (SNAP = whole semitones). Click the value to type it");
+    pitchKnob.setSnap ([this] (double v) { return paramOn (ParamIDs::rbSnap) ? std::round (v) : v; });
     primaryKnob  .attach (state, rbPrimary,   "DRONE: level of the main harmony voice");
     secondaryKnob.attach (state, rbSecondary, "QUEEN: a voice one octave from the DRONE (above for up-shifts, below for down)");
     toneKnob     .attach (state, rbTone,      "Brightness of the voices and of the regeneration loop");
@@ -257,37 +259,73 @@ void MainPanel::resized()
 //==============================================================================
 void MainPanel::paintBackdrop (juce::Graphics& g)
 {
-    g.setGradientFill (juce::ColourGradient (Colours::backgroundHi, baseWidth * 0.5f, baseHeight * 0.35f,
+    const auto all = juce::Rectangle<float> ((float) baseWidth, (float) baseHeight);
+    g.setGradientFill (juce::ColourGradient (Colours::backgroundHi, baseWidth * 0.5f, baseHeight * 0.45f,
                                              Colours::background, 0.0f, (float) baseHeight, true));
     g.fillAll();
 
-    g.setColour (juce::Colours::white.withAlpha (0.012f));
-    for (int i = -baseHeight; i < baseWidth; i += 6)
-        g.drawLine ((float) i, 0.0f, (float) (i + baseHeight), (float) baseHeight, 1.0f);
+    // Honeycomb wall
+    drawHoneycomb (g, all, 30.0f, Colours::accent.withAlpha (0.045f), 1.4f);
+
+    // The necro-bee, looming behind everything
+    if (emblem.isValid())
+    {
+        const float h = 640.0f, w = h * (float) emblem.getWidth() / (float) emblem.getHeight();
+        g.setOpacity (0.2f);
+        g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
+        g.drawImage (emblem, juce::Rectangle<float> (w, h).withCentre ({ baseWidth * 0.5f, baseHeight * 0.52f }),
+                     juce::RectanglePlacement::centred);
+        g.setOpacity (1.0f);
+    }
+
+    drawGrime (g, all, 0.6f);
+
+    // Vignette
+    g.setGradientFill (juce::ColourGradient (juce::Colours::transparentBlack, baseWidth * 0.5f, baseHeight * 0.5f,
+                                             juce::Colours::black.withAlpha (0.75f), 0.0f, 0.0f, true));
+    g.fillAll();
 
     // Header
     {
         const auto header = juce::Rectangle<float> (0.0f, 0.0f, (float) baseWidth, 64.0f);
-        g.setGradientFill (juce::ColourGradient (juce::Colour (0xff1b1d22), 0.0f, 0.0f,
-                                                 juce::Colour (0xff111215), 0.0f, header.getBottom(), false));
+        g.setGradientFill (juce::ColourGradient (juce::Colour (0xf01a130d), 0.0f, 0.0f,
+                                                 juce::Colour (0xf00b0806), 0.0f, header.getBottom(), false));
         g.fillRect (header);
+        drawHoneycomb (g, header, 9.0f, Colours::accent.withAlpha (0.05f), 0.8f);
 
-        juce::ColourGradient line (Colours::accent.withAlpha (0.0f), 0.0f, 0.0f, Colours::accent.withAlpha (0.0f), (float) baseWidth, 0.0f, false);
-        line.addColour (0.5, Colours::accent);
+        // Honey line with drips
+        juce::ColourGradient line (Colours::accentDeep.withAlpha (0.0f), 0.0f, 0.0f, Colours::accentDeep.withAlpha (0.0f), (float) baseWidth, 0.0f, false);
+        line.addColour (0.2, Colours::accent);
+        line.addColour (0.5, Colours::accentBright);
+        line.addColour (0.8, Colours::accent);
         g.setGradientFill (line);
-        g.fillRect (0.0f, header.getBottom() - 1.5f, (float) baseWidth, 1.5f);
+        g.fillRect (0.0f, header.getBottom() - 2.0f, (float) baseWidth, 2.0f);
+
+        juce::Random rng (1337);
+        for (int i = 0; i < 11; ++i)
+        {
+            const float x = 180.0f + rng.nextFloat() * ((float) baseWidth - 240.0f);
+            const float len = 3.0f + std::pow (rng.nextFloat(), 2.0f) * 16.0f;
+            const float w = 1.5f + rng.nextFloat() * 2.0f;
+            const float top = header.getBottom() - 1.0f;
+            juce::Path drip;
+            drip.startNewSubPath (x - w, top);
+            drip.quadraticTo (x - w * 0.4f, top + len * 0.6f, x - w * 0.5f, top + len);
+            drip.addCentredArc (x, top + len, w * 0.5f, w * 0.6f, 0.0f, -juce::MathConstants<float>::halfPi,
+                                juce::MathConstants<float>::halfPi, false);
+            drip.quadraticTo (x + w * 0.4f, top + len * 0.6f, x + w, top);
+            drip.closeSubPath();
+            const float t = x / (float) baseWidth;
+            g.setColour ((t > 0.3f && t < 0.7f ? Colours::accentBright : Colours::accent).withAlpha (0.35f + 0.5f * (1.0f - std::abs (t - 0.5f) * 2.0f)));
+            g.fillPath (drip);
+        }
 
         if (logo.isValid())
         {
-            const float h = 48.0f;
+            const float h = 70.0f;   // breaks out of the header a little, like the pedal's artwork
             const float lw = h * (float) logo.getWidth() / (float) logo.getHeight();
             g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
-            g.drawImage (logo, juce::Rectangle<float> (16.0f, 8.0f, lw, h), juce::RectanglePlacement::centred);
-
-            g.setFont (font (13.0f, true));
-            g.setColour (Colours::textDim);
-            g.drawText ("STING / HIVE / SWARM", juce::Rectangle<float> (24.0f + lw, 22.0f, 190.0f, 20.0f),
-                        juce::Justification::centredLeft, false);
+            g.drawImage (logo, juce::Rectangle<float> (10.0f, 1.0f, lw, h), juce::RectanglePlacement::centred);
         }
     }
 
@@ -304,7 +342,7 @@ void MainPanel::paintBackdrop (juce::Graphics& g)
 
     g.setFont (font (12.5f, true));
     g.setColour (Colours::textFaint);
-    g.drawText ("hold the footswitches below", titleRow (noiseArea).withTrimmedLeft (80.0f),
+    g.drawText ("hold the footswitches below", titleRow (noiseArea).withTrimmedLeft (98.0f),
                 juce::Justification::centredLeft, false);
 
     g.setFont (font (13.0f));

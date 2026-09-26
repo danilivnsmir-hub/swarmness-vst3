@@ -81,7 +81,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
         pid (rbPitch), "Hive Pitch", juce::NormalisableRange<float> (-12.0f, 12.0f, 0.01f), 7.0f,
         Attr().withLabel ("st").withStringFromValueFunction ([] (float v, int)
         {
-            return (v > 0.005f ? "+" : "") + juce::String (v, 2) + " st";
+            // Whole semitones also show the interval name
+            static const char* names[] = { "unison", "m2", "M2", "m3", "M3", "4th", "tritone", "5th", "m6", "M6", "m7", "M7", "oct" };
+            const float r = std::round (v);
+            if (std::abs (v - r) < 0.005f)
+            {
+                const int st = (int) r;
+                return (st > 0 ? "+" : "") + juce::String (st) + " " + names[std::abs (st)];
+            }
+            return (v > 0.0f ? "+" : "") + juce::String (v, 2) + " st";
         })));
     rainbow->addChild (toggle (rbSnap, "Hive Snap", true));
     rainbow->addChild (toggle (rbRaw, "Hive Raw", true));
