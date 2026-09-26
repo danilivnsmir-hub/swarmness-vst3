@@ -707,6 +707,41 @@ namespace
         }
     }
 
+    void testFuzzSag()
+    {
+        std::printf ("\nSMOKE SAG: the attack sags and the note blooms back\n");
+        const double sr = 48000.0;
+        // one plucked note: sharp attack, 1.2 s decay
+        juce::AudioBuffer<float> input (2, 48000 * 2);
+        for (int i = 0; i < input.getNumSamples(); ++i)
+        {
+            const double t = i / sr;
+            double v = 0.0;
+            for (int h = 1; h <= 6; ++h)
+                v += std::sin (juce::MathConstants<double>::twoPi * 110.0 * h * t) / h;
+            v *= 0.4 * std::exp (-t * 2.5);
+            input.setSample (0, i, (float) v);
+            input.setSample (1, i, (float) v);
+        }
+        double bloom[2] {};
+        for (int k = 0; k < 2; ++k)
+        {
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            setParam (p, ParamIDs::fuzzOn, 1.0f);
+            setParam (p, ParamIDs::fuzz, 80.0f);
+            setParam (p, ParamIDs::fuzzSag, k == 0 ? 0.0f : 100.0f);
+            auto out = render (p, input, sr, 256);
+            const int lat = p.getLatencySamples();
+            const float attack = out.getRMSLevel (0, lat + 480, 2400);           // 10..60 ms
+            const float body   = out.getRMSLevel (0, lat + 19200, 4800);         // 400..500 ms
+            bloom[k] = juce::Decibels::gainToDecibels (body / attack);
+
+        }
+        check (bloom[1] > bloom[0] + 1.0,
+               juce::String::formatted ("body vs attack: %+.1f dB (SAG 0) -> %+.1f dB (SAG 100)", bloom[0], bloom[1]));
+    }
+
     void testSwarmBounded()
     {
         std::printf ("\nSWARM: extreme settings stay bounded\n");
@@ -908,6 +943,7 @@ int main (int argc, char** argv)
     testTrails();
     reportLag();
     testFuzzIdleNoise();
+    testFuzzSag();
     testInputSensitivity();
     testSwarmBounded();
     testStateRoundTrip();

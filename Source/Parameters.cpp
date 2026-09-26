@@ -131,6 +131,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     fz->addChild (percent (fuzzGlare, "Smoke Glare", 0.0f));
     fz->addChild (percent (fuzzGate, "Smoke Gate", 0.0f));
     fz->addChild (percent (fuzzBlend, "Smoke Blend", 0.0f));
+    fz->addChild (percent (fuzzSag, "Smoke Sag", 40.0f));
 
     // ------------------------------------------------------------------- FLOW
     auto flow = std::make_unique<Group> ("flow", "Wings", "|");

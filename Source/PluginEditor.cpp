@@ -92,8 +92,9 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     fuzzGlareKnob.attach (state, fuzzGlare, "GLARE: gated octave-up that rips through on hard picking");
     fuzzGateKnob .attach (state, fuzzGate,  "GATE: starve the fuzz - sputtering, gated velcro decay");
     fuzzBlendKnob.attach (state, fuzzBlend, "BLEND: clean signal under the fuzz (pick attack and low end)");
+    fuzzSagKnob  .attach (state, fuzzSag,   "SAG: how much the fuzz breathes - the supply sags on the pick (compressed, darker) and the note blooms back as it recovers");
     for (auto* c : std::initializer_list<juce::Component*> { &fuzzVoiceSelector, &fuzzKnob, &fuzzToneKnob, &fuzzScoopKnob,
-                                                             &fuzzGlareKnob, &fuzzGateKnob, &fuzzBlendKnob })
+                                                             &fuzzGlareKnob, &fuzzGateKnob, &fuzzSagKnob, &fuzzBlendKnob })
         addAndMakeVisible (c);
 
     // FLOW
@@ -205,7 +206,7 @@ void MainPanel::resized()
 
     auto threeKnobs = [] (juce::Rectangle<float> a, std::initializer_list<Knob*> knobs)
     {
-        const int kw = knobs.size() > 3 ? 70 : 72, y = (int) a.getY() + 58;
+        const int kw = knobs.size() > 6 ? 64 : (knobs.size() > 3 ? 70 : 72), y = (int) a.getY() + 58;
         const int gap = ((int) a.getWidth() - kw * (int) knobs.size()) / ((int) knobs.size() + 1);
         int x = (int) a.getX() + gap;
         for (auto* k : knobs)
@@ -224,7 +225,7 @@ void MainPanel::resized()
     fuzzPower.setBounds (powerFor (fuzzArea));
     postToggle.setBounds (pillFor (fuzzArea, 0));
     fuzzVoiceSelector.setBounds (postToggle.getX() - 8 - 150, (int) fuzzArea.getY() + 10, 150, 22);
-    threeKnobs (fuzzArea, { &fuzzKnob, &fuzzToneKnob, &fuzzScoopKnob, &fuzzGlareKnob, &fuzzGateKnob, &fuzzBlendKnob });
+    threeKnobs (fuzzArea, { &fuzzKnob, &fuzzToneKnob, &fuzzScoopKnob, &fuzzGlareKnob, &fuzzGateKnob, &fuzzSagKnob, &fuzzBlendKnob });
 
     // FLOW
     flowPower.setBounds (powerFor (flowArea));
@@ -386,7 +387,7 @@ void MainPanel::tick()
                         &magicKnob, &rbTimeKnob, &rbDivKnob, &rbMixKnob }, ! states[1]);
     setSectionDimmed ({ &deepToggle, &swarmDepthKnob, &swarmRateKnob, &swarmMixKnob }, ! states[2]);
     setSectionDimmed ({ &postToggle, &fuzzVoiceSelector, &fuzzKnob, &fuzzToneKnob, &fuzzScoopKnob,
-                        &fuzzGlareKnob, &fuzzGateKnob, &fuzzBlendKnob }, ! states[3]);
+                        &fuzzGlareKnob, &fuzzGateKnob, &fuzzSagKnob, &fuzzBlendKnob }, ! states[3]);
     setSectionDimmed ({ &hardToggle, &syncToggle, &flowAmountKnob, &flowSpeedKnob, &flowDivKnob }, ! states[4]);
 
     if (states != lastSectionStates)

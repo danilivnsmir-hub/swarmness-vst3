@@ -865,8 +865,8 @@ void InfoOverlay::paint (juce::Graphics& g)
         { "VENOM",    "The VENOM footswitch pushes the TRAILS into self-oscillation - even with HIVE or the plug-in off. "
                       "LINK mini switches next to the octaves make VENOM engage +1 / +2 OCT too." },
         { "SWARM",    "Stereo chorus with bucket-brigade colour. DEEP = 8 voices with feedback. MIX 50% = dry and chorus both full, 100% = vibrato." },
-        { "SMOKE",    "Jumbo fuzz. VOICE: DOWN doom / MID / UP scream. SCOOP = mid cut, GLARE = gated octave-up, GATE = starved sputter, "
-                      "BLEND = clean under the fuzz. POST = after the pitch effects (off = before)." },
+        { "SMOKE",    "Jumbo fuzz. VOICE: DOWN doom / MID / UP scream. SCOOP = mid cut, GLARE = gated octave-up, GATE = starved sputter, SAG = breathing "
+                      "(the pick sags, the note blooms), BLEND = clean under the fuzz. POST = after the pitch effects (off = before)." },
         { "WINGS",    "Rhythmic gate: HARD = stutter, off = tremolo. SYNC locks to the host tempo (DIV)." },
         { "SWITCHES", "MOMENTARY = active while held, LATCH = click on / off. Footswitches work even while bypassed. MIDI-learn them in your DAW." },
         { "LEVELS",   "INPUT sets how hard the effects are hit (aim for the green zone of the IN meter); it is compensated at the output. "

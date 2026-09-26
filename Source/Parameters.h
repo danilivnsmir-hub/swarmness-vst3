@@ -57,6 +57,7 @@ namespace ParamIDs
     inline constexpr const char* fuzzScoop   = "fuzzScoop";    // mid scoop depth
     inline constexpr const char* fuzzGlare   = "fuzzGlare";    // gated octave-up
     inline constexpr const char* fuzzBlend   = "fuzzBlend";    // clean signal under the fuzz
+    inline constexpr const char* fuzzSag     = "fuzzSag";      // supply sag / bloom ("breathing")
 
     // WINGS (rhythmic gate)
     inline constexpr const char* flowOn      = "flowOn";

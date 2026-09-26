@@ -41,7 +41,7 @@ SwarmnessAudioProcessor::SwarmnessAudioProcessor()
     p.swarmDepth = get (id::swarmDepth); p.swarmMix = get (id::swarmMix);
     p.fuzzOn = get (id::fuzzOn);         p.fuzzPost = get (id::fuzzPost);       p.fuzz = get (id::fuzz);
     p.fuzzTone = get (id::fuzzTone);     p.fuzzGate = get (id::fuzzGate);       p.fuzzVoice = get (id::fuzzVoice);
-    p.fuzzScoop = get (id::fuzzScoop);   p.fuzzGlare = get (id::fuzzGlare);     p.fuzzBlend = get (id::fuzzBlend);
+    p.fuzzScoop = get (id::fuzzScoop);   p.fuzzGlare = get (id::fuzzGlare);     p.fuzzBlend = get (id::fuzzBlend);   p.fuzzSag = get (id::fuzzSag);
     p.flowOn = get (id::flowOn);         p.flowHard = get (id::flowHard);       p.flowSync = get (id::flowSync);
     p.flowAmount = get (id::flowAmount); p.flowSpeed = get (id::flowSpeed);     p.flowDiv = get (id::flowDiv);
     p.output = get (id::output);         p.input = get (id::input);           p.bypass = get (id::bypass);
@@ -189,6 +189,7 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     fuzzSettings.glare = pct (p.fuzzGlare);
     fuzzSettings.gate  = pct (p.fuzzGate);
     fuzzSettings.blend = pct (p.fuzzBlend);
+    fuzzSettings.sag   = pct (p.fuzzSag);
     fuzzSettings.voice = (int) p.fuzzVoice->load();
     fuzzPre.setParams (fuzzOn && ! fuzzIsPost, fuzzSettings);
     fuzzPre.process (audio, numChannels, numSamples);

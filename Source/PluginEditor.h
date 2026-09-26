@@ -68,7 +68,7 @@ private:
     PillToggle postToggle { "POST" };
     SegmentedChoice fuzzVoiceSelector;
     Knob fuzzKnob { "FUZZ" }, fuzzToneKnob { "TONE" }, fuzzScoopKnob { "SCOOP" };
-    Knob fuzzGlareKnob { "GLARE" }, fuzzGateKnob { "GATE" }, fuzzBlendKnob { "BLEND" };
+    Knob fuzzGlareKnob { "GLARE" }, fuzzGateKnob { "GATE" }, fuzzSagKnob { "SAG" }, fuzzBlendKnob { "BLEND" };
 
     // WINGS (gate)
     PowerButton flowPower;

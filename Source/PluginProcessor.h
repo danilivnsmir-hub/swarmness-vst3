@@ -84,7 +84,7 @@ private:
         std::atomic<float>* swarmDepth {}; std::atomic<float>* swarmMix {};
         std::atomic<float>* fuzzOn {};     std::atomic<float>* fuzzPost {};    std::atomic<float>* fuzz {};
         std::atomic<float>* fuzzTone {};   std::atomic<float>* fuzzGate {};    std::atomic<float>* fuzzVoice {};
-        std::atomic<float>* fuzzScoop {};  std::atomic<float>* fuzzGlare {};   std::atomic<float>* fuzzBlend {};
+        std::atomic<float>* fuzzScoop {};  std::atomic<float>* fuzzGlare {};   std::atomic<float>* fuzzBlend {};   std::atomic<float>* fuzzSag {};
         std::atomic<float>* flowOn {};     std::atomic<float>* flowHard {};    std::atomic<float>* flowSync {};
         std::atomic<float>* flowAmount {}; std::atomic<float>* flowSpeed {};   std::atomic<float>* flowDiv {};
         std::atomic<float>* output {};      std::atomic<float>* input {};      std::atomic<float>* bypass {};
