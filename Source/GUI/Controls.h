@@ -30,6 +30,7 @@ private:
     };
 
     void showValueEditor();
+    void closeValueEditor();
 
     juce::String caption;
     SnappingSlider slider;

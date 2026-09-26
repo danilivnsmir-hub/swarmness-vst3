@@ -58,24 +58,27 @@ void Knob::showValueEditor()
     ed->selectAll();
     ed->grabKeyboardFocus();
 
-    auto finish = [this] (bool apply)
+    juce::Component::SafePointer<Knob> safe (this);
+    auto finish = [safe] (bool apply)
     {
-        if (valueEditor == nullptr) return;
+        if (safe == nullptr || safe->valueEditor == nullptr) return;
         if (apply)
         {
-            const auto text = valueEditor->getText().trim();
-            if (text.isNotEmpty())
-                slider.setValue (slider.snapValue (slider.getValueFromText (text), juce::Slider::notDragging),
-                                 juce::sendNotificationSync);
+            const auto entered = safe->valueEditor->getText().trim();
+            if (entered.isNotEmpty())
+                safe->slider.setValue (safe->slider.snapValue (safe->slider.getValueFromText (entered), juce::Slider::notDragging),
+                                       juce::sendNotificationSync);
         }
-        juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<Knob> (this)]
-        {
-            if (safe != nullptr) safe->valueEditor.reset();
-        });
+        juce::MessageManager::callAsync ([safe] { if (safe != nullptr) safe->closeValueEditor(); });
     };
     ed->onReturnKey = [finish] { finish (true); };
     ed->onEscapeKey = [finish] { finish (false); };
     ed->onFocusLost = [finish] { finish (true); };
+}
+
+void Knob::closeValueEditor()
+{
+    valueEditor.reset();
 }
 
 void Knob::resized()
