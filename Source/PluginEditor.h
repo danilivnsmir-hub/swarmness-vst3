@@ -88,7 +88,7 @@ private:
     std::vector<std::unique_ptr<APVTS::ButtonAttachment>> buttonAttachments;
 
     // Section rectangles (base coordinates)
-    juce::Rectangle<float> noiseArea, rainbowArea, swarmArea, fuzzArea, flowArea;
+    juce::Rectangle<float> noiseArea, rainbowArea, swarmArea, fuzzArea, flowArea, footswitchArea;
     std::array<bool, 5> lastSectionStates {};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainPanel)

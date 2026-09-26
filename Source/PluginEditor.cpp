@@ -246,10 +246,12 @@ void MainPanel::resized()
         }
         link1Switch.setBounds (oct1Switch.getRight() + 2, fy + 34, 38, 50);
         link2Switch.setBounds (oct2Switch.getRight() + 2, fy + 34, 38, 50);
+        footswitchArea = juce::Rectangle<float> ((float) oct1Switch.getX() - 14.0f, (float) fy - 4.0f,
+                                                 (float) (bypassSwitch.getRight() - oct1Switch.getX()) + 28.0f, (float) fh + 6.0f);
         inputKnob .setBounds (16, fy - 8, 72, 104);
-        inMeter   .setBounds (96, 600, 190, 26);
+        inMeter   .setBounds (96, 600, 176, 26);
         volumeKnob.setBounds (baseWidth - 16 - 72, fy - 8, 72, 104);
-        outMeter  .setBounds (baseWidth - 16 - 72 - 8 - 190, 600, 190, 26);
+        outMeter  .setBounds (baseWidth - 16 - 72 - 8 - 176, 600, 176, 26);
     }
 
     infoOverlay.setBounds (getLocalBounds());
@@ -331,6 +333,9 @@ void MainPanel::paintBackdrop (juce::Graphics& g)
 
     for (auto a : { noiseArea, rainbowArea, swarmArea, fuzzArea, flowArea })
         drawPanel (g, a);
+
+    // Footswitch plate (pedalboard strip behind the stomps and LINK switches)
+    drawPanel (g, footswitchArea, 12.0f);
 
     auto titleRow = [] (juce::Rectangle<float> a) { return a.reduced (16.0f, 0.0f).withTrimmedTop (8.0f).withHeight (26.0f); };
 
