@@ -145,7 +145,7 @@ private:
         std::atomic<float>* revDecay {};   std::atomic<float>* revSize {};     std::atomic<float>* revPreDelay {};
         std::atomic<float>* revTone {};    std::atomic<float>* revLowCut {};   std::atomic<float>* revMod {};     std::atomic<float>* revDuck {};
         std::array<std::atomic<float>*, Chain::numBlocks> chainSlots {}, chainLanes {};
-        std::atomic<float>* parMix {};
+        std::array<std::atomic<float>*, Chain::maxSplits> parMix {};
     } p;
 
     /** Per-block state shared by the chain blocks. */
@@ -175,7 +175,7 @@ private:
 
     Chain::Layout activeLayout { Chain::defaultOrder(), {} };
     juce::SmoothedValue<float> chainFade;   // dips the chain output while the order / routing changes
-    juce::SmoothedValue<float> parMixSmoothed;
+    std::array<juce::SmoothedValue<float>, Chain::maxSplits> parMixSmoothed;
     juce::AudioBuffer<float> pathBBuffer;   // parallel path B
     // Parallel paths are latency-aligned: the path without SMOKE is delayed by SMOKE's latency.
     juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::None> pathAlignA { 1 }, pathAlignB { 1 };

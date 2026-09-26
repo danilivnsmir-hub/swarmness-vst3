@@ -62,7 +62,8 @@ SwarmnessAudioProcessor::SwarmnessAudioProcessor()
         p.chainSlots[(size_t) b] = get (Chain::slotIds[b]);
         p.chainLanes[(size_t) b] = get (Chain::laneIds[b]);
     }
-    p.parMix = get (Chain::parallelMixId);
+    for (int sp = 0; sp < Chain::maxSplits; ++sp)
+        p.parMix[(size_t) sp] = get (Chain::parallelMixIds[sp]);
 
     bypassParam = dynamic_cast<juce::AudioParameterBool*> (apvts.getParameter (id::bypass));
     jassert (bypassParam != nullptr);
@@ -127,7 +128,8 @@ void SwarmnessAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBl
     init (hiveVoiceGain,      0.02, 1.0f);
     init (bypassSmoothed,     0.02, on (p.bypass) ? 1.0f : 0.0f);
     init (chainFade,          0.008, 1.0f);
-    init (parMixSmoothed,     0.03, pct (p.parMix));
+    for (int sp = 0; sp < Chain::maxSplits; ++sp)
+        init (parMixSmoothed[(size_t) sp], 0.03, pct (p.parMix[(size_t) sp]));
     activeLayout = getRequestedLayout();
     pathBBuffer.setSize (2, maxBlockSize, false, false, true);
     for (auto* d : { &pathAlignA, &pathAlignB })
@@ -247,28 +249,37 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
         chainFade.setTargetValue (0.0f);
 
     const auto plan = Chain::planFor (activeLayout);
-    for (int i = 0; i < plan.numPre; ++i)
-        processChainBlock (plan.pre[(size_t) i], ctx, audio, numChannels, numSamples);
+    for (int sp = 0; sp < Chain::maxSplits; ++sp)
+        parMixSmoothed[(size_t) sp].setTargetValue (pct (p.parMix[(size_t) sp]));
 
-    if (plan.hasParallel())
+    for (int si = 0; si < plan.numStages; ++si)
     {
+        const auto& stage = plan.stages[(size_t) si];
+        if (! stage.parallel)
+        {
+            processChainBlock (stage.block, ctx, audio, numChannels, numSamples);
+            continue;
+        }
+
+        // split: path A works in place, path B on a copy
         for (int ch = 0; ch < numChannels; ++ch)
             pathBBuffer.copyFrom (ch, 0, audio[ch], numSamples);
         float* pathB[2] = { pathBBuffer.getWritePointer (0), pathBBuffer.getWritePointer (1) };
 
         bool smokeA = false, smokeB = false;
-        for (int i = 0; i < plan.numA; ++i)
+        for (int i = 0; i < stage.numA; ++i)
         {
-            smokeA = smokeA || plan.a[(size_t) i] == Chain::smoke;
-            processChainBlock (plan.a[(size_t) i], ctx, audio, numChannels, numSamples);
+            smokeA = smokeA || stage.a[(size_t) i] == Chain::smoke;
+            processChainBlock (stage.a[(size_t) i], ctx, audio, numChannels, numSamples);
         }
-        for (int i = 0; i < plan.numB; ++i)
+        for (int i = 0; i < stage.numB; ++i)
         {
-            smokeB = smokeB || plan.b[(size_t) i] == Chain::smoke;
-            processChainBlock (plan.b[(size_t) i], ctx, pathB, numChannels, numSamples);
+            smokeB = smokeB || stage.b[(size_t) i] == Chain::smoke;
+            processChainBlock (stage.b[(size_t) i], ctx, pathB, numChannels, numSamples);
         }
 
-        // Keep both paths time-aligned (SMOKE oversampling) so they never comb-filter
+        // Keep both paths time-aligned (SMOKE oversampling) so they never comb-filter.
+        // SMOKE exists once, so at most one split ever needs this.
         auto align = [numChannels, numSamples] (juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::None>& d, float* const* x)
         {
             for (int ch = 0; ch < numChannels; ++ch)
@@ -281,22 +292,19 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
         if (smokeA && ! smokeB) align (pathAlignB, pathB);
         if (smokeB && ! smokeA) align (pathAlignA, audio);
 
-        // Merge: linear balance, so identical paths add up to exactly the input level
-        parMixSmoothed.setTargetValue (pct (p.parMix));
+        // merge: linear balance, so identical paths add up to exactly the input level
+        auto& mix = parMixSmoothed[(size_t) stage.split];
         for (int i = 0; i < numSamples; ++i)
         {
-            const float m = parMixSmoothed.getNextValue();
+            const float m = mix.getNextValue();
             for (int ch = 0; ch < numChannels; ++ch)
                 audio[ch][i] += m * (pathB[ch][i] - audio[ch][i]);
         }
     }
-    else
-    {
-        parMixSmoothed.setCurrentAndTargetValue (pct (p.parMix));
-    }
 
-    for (int i = 0; i < plan.numPost; ++i)
-        processChainBlock (plan.post[(size_t) i], ctx, audio, numChannels, numSamples);
+    // mixes of splits that are not in the chain just follow their parameter
+    for (int sp = plan.numSplits; sp < Chain::maxSplits; ++sp)
+        parMixSmoothed[(size_t) sp].setCurrentAndTargetValue (pct (p.parMix[(size_t) sp]));
 
     if (chainFade.isSmoothing() || chainFade.getCurrentValue() < 1.0f)
     {

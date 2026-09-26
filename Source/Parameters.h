@@ -189,7 +189,9 @@ namespace Chain
     enum Lane : int { series = 0, pathA, pathB };
     inline constexpr const char* laneIds[numBlocks] { "lanePitch", "laneSmoke", "laneSwarm", "laneWings",
                                                       "laneComb", "laneCarve", "laneCrypt" };
-    inline constexpr const char* parallelMixId = "chainParMix";   // A <-> B balance at the merge
+    /** A / B balance of each split, numbered left to right (7 blocks allow at most 4 splits). */
+    inline constexpr int maxSplits = 4;
+    inline constexpr const char* parallelMixIds[maxSplits] { "chainParMix", "chainParMix2", "chainParMix3", "chainParMix4" };
 
     using Lanes = std::array<int, numBlocks>;
 
@@ -203,28 +205,50 @@ namespace Chain
     };
 
     /**
-     * The routing a layout means:  pre (series) -> split -> [path A || path B] -> merge -> post (series).
-     * The parallel section sits where its first block is in the order; series blocks before it are
-     * "pre", all other series blocks are "post". An empty path passes the dry signal (parallel blend).
+     * The routing a layout means: a sequence of stages, each either one series block or a split
+     * (path A || path B, then a merge). Parallel blocks that follow each other in the order form
+     * one split; a series block between them starts a new one:
+     *     FX1 -> [FX2 || FX3] -> FX4 -> [FX5 || FX6] -> FX7
+     * An empty path carries the dry signal (parallel blend).
      */
+    struct Stage
+    {
+        bool parallel = false;
+        int block = -1;                      // series stage
+        std::array<int, numBlocks> a {}, b {};
+        int numA = 0, numB = 0;
+        int split = -1;                      // index of the split (its MIX parameter)
+    };
+
     struct Plan
     {
-        std::array<int, numBlocks> pre {}, a {}, b {}, post {};
-        int numPre = 0, numA = 0, numB = 0, numPost = 0;
-        bool hasParallel() const noexcept { return numA + numB > 0; }
+        std::array<Stage, numBlocks> stages {};
+        int numStages = 0, numSplits = 0;
     };
 
     inline Plan planFor (const Layout& l) noexcept
     {
         Plan p;
-        bool seenParallel = false;
         for (int blk : l.order)
         {
             const int lane = l.lanes[(size_t) blk];
-            if (lane == pathA)      { p.a[(size_t) p.numA++] = blk; seenParallel = true; }
-            else if (lane == pathB) { p.b[(size_t) p.numB++] = blk; seenParallel = true; }
-            else if (seenParallel)  p.post[(size_t) p.numPost++] = blk;
-            else                    p.pre[(size_t) p.numPre++] = blk;
+            if (lane == series)
+            {
+                auto& st = p.stages[(size_t) p.numStages++];
+                st = {};
+                st.block = blk;
+                continue;
+            }
+            if (p.numStages == 0 || ! p.stages[(size_t) p.numStages - 1].parallel)
+            {
+                auto& st = p.stages[(size_t) p.numStages++];
+                st = {};
+                st.parallel = true;
+                st.split = juce::jmin (p.numSplits++, maxSplits - 1);
+            }
+            auto& st = p.stages[(size_t) p.numStages - 1];
+            if (lane == pathA) st.a[(size_t) st.numA++] = blk;
+            else               st.b[(size_t) st.numB++] = blk;
         }
         return p;
     }

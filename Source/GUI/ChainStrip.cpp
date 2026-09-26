@@ -11,14 +11,18 @@ ChainStrip::ChainStrip (juce::AudioProcessorValueTreeState& s) : state (s)
 {
     setRepaintsOnMouseActivity (false);
 
-    mixKnob.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
-    mixKnob.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
-    mixKnob.getProperties().set ("bipolar", true);
-    mixKnob.setTooltip ("Parallel MIX: balance of path A (upper) and path B (lower) at the merge. "
-                        "Centre = both at half level (identical paths = unity). An empty path is the dry signal");
-    mixKnob.setDoubleClickReturnValue (true, 50.0);
-    mixAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (state, Chain::parallelMixId, mixKnob);
-    addChildComponent (mixKnob);
+    for (int sp = 0; sp < Chain::maxSplits; ++sp)
+    {
+        auto& k = mixKnobs[(size_t) sp];
+        k.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
+        k.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
+        k.getProperties().set ("bipolar", true);
+        k.setTooltip ("Split " + juce::String (sp + 1) + " MIX: balance of path A (upper) and path B (lower) at the merge. "
+                      "Centre = both at half level (identical paths = unity). An empty path is the dry signal. Double-click = centre");
+        k.setDoubleClickReturnValue (true, 50.0);
+        mixAttachments[(size_t) sp] = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (state, Chain::parallelMixIds[sp], k);
+        addChildComponent (k);
+    }
 }
 
 ChainStrip::~ChainStrip() = default;
@@ -65,15 +69,27 @@ ChainStrip::Geometry ChainStrip::computeGeometry (const Chain::Layout& l) const
     g.laneBY = h * 0.75f - 0.5f;
 
     const auto plan = Chain::planFor (l);
-    const int parCols = plan.hasParallel() ? juce::jmax (1, plan.numA, plan.numB) : 0;
-    const int cols = juce::jmax (1, plan.numPre + parCols + plan.numPost);
+
+    // columns: one per series stage, max (A, B, 1) per split; wider gaps around each split
+    int cols = 0;
+    std::vector<int> stageCol ((size_t) plan.numStages + 1, 0);
+    for (int si = 0; si < plan.numStages; ++si)
+    {
+        stageCol[(size_t) si] = cols;
+        const auto& st = plan.stages[(size_t) si];
+        cols += st.parallel ? juce::jmax (1, st.numA, st.numB) : 1;
+    }
+    stageCol[(size_t) plan.numStages] = cols;
+    cols = juce::jmax (1, cols);
 
     std::vector<float> gaps ((size_t) cols + 1, kGap);
-    if (plan.hasParallel())
-    {
-        gaps[(size_t) plan.numPre] = kSplitGap;
-        gaps[(size_t) (plan.numPre + parCols)] = kMergeGap;
-    }
+    for (int si = 0; si < plan.numStages; ++si)
+        if (plan.stages[(size_t) si].parallel)
+        {
+            auto& before = gaps[(size_t) stageCol[(size_t) si]];
+            before = juce::jmax (before, kSplitGap);
+            gaps[(size_t) stageCol[(size_t) si + 1]] = kMergeGap;
+        }
     float gapSum = 0.0f;
     for (auto v : gaps)
         gapSum += v;
@@ -91,21 +107,27 @@ ChainStrip::Geometry ChainStrip::computeGeometry (const Chain::Layout& l) const
     const auto upper = [&] (float x) { return juce::Rectangle<float> (x, 2.0f, tileW, h * 0.5f - 3.0f); };
     const auto lower = [&] (float x) { return juce::Rectangle<float> (x, h * 0.5f + 1.0f, tileW, h * 0.5f - 3.0f); };
 
-    for (int i = 0; i < plan.numPre; ++i)
-        g.rects[(size_t) plan.pre[(size_t) i]] = full (colX (i));
-    for (int i = 0; i < plan.numA; ++i)
-        g.rects[(size_t) plan.a[(size_t) i]] = upper (colX (plan.numPre + i));
-    for (int i = 0; i < plan.numB; ++i)
-        g.rects[(size_t) plan.b[(size_t) i]] = lower (colX (plan.numPre + i));
-    for (int i = 0; i < plan.numPost; ++i)
-        g.rects[(size_t) plan.post[(size_t) i]] = full (colX (plan.numPre + parCols + i));
-
-    if (plan.hasParallel())
+    for (int si = 0; si < plan.numStages; ++si)
     {
-        g.splitX = colX (plan.numPre) - kSplitGap * 0.5f;
-        g.mergeX = colX (plan.numPre + parCols) - kMergeGap * 0.5f;
-        g.emptyA = plan.numA == 0;
-        g.emptyB = plan.numB == 0;
+        const auto& st = plan.stages[(size_t) si];
+        const int c0 = stageCol[(size_t) si];
+        if (! st.parallel)
+        {
+            g.rects[(size_t) st.block] = full (colX (c0));
+            continue;
+        }
+        for (int i = 0; i < st.numA; ++i)
+            g.rects[(size_t) st.a[(size_t) i]] = upper (colX (c0 + i));
+        for (int i = 0; i < st.numB; ++i)
+            g.rects[(size_t) st.b[(size_t) i]] = lower (colX (c0 + i));
+
+        Split sp;
+        sp.splitX = colX (c0) - gaps[(size_t) c0] * 0.5f;
+        sp.mergeX = colX (stageCol[(size_t) si + 1]) - kMergeGap * 0.5f;
+        sp.emptyA = st.numA == 0;
+        sp.emptyB = st.numB == 0;
+        sp.index = st.split;
+        g.splits.push_back (sp);
     }
     return g;
 }
@@ -178,13 +200,20 @@ void ChainStrip::refresh()
         }
     }
 
-    const bool showMix = geometry.mergeX > 0.0f && ! dragging;
-    if (showMix)
-        mixKnob.setBounds (juce::Rectangle<int> (34, 34).withCentre ({ juce::roundToInt (geometry.mergeX), getHeight() / 2 }));
-    if (mixKnob.isVisible() != showMix)
+    for (int k = 0; k < Chain::maxSplits; ++k)
     {
-        mixKnob.setVisible (showMix);
-        changed = true;
+        bool show = false;
+        for (const auto& sp : geometry.splits)
+            if (sp.index == k && ! dragging)
+            {
+                show = true;
+                mixKnobs[(size_t) k].setBounds (juce::Rectangle<int> (34, 34).withCentre ({ juce::roundToInt (sp.mergeX), getHeight() / 2 }));
+            }
+        if (mixKnobs[(size_t) k].isVisible() != show)
+        {
+            mixKnobs[(size_t) k].setVisible (show);
+            changed = true;
+        }
     }
 
     if (changed)
@@ -220,41 +249,42 @@ void ChainStrip::paint (juce::Graphics& g)
         g.fillPath (a);
     };
 
-    // Cables
+    // Cables: the main line with a detour through each split
     g.setColour (cable);
     const float left = 26.0f, right = bounds.getRight() - 34.0f;
-    if (geo.splitX < 0.0f)
+    float x = left;
+    for (const auto& sp : geo.splits)
     {
-        g.fillRect (juce::Rectangle<float> (left, cy - 1.0f, right - left, 2.0f));
-    }
-    else
-    {
-        g.fillRect (juce::Rectangle<float> (left, cy - 1.0f, geo.splitX - left, 2.0f));
-        g.fillRect (juce::Rectangle<float> (geo.mergeX, cy - 1.0f, right - geo.mergeX, 2.0f));
-        // split / merge: the two paths
+        g.fillRect (juce::Rectangle<float> (x, cy - 1.0f, sp.splitX - x, 2.0f));
+        g.setColour (cable);
         for (float y : { geo.laneAY, geo.laneBY })
-            g.fillRect (juce::Rectangle<float> (geo.splitX, y - 1.0f, geo.mergeX - geo.splitX, 2.0f));
-        g.fillRect (juce::Rectangle<float> (geo.splitX - 1.0f, geo.laneAY, 2.0f, geo.laneBY - geo.laneAY));
-        g.fillRect (juce::Rectangle<float> (geo.mergeX - 1.0f, geo.laneAY, 2.0f, geo.laneBY - geo.laneAY));
+            g.fillRect (juce::Rectangle<float> (sp.splitX, y - 1.0f, sp.mergeX - sp.splitX, 2.0f));
+        g.fillRect (juce::Rectangle<float> (sp.splitX - 1.0f, geo.laneAY, 2.0f, geo.laneBY - geo.laneAY));
+        g.fillRect (juce::Rectangle<float> (sp.mergeX - 1.0f, geo.laneAY, 2.0f, geo.laneBY - geo.laneAY));
 
         g.setFont (font (10.5f, true));
         g.setColour (Colours::textFaint);
-        g.drawText ("A", juce::Rectangle<float> (geo.splitX + 2.0f, geo.laneAY - 13.0f, 10.0f, 11.0f), juce::Justification::centredLeft, false);
-        g.drawText ("B", juce::Rectangle<float> (geo.splitX + 2.0f, geo.laneBY + 2.0f, 10.0f, 11.0f), juce::Justification::centredLeft, false);
+        g.drawText ("A", juce::Rectangle<float> (sp.splitX + 2.0f, geo.laneAY - 13.0f, 10.0f, 11.0f), juce::Justification::centredLeft, false);
+        g.drawText ("B", juce::Rectangle<float> (sp.splitX + 2.0f, geo.laneBY + 2.0f, 10.0f, 11.0f), juce::Justification::centredLeft, false);
 
         // an empty path carries the dry signal
         g.setFont (font (11.5f, true));
         auto dryLabel = [&] (float y)
         {
-            const auto r = juce::Rectangle<float> (60.0f, 14.0f).withCentre ({ (geo.splitX + geo.mergeX) * 0.5f, y });
+            const auto r = juce::Rectangle<float> (60.0f, 14.0f).withCentre ({ (sp.splitX + sp.mergeX) * 0.5f, y });
             g.setColour (Colours::background);
             g.fillRect (r.withSizeKeepingCentre (38.0f, 12.0f));
             g.setColour (Colours::textDim);
             g.drawText ("DRY", r, juce::Justification::centred, false);
         };
-        if (geo.emptyA) dryLabel (geo.laneAY);
-        if (geo.emptyB) dryLabel (geo.laneBY);
+        if (sp.emptyA) dryLabel (geo.laneAY);
+        if (sp.emptyB) dryLabel (geo.laneBY);
+
+        g.setColour (cable);
+        x = sp.mergeX;
     }
+    g.setColour (cable);
+    g.fillRect (juce::Rectangle<float> (x, cy - 1.0f, right - x, 2.0f));
 
     // Arrow heads on the main cable (in front of every series tile and at the output)
     for (int b = 0; b < Chain::numBlocks; ++b)
@@ -264,8 +294,8 @@ void ChainStrip::paint (juce::Graphics& g)
             arrow (r.getX() - kGap * 0.5f, cy);
     }
     arrow (right - 6.0f, cy);
-    if (geo.splitX > 0.0f)
-        arrow (geo.splitX - 7.0f, cy);
+    for (const auto& sp : geo.splits)
+        arrow (sp.splitX - 7.0f, cy);
 
     auto drawTile = [&] (int b, juce::Rectangle<float> r, bool floating)
     {

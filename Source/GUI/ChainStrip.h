@@ -6,7 +6,8 @@
 /**
  * The signal chain as hex tiles:  IN > [SMOKE] > [PITCH] > ... > OUT
  * Blocks can also run in parallel: the chain splits into path A (upper row) and path B
- * (lower row) and merges again (A/B mix knob at the merge). An empty path = dry signal.
+ * (lower row) and merges again (A/B mix knob at each merge). There can be several splits,
+ * separated by series blocks. An empty path = dry signal.
  *  - click a tile: open the page with that block
  *  - drag a tile sideways: move it in the chain; drag it up / down: parallel path A / B;
  *    drag it back to the middle: series again
@@ -45,12 +46,17 @@ public:
 
 private:
     using Rects = std::array<juce::Rectangle<float>, Chain::numBlocks>;
+    struct Split
+    {
+        float splitX = 0.0f, mergeX = 0.0f;
+        bool emptyA = false, emptyB = false;
+        int index = 0;   // its MIX parameter
+    };
     struct Geometry
     {
         Rects rects;
-        float splitX = -1.0f, mergeX = -1.0f;
+        std::vector<Split> splits;
         float cableY = 0.0f, laneAY = 0.0f, laneBY = 0.0f;
-        bool emptyA = false, emptyB = false;
     };
 
     Geometry computeGeometry (const Chain::Layout&) const;
@@ -71,8 +77,8 @@ private:
     bool dragging = false, pressedOnLed = false;
     juce::Point<float> grabOffset, dragPos;
 
-    juce::Slider mixKnob;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> mixAttachment;
+    std::array<juce::Slider, Chain::maxSplits> mixKnobs;
+    std::array<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>, Chain::maxSplits> mixAttachments;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChainStrip)
 };

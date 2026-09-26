@@ -1077,13 +1077,24 @@ namespace
     {
         std::printf ("\nParallel paths (split -> A || B -> merge)\n");
         {
-            Chain::Layout l { Chain::defaultOrder(), {} };
+            Chain::Layout l { { Chain::smoke, Chain::pitch, Chain::swarm, Chain::crypt, Chain::wings, Chain::comb, Chain::carve }, {} };
             l.lanes[Chain::swarm] = Chain::pathA;
             l.lanes[Chain::crypt] = Chain::pathB;
             const auto plan = Chain::planFor (l);
-            check (plan.numPre == 2 && plan.numA == 1 && plan.numB == 1 && plan.numPost == 3
-                   && plan.a[0] == Chain::swarm && plan.b[0] == Chain::crypt && plan.post[0] == Chain::wings,
+            const auto& split = plan.stages[2];
+            check (plan.numStages == 6 && plan.numSplits == 1 && split.parallel && split.numA == 1 && split.numB == 1
+                   && split.a[0] == Chain::swarm && split.b[0] == Chain::crypt && plan.stages[3].block == Chain::wings,
                    "plan: SMOKE, PITCH -> [SWARM || CRYPT] -> WINGS, COMB, CARVE");
+
+            // two splits with a series block between: [SMOKE || PITCH] -> SWARM -> [WINGS || COMB] -> CARVE -> CRYPT
+            Chain::Layout two { Chain::defaultOrder(), {} };
+            two.lanes[Chain::smoke] = Chain::pathA;  two.lanes[Chain::pitch] = Chain::pathB;
+            two.lanes[Chain::wings] = Chain::pathA;  two.lanes[Chain::comb]  = Chain::pathB;
+            const auto p2 = Chain::planFor (two);
+            check (p2.numSplits == 2 && p2.numStages == 5 && p2.stages[0].parallel && p2.stages[0].split == 0
+                   && p2.stages[1].block == Chain::swarm && p2.stages[2].parallel && p2.stages[2].split == 1
+                   && p2.stages[2].a[0] == Chain::wings && p2.stages[2].b[0] == Chain::comb,
+                   "two splits separated by a series block, each with its own MIX");
         }
 
         const double sr = 48000.0;
@@ -1102,17 +1113,28 @@ namespace
             resetToInit (p);
             setParam (p, ParamIDs::fuzzOn, 1.0f);
             setLanes (p, { { Chain::smoke, Chain::pathA } });
-            setParam (p, Chain::parallelMixId, 100.0f);
+            setParam (p, Chain::parallelMixIds[0], 100.0f);
             auto out = render (p, input, sr, 256);
             const double db = nullDb (out, input, p.getLatencySamples(), 4096, input.getNumSamples());
             check (db < -120.0, juce::String::formatted ("dry path B is aligned with SMOKE's latency (null %.1f dB)", db));
 
-            setParam (p, Chain::parallelMixId, 50.0f);
+            setParam (p, Chain::parallelMixIds[0], 50.0f);
             auto blend = render (p, input, sr, 256);
             setLanes (p, { { Chain::smoke, Chain::series } });
             auto series = render (p, input, sr, 256);
             const double diff = nullDb (blend, series, 0, 4096, input.getNumSamples());
             check (diff > -10.0 && allFinite (blend), juce::String::formatted ("fuzz || dry differs from series fuzz (%.1f dB)", diff));
+        }
+        {
+            // Two splits, both transparent while their blocks are off
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            setLanes (p, { { Chain::smoke, Chain::pathA }, { Chain::swarm, Chain::pathA }, { Chain::crypt, Chain::pathB } });
+            setParam (p, Chain::slotIds[Chain::crypt], 35.0f);
+            setParam (p, Chain::parallelMixIds[1], 70.0f);
+            auto out = render (p, input, sr, 256);
+            const double db = nullDb (out, input, p.getLatencySamples(), 4096, input.getNumSamples());
+            check (db < -120.0, juce::String::formatted ("[SMOKE || dry] -> PITCH -> [SWARM || CRYPT], all off: transparent (null %.1f dB)", db));
         }
         {
             // Moving a block into a path while playing: short dip, no clicks
