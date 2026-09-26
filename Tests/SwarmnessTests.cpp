@@ -1067,6 +1067,76 @@ namespace
         }
     }
 
+    void setLanes (SwarmnessAudioProcessor& p, std::initializer_list<std::pair<int, int>> lanes)
+    {
+        for (auto [block, lane] : lanes)
+            setParam (p, Chain::laneIds[block], (float) lane);
+    }
+
+    void testParallelRouting()
+    {
+        std::printf ("\nParallel paths (split -> A || B -> merge)\n");
+        {
+            Chain::Layout l { Chain::defaultOrder(), {} };
+            l.lanes[Chain::swarm] = Chain::pathA;
+            l.lanes[Chain::crypt] = Chain::pathB;
+            const auto plan = Chain::planFor (l);
+            check (plan.numPre == 2 && plan.numA == 1 && plan.numB == 1 && plan.numPost == 3
+                   && plan.a[0] == Chain::swarm && plan.b[0] == Chain::crypt && plan.post[0] == Chain::wings,
+                   "plan: SMOKE, PITCH -> [SWARM || CRYPT] -> WINGS, COMB, CARVE");
+        }
+
+        const double sr = 48000.0;
+        auto input = makeGuitar (sr, 48000);
+        {
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            setLanes (p, { { Chain::smoke, Chain::pathA }, { Chain::crypt, Chain::pathB } });
+            auto out = render (p, input, sr, 256);
+            const double db = nullDb (out, input, p.getLatencySamples(), 4096, input.getNumSamples());
+            check (db < -120.0, juce::String::formatted ("blocks off in both paths, MIX 50%%: transparent (null %.1f dB)", db));
+        }
+        {
+            // SMOKE on path A, B empty (dry), MIX fully to B: exactly the dry signal, latency-aligned
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            setParam (p, ParamIDs::fuzzOn, 1.0f);
+            setLanes (p, { { Chain::smoke, Chain::pathA } });
+            setParam (p, Chain::parallelMixId, 100.0f);
+            auto out = render (p, input, sr, 256);
+            const double db = nullDb (out, input, p.getLatencySamples(), 4096, input.getNumSamples());
+            check (db < -120.0, juce::String::formatted ("dry path B is aligned with SMOKE's latency (null %.1f dB)", db));
+
+            setParam (p, Chain::parallelMixId, 50.0f);
+            auto blend = render (p, input, sr, 256);
+            setLanes (p, { { Chain::smoke, Chain::series } });
+            auto series = render (p, input, sr, 256);
+            const double diff = nullDb (blend, series, 0, 4096, input.getNumSamples());
+            check (diff > -10.0 && allFinite (blend), juce::String::formatted ("fuzz || dry differs from series fuzz (%.1f dB)", diff));
+        }
+        {
+            // Moving a block into a path while playing: short dip, no clicks
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            setParam (p, ParamIDs::swarmOn, 1.0f);
+            auto tone = makeSine (sr, 48000, 220.0, 0.25f);
+            p.prepareToPlay (sr, 128);
+            juce::AudioBuffer<float> out (tone);
+            juce::MidiBuffer midi;
+            for (int start = 0; start < out.getNumSamples(); start += 128)
+            {
+                if (start == 24064)
+                    setLanes (p, { { Chain::swarm, Chain::pathB } });
+                juce::AudioBuffer<float> view (out.getArrayOfWritePointers(), 2, start, 128);
+                p.processBlock (view, midi);
+            }
+            float maxStep = 0.0f;
+            for (int i = 1; i < out.getNumSamples(); ++i)
+                maxStep = juce::jmax (maxStep, std::abs (out.getSample (0, i) - out.getSample (0, i - 1)));
+            check (maxStep < 0.04f && allFinite (out), juce::String::formatted ("series -> parallel while playing: max step %.4f", maxStep));
+        }
+    }
+
     void testGraphicEq()
     {
         std::printf ("\nCOMB graphic EQ\n");
@@ -1404,6 +1474,7 @@ int main (int argc, char** argv)
     {
         const juce::String which (argv[2]);
         if (which == "chain")   testChainOrder();
+        if (which == "parallel") testParallelRouting();
         if (which == "comb")    testGraphicEq();
         if (which == "carve")   testParametricEq();
         if (which == "reverb")  testReverb();
@@ -1439,6 +1510,7 @@ int main (int argc, char** argv)
     testPresetDirtyTracking();
     testPresetBanks();
     testChainOrder();
+    testParallelRouting();
     testGraphicEq();
     testParametricEq();
     testReverb();

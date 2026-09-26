@@ -232,6 +232,18 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
         chain->addChild (std::make_unique<juce::AudioParameterInt> (
             pid (Chain::slotIds[b]), juce::String ("Chain Slot ") + Chain::names[b], 0, Chain::slotMax, Chain::defaultSlots[b],
             juce::AudioParameterIntAttributes().withAutomatable (false)));
+    for (int b = 0; b < Chain::numBlocks; ++b)
+        chain->addChild (std::make_unique<juce::AudioParameterChoice> (
+            pid (Chain::laneIds[b]), juce::String ("Chain Lane ") + Chain::names[b],
+            juce::StringArray { "Series", "Parallel A", "Parallel B" }, Chain::series,
+            juce::AudioParameterChoiceAttributes().withAutomatable (false)));
+    chain->addChild (std::make_unique<juce::AudioParameterFloat> (
+        pid (Chain::parallelMixId), "Parallel Mix", percentRange(), 50.0f,
+        Attr().withLabel ("%").withStringFromValueFunction ([] (float v, int)
+        {
+            const int b = juce::roundToInt (v);
+            return "A " + juce::String (100 - b) + " / B " + juce::String (b);
+        })));
 
     // ----------------------------------------------------------------- OUTPUT
     auto out = std::make_unique<Group> ("output", "Output", "|");

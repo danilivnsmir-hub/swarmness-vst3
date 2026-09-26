@@ -185,6 +185,50 @@ namespace Chain
         return order;
     }
 
+    /** Where a block sits: in the main (series) line, or on parallel path A (upper) / B (lower). */
+    enum Lane : int { series = 0, pathA, pathB };
+    inline constexpr const char* laneIds[numBlocks] { "lanePitch", "laneSmoke", "laneSwarm", "laneWings",
+                                                      "laneComb", "laneCarve", "laneCrypt" };
+    inline constexpr const char* parallelMixId = "chainParMix";   // A <-> B balance at the merge
+
+    using Lanes = std::array<int, numBlocks>;
+
+    /** Order + lanes: everything the audio thread needs to route the chain. */
+    struct Layout
+    {
+        Order order {};
+        Lanes lanes {};
+        bool operator== (const Layout& o) const noexcept { return order == o.order && lanes == o.lanes; }
+        bool operator!= (const Layout& o) const noexcept { return ! (*this == o); }
+    };
+
+    /**
+     * The routing a layout means:  pre (series) -> split -> [path A || path B] -> merge -> post (series).
+     * The parallel section sits where its first block is in the order; series blocks before it are
+     * "pre", all other series blocks are "post". An empty path passes the dry signal (parallel blend).
+     */
+    struct Plan
+    {
+        std::array<int, numBlocks> pre {}, a {}, b {}, post {};
+        int numPre = 0, numA = 0, numB = 0, numPost = 0;
+        bool hasParallel() const noexcept { return numA + numB > 0; }
+    };
+
+    inline Plan planFor (const Layout& l) noexcept
+    {
+        Plan p;
+        bool seenParallel = false;
+        for (int blk : l.order)
+        {
+            const int lane = l.lanes[(size_t) blk];
+            if (lane == pathA)      { p.a[(size_t) p.numA++] = blk; seenParallel = true; }
+            else if (lane == pathB) { p.b[(size_t) p.numB++] = blk; seenParallel = true; }
+            else if (seenParallel)  p.post[(size_t) p.numPost++] = blk;
+            else                    p.pre[(size_t) p.numPre++] = blk;
+        }
+        return p;
+    }
+
     inline Order defaultOrder() noexcept
     {
         std::array<float, numBlocks> slots;

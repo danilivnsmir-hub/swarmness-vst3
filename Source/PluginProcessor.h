@@ -70,9 +70,12 @@ public:
     SpectrumTap& getSpectrumTap() noexcept { return spectrumTap; }
     double getCurrentSampleRate() const noexcept { return currentSampleRate; }
 
-    /** The chain order the parameters ask for (message or audio thread). */
-    Chain::Order getRequestedChainOrder() const noexcept;
-    /** Writes the slot parameters for a new order (message thread, one undoable host gesture per slot). */
+    /** The chain order / routing the parameters ask for (message or audio thread). */
+    Chain::Layout getRequestedLayout() const noexcept;
+    Chain::Order getRequestedChainOrder() const noexcept { return getRequestedLayout().order; }
+    /** Writes the slot and lane parameters for a new layout (message thread). */
+    void setChainLayout (const Chain::Layout&);
+    /** New order, lanes unchanged. */
     void setChainOrder (const Chain::Order&);
 
     /** CRYPT impulse response (message thread). Returns an error message, empty on success. */
@@ -141,7 +144,8 @@ private:
         std::atomic<float>* revOn {};      std::atomic<float>* revType {};     std::atomic<float>* revMix {};
         std::atomic<float>* revDecay {};   std::atomic<float>* revSize {};     std::atomic<float>* revPreDelay {};
         std::atomic<float>* revTone {};    std::atomic<float>* revLowCut {};   std::atomic<float>* revMod {};     std::atomic<float>* revDuck {};
-        std::array<std::atomic<float>*, Chain::numBlocks> chainSlots {};
+        std::array<std::atomic<float>*, Chain::numBlocks> chainSlots {}, chainLanes {};
+        std::atomic<float>* parMix {};
     } p;
 
     /** Per-block state shared by the chain blocks. */
@@ -169,8 +173,12 @@ private:
     swarm::ParametricEq carve;
     ReverbStage        crypt;
 
-    Chain::Order activeOrder = Chain::defaultOrder();
-    juce::SmoothedValue<float> chainFade;   // dips the chain output while the order changes
+    Chain::Layout activeLayout { Chain::defaultOrder(), {} };
+    juce::SmoothedValue<float> chainFade;   // dips the chain output while the order / routing changes
+    juce::SmoothedValue<float> parMixSmoothed;
+    juce::AudioBuffer<float> pathBBuffer;   // parallel path B
+    // Parallel paths are latency-aligned: the path without SMOKE is delayed by SMOKE's latency.
+    juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::None> pathAlignA { 1 }, pathAlignB { 1 };
 
     SpectrumTap spectrumTap;
     juce::File reverbIRFile;

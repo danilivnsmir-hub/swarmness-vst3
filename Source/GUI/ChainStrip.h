@@ -4,9 +4,12 @@
 #include "../Parameters.h"
 
 /**
- * The signal chain as a row of hex tiles:  IN > [SMOKE] > [PITCH] > ... > OUT
+ * The signal chain as hex tiles:  IN > [SMOKE] > [PITCH] > ... > OUT
+ * Blocks can also run in parallel: the chain splits into path A (upper row) and path B
+ * (lower row) and merges again (A/B mix knob at the merge). An empty path = dry signal.
  *  - click a tile: open the page with that block
- *  - drag a tile: move the block in the chain (the processor crossfades the change)
+ *  - drag a tile sideways: move it in the chain; drag it up / down: parallel path A / B;
+ *    drag it back to the middle: series again
  *  - click the LED: switch the block on / off
  */
 class ChainStrip : public juce::Component,
@@ -14,9 +17,10 @@ class ChainStrip : public juce::Component,
 {
 public:
     explicit ChainStrip (juce::AudioProcessorValueTreeState&);
+    ~ChainStrip() override;
 
-    std::function<Chain::Order()> getOrder;
-    std::function<void (const Chain::Order&)> setOrder;
+    std::function<Chain::Layout()> getLayout;
+    std::function<void (const Chain::Layout&)> setLayout;
     std::function<void (int block)> onBlockClicked;
     /** Extra activity (e.g. STING engaged by a footswitch) that lights a tile without its power param. */
     std::function<bool (int block)> isBlockActive;
@@ -24,7 +28,7 @@ public:
     /** Blocks shown on the current page get a bright outline. */
     void setHighlighted (const std::array<bool, Chain::numBlocks>&);
 
-    /** Called from the editor timer: pulls the order / states and animates the tiles. */
+    /** Called from the editor timer: pulls the layout / states and animates the tiles. */
     void refresh();
 
     void paint (juce::Graphics&) override;
@@ -40,22 +44,35 @@ public:
     static const char* powerParamFor (int block);
 
 private:
-    float slotX (int position) const noexcept { return firstX + (float) position * (tileW + gap); }
-    juce::Rectangle<float> tileRect (float left) const noexcept { return { left, 3.0f, tileW, (float) getHeight() - 6.0f }; }
+    using Rects = std::array<juce::Rectangle<float>, Chain::numBlocks>;
+    struct Geometry
+    {
+        Rects rects;
+        float splitX = -1.0f, mergeX = -1.0f;
+        float cableY = 0.0f, laneAY = 0.0f, laneBY = 0.0f;
+        bool emptyA = false, emptyB = false;
+    };
+
+    Geometry computeGeometry (const Chain::Layout&) const;
+    Chain::Layout displayLayout() const;   // the layout while dragging (preview)
     juce::Rectangle<float> ledRect (juce::Rectangle<float> tile) const noexcept;
     int blockAt (juce::Point<float>) const;
     bool blockOn (int block) const;
-    Chain::Order displayOrder() const;   // the order while dragging (preview)
+    static bool isHalf (juce::Rectangle<float> r, float fullHeight) { return r.getHeight() < fullHeight * 0.7f; }
 
     juce::AudioProcessorValueTreeState& state;
-    Chain::Order order = Chain::defaultOrder();
-    std::array<float, Chain::numBlocks> x {};           // animated tile positions per block
+    Chain::Layout layout { Chain::defaultOrder(), {} };
+    Geometry geometry;                 // targets for the shown layout
+    Rects current {};                  // animated tile rectangles
     std::array<bool, Chain::numBlocks> lit {}, highlighted {};
-    float firstX = 40.0f, tileW = 120.0f, gap = 22.0f;
+    bool initialised = false;
 
-    int hover = -1, pressed = -1, dragInsert = -1;
-    bool dragging = false, pressedOnLed = false, animating = false;
-    float grabOffset = 0.0f, dragX = 0.0f;
+    int hover = -1, pressed = -1, dragInsert = -1, dragLane = Chain::series;
+    bool dragging = false, pressedOnLed = false;
+    juce::Point<float> grabOffset, dragPos;
+
+    juce::Slider mixKnob;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> mixAttachment;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChainStrip)
 };

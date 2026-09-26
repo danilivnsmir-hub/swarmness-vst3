@@ -898,7 +898,8 @@ void InfoOverlay::paint (juce::Graphics& g)
                       "(the pick sags, the note blooms), BLEND = clean under the fuzz." },
         { "WINGS",    "Rhythmic gate: HARD = stutter, off = tremolo. SYNC locks to the host tempo (DIV)." },
         { "CHAIN",    "The strip under the header is the signal chain. Drag a block to reorder it (fuzz before or after the pitch, reverb into the fuzz...), "
-                      "click it to open its page, click its LED to switch it on / off. The order is saved with presets." },
+                      "click it to open its page, click its LED to switch it on / off. Drag it UP / DOWN for parallel paths A / B (an empty path = dry), "
+                      "the knob at the merge balances A and B. Order and paths are saved with presets." },
         { "EQ",       "COMB = 10-band graphic EQ (+-12 dB) with LEVEL. CARVE = parametric: 24 dB/oct LOW / HIGH CUT, shelves and 3 bells - drag the nodes, "
                       "wheel = Q, double-click = reset; the output spectrum runs behind the curve." },
         { "CRYPT",    "Reverb: ROOM / PLATE / HALL / ABYSS or your own IR (LOAD IR or drop a file). DUCK dips the tail while you play, "

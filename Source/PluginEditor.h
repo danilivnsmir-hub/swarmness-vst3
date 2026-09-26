@@ -12,7 +12,7 @@ class MainPanel : public juce::Component
 {
 public:
     static constexpr int baseWidth  = 1100;
-    static constexpr int baseHeight = 740;
+    static constexpr int baseHeight = 748;
 
     explicit MainPanel (SwarmnessAudioProcessor&);
 

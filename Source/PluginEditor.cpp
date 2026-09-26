@@ -45,8 +45,8 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     addChildComponent (reverbPage);
 
     // Chain strip
-    chainStrip.getOrder = [this] { return processor.getRequestedChainOrder(); };
-    chainStrip.setOrder = [this] (const Chain::Order& o) { processor.setChainOrder (o); };
+    chainStrip.getLayout = [this] { return processor.getRequestedLayout(); };
+    chainStrip.setLayout = [this] (const Chain::Layout& l) { processor.setChainLayout (l); };
     chainStrip.onBlockClicked = [this] (int block) { showPage (pageForBlock (block)); };
     chainStrip.isBlockActive = [this] (int block) { return block == Chain::pitch && processor.getMeters().noiseEngaged.load(); };
     addAndMakeVisible (chainStrip);
@@ -231,16 +231,16 @@ void MainPanel::resized()
     infoButton.setBounds (baseWidth - 16 - 32, 16, 32, 32);
 
     // Chain strip and the page area below it
-    chainStrip.setBounds (16, 72, baseWidth - 32, 54);
-    const auto pageArea = juce::Rectangle<int> (16, 136, baseWidth - 32, 464);
+    chainStrip.setBounds (16, 70, baseWidth - 32, 66);
+    const auto pageArea = juce::Rectangle<int> (16, 144, baseWidth - 32, 464);
     eqPage.setBounds (pageArea);
     reverbPage.setBounds (pageArea);
     fxPage.setBounds (getLocalBounds());
 
     // FX page section areas
-    noiseArea   = { 16.0f,  136.0f, 536.0f, 262.0f };
-    rainbowArea = { 564.0f, 136.0f, 520.0f, 262.0f };
-    const float rowY = 410.0f, rowH = 190.0f;
+    noiseArea   = { 16.0f,  144.0f, 536.0f, 262.0f };
+    rainbowArea = { 564.0f, 144.0f, 520.0f, 262.0f };
+    const float rowY = 418.0f, rowH = 190.0f;
     swarmArea  = { 16.0f,  rowY, 250.0f, rowH };
     fuzzArea   = { 278.0f, rowY, 500.0f, rowH };
     flowArea   = { 790.0f, rowY, 294.0f, rowH };
@@ -311,7 +311,7 @@ void MainPanel::resized()
 
     // Footer: footswitches centred (LINK mini switches beside the octaves), meters at the sides
     {
-        const int fy = 612, fw = 92, fh = 118, spacing = 136;
+        const int fy = 620, fw = 92, fh = 118, spacing = 136;
         const int total = spacing * 3 + fw;
         int x = (baseWidth - total) / 2;
         for (auto* f : { &oct1Switch, &oct2Switch, &magicSwitch, &bypassSwitch })
