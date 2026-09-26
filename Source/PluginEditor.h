@@ -60,7 +60,8 @@ private:
 
     // HIVE: SHIFT | VOICES | TRAILS | MANGLE
     Knob shiftAKnob { "SHIFT A", true }, shiftBKnob { "SHIFT B", true }, riseKnob { "RISE" }, fallKnob { "FALL" }, blendKnob { "BLEND" };
-    PowerButton voicesPower;
+    PowerButton hivePower;
+    PitchScope pitchScope;
     PillToggle snapToggle { "SNAP" }, followToggle { "FOLLOW" };
     Knob pitchKnob { "PITCH", true }, primaryKnob { "DRONE" }, secondaryKnob { "QUEEN" }, trackingKnob { "TRACKING" };
     PillToggle rbSyncToggle { "SYNC" };

@@ -66,7 +66,7 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     fallKnob  .attach (state, fall,   "FALL: time to glide back home when the footswitch is released");
     blendKnob .attach (state, stingMix, "BLEND: how much the shifted note replaces your note while SHIFT is held (100% = only the shifted note, 50% = doubled)");
     // VOICES
-    attachButton (fxPage, voicesPower, rbOn, "HIVE voices (DRONE / QUEEN + TRAILS) on/off - the VENOM footswitch engages them by itself");
+    attachButton (fxPage, hivePower, rbOn, "HIVE on/off (voices + trails). The SHIFT A / B and VENOM footswitches work even while it is off - like momentary pedals");
     attachButton (fxPage, snapToggle, rbSnap, "SNAP: PITCH in whole semitones (off = atonal in-between intervals)");
     attachButton (fxPage, followToggle, hiveFollow, "FOLLOW: the voices harmonise the SHIFTed note instead of the note you play");
     pitchKnob    .attach (state, rbPitch,     "PITCH: DRONE interval, -12..+12 semitones (SNAP = whole semitones). Also the step of the TRAILS");
@@ -90,7 +90,8 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     rbMixKnob.attach (state, rbMix, "MIX: dry / HIVE voices. 50% = both at full level, 100% = only the voices and trails (a held SHIFT still sounds)");
     attachButton (fxPage, rbRawToggle, rbRaw, "RAW: cheap-pedal-DSP character for every HIVE voice - warble, rough splices, lo-fi converters. Off = clean modern engine");
 
-    for (auto* c : std::initializer_list<juce::Component*> { &shiftAKnob, &shiftBKnob, &riseKnob, &fallKnob, &blendKnob,
+    pitchScope.setTooltip ("Live SHIFT transposition; dashed lines = where the HIVE voices sound");
+    for (auto* c : std::initializer_list<juce::Component*> { &pitchScope, &shiftAKnob, &shiftBKnob, &riseKnob, &fallKnob, &blendKnob,
                                                              &pitchKnob, &primaryKnob, &secondaryKnob, &trackingKnob,
                                                              &magicKnob, &rbTimeKnob, &toneKnob, &patternSelector,
                                                              &panicKnob, &chaosKnob, &speedKnob, &rbDetuneKnob, &rbMixKnob })
@@ -255,7 +256,7 @@ void MainPanel::resized()
 
     // HIVE: four sections side by side, two rows of knobs each
     {
-        const float widths[4] { 262.0f, 262.0f, 272.0f, 0.0f };
+        const float widths[4] { 310.0f, 236.0f, 278.0f, 0.0f };
         float x = hiveArea.getX();
         for (int i = 0; i < 4; ++i)
         {
@@ -263,7 +264,8 @@ void MainPanel::resized()
             hiveSections[(size_t) i] = { x, hiveArea.getY(), w, hiveArea.getHeight() };
             x += w;
         }
-        const int y1 = (int) hiveArea.getY() + 58, y2 = (int) hiveArea.getY() + 158, kw = 78, kh = 100;
+        const int y1 = (int) hiveArea.getY() + 58, y2 = (int) hiveArea.getY() + 158, kh = 100;
+        int kw = 72;
         auto row = [&] (juce::Rectangle<float> sec, int y, std::initializer_list<juce::Component*> comps, int slots = 3)
         {
             const int gap = ((int) sec.getWidth() - kw * slots) / (slots + 1);
@@ -280,21 +282,25 @@ void MainPanel::resized()
         const auto& trailSec = hiveSections[2];
         const auto& mangleSec = hiveSections[3];
 
-        row (shiftSec, y1, { &shiftAKnob, &shiftBKnob }, 2);
-        row (shiftSec, y2, { &riseKnob, &fallKnob, &blendKnob });
+        hivePower.setBounds (powerFor (hiveArea));
 
-        voicesPower.setBounds ((int) voiceSec.getRight() - 40, (int) voiceSec.getY() + 36, 24, 24);
+        // SHIFT: the live pitch display on top, the five SHIFT knobs below
+        pitchScope.setBounds ((int) shiftSec.getX() + 14, y1 + 4, (int) shiftSec.getWidth() - 26, 90);
+        kw = 58;
+        row (shiftSec, y2, { &shiftAKnob, &shiftBKnob, &riseKnob, &fallKnob, &blendKnob }, 5);
+        kw = 72;
+
         row (voiceSec, y1, { &pitchKnob, &primaryKnob, &secondaryKnob });
         row (voiceSec, y2, { &trackingKnob, nullptr, nullptr });
-        snapToggle  .setBounds ((int) voiceSec.getX() + 112, y2 + 22, 64, 24);
-        followToggle.setBounds ((int) voiceSec.getX() + 182, y2 + 22, 72, 24);
+        snapToggle  .setBounds ((int) voiceSec.getX() + 96, y2 + 22, 60, 24);
+        followToggle.setBounds ((int) voiceSec.getX() + 160, y2 + 22, 70, 24);
 
-        rbSyncToggle.setBounds ((int) trailSec.getRight() - 12 - 60, (int) trailSec.getY() + 36, 60, 22);
+        rbSyncToggle.setBounds ((int) trailSec.getRight() - 12 - 60, (int) trailSec.getY() + 36, 60, 22);   // header row
         row (trailSec, y1, { &magicKnob, &rbTimeKnob, &toneKnob });
         rbDivKnob.setBounds (rbTimeKnob.getBounds());
-        patternSelector.setBounds ((int) trailSec.getX() + 12, y2 + 30, (int) trailSec.getWidth() - 24, 26);
+        patternSelector.setBounds ((int) trailSec.getX() + 10, y2 + 32, (int) trailSec.getWidth() - 20, 22);
 
-        rbRawToggle.setBounds ((int) mangleSec.getRight() - 16 - 60, (int) mangleSec.getY() + 36, 60, 22);
+        rbRawToggle.setBounds ((int) mangleSec.getRight() - 12 - 60, (int) mangleSec.getY() + 36, 60, 22);
         row (mangleSec, y1, { &panicKnob, &chaosKnob, &speedKnob });
         row (mangleSec, y2, { &rbDetuneKnob, &rbMixKnob }, 2);
     }
@@ -484,6 +490,16 @@ void MainPanel::tick()
     const bool venom = paramOn (ParamIDs::magicHold);
     oct1Switch.setLitExternally (venom && paramOn (ParamIDs::linkOct1));
     oct2Switch.setLitExternally (venom && paramOn (ParamIDs::linkOct2));
+    pitchScope.push (meters.pitchSemitones.load(), noiseOn);
+    {
+        const float droneSemis = paramOn (ParamIDs::rbSnap) ? std::round (state.getRawParameterValue (ParamIDs::rbPitch)->load())
+                                                           : state.getRawParameterValue (ParamIDs::rbPitch)->load();
+        // FOLLOW: the voices ride on the shifted note
+        const float base = paramOn (ParamIDs::hiveFollow) ? meters.pitchSemitones.load() : 0.0f;
+        pitchScope.setVoiceMarkers (paramOn (ParamIDs::rbOn) || venom, base + droneSemis,
+                                    base + droneSemis + (droneSemis >= 0.0f ? 12.0f : -12.0f),
+                                    state.getRawParameterValue (ParamIDs::rbSecondary)->load() * 0.01f);
+    }
 
     // Footswitch captions follow the SHIFT intervals
     const int a = juce::roundToInt (state.getRawParameterValue (ParamIDs::shiftA)->load());

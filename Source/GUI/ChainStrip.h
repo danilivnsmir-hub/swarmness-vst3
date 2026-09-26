@@ -41,7 +41,7 @@ public:
     void mouseUp (const juce::MouseEvent&) override;
     juce::String getTooltip() override;
 
-    /** The power parameter of a block (nullptr: PITCH has none - STING is played with the footswitches). */
+    /** The power parameter of a block. */
     static const char* powerParamFor (int block);
 
 private:

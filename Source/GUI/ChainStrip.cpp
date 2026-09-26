@@ -31,6 +31,7 @@ const char* ChainStrip::powerParamFor (int block)
 {
     switch (block)
     {
+        case Chain::pitch: return ParamIDs::rbOn;
         case Chain::smoke: return ParamIDs::fuzzOn;
         case Chain::swarm: return ParamIDs::swarmOn;
         case Chain::wings: return ParamIDs::flowOn;
@@ -43,8 +44,6 @@ const char* ChainStrip::powerParamFor (int block)
 
 bool ChainStrip::blockOn (int block) const
 {
-    if (block == Chain::pitch)
-        return state.getRawParameterValue (ParamIDs::rbOn)->load() > 0.5f;
     if (auto* id = powerParamFor (block))
         return state.getRawParameterValue (id)->load() > 0.5f;
     return false;
@@ -493,7 +492,7 @@ juce::String ChainStrip::getTooltip()
                "(path A / B), back to the middle for series. Click a block to open its controls";
 
     static const char* what[Chain::numBlocks] {
-        "PITCH: STING octaves (footswitches) + HIVE harmonies. LED = HIVE on or an octave engaged",
+        "HIVE: destructive pitch-delay (SHIFT footswitches, voices, trails). The SHIFT / VENOM footswitches work even while it is off",
         "SMOKE: fuzz",
         "SWARM: chorus",
         "WINGS: tremolo / stutter gate",

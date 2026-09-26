@@ -582,6 +582,19 @@ void PitchScope::push (float semitones, bool isActive)
     repaint();
 }
 
+void PitchScope::setVoiceMarkers (bool visible, float droneSemis, float queenSemis, float queenLevel)
+{
+    if (visible != markersVisible || std::abs (droneSemis - droneMarker) > 0.01f || std::abs (queenSemis - queenMarker) > 0.01f
+        || std::abs (queenLevel - queenAmount) > 0.01f)
+    {
+        markersVisible = visible;
+        droneMarker = droneSemis;
+        queenMarker = queenSemis;
+        queenAmount = queenLevel;
+        repaint();
+    }
+}
+
 void PitchScope::paint (juce::Graphics& g)
 {
     const auto r = getLocalBounds().toFloat();
@@ -610,6 +623,29 @@ void PitchScope::paint (juce::Graphics& g)
         g.setColour (Colours::textFaint);
         g.drawText ((st > 0 ? "+" : "") + juce::String (st), juce::Rectangle<float> (plot.getRight() + 4.0f, y - 7.0f, 30.0f, 14.0f),
                     juce::Justification::centredLeft, false);
+    }
+
+    // HIVE voices: dashed markers where DRONE / QUEEN sound
+    if (markersVisible)
+    {
+        auto marker = [&] (float st, const char* name, float alpha)
+        {
+            const float my = yFor (st);
+            juce::Path line;
+            line.startNewSubPath (plot.getX(), my);
+            line.lineTo (plot.getRight(), my);
+            juce::Path dashed;
+            const float dashes[] { 4.0f, 4.0f };
+            juce::PathStrokeType (1.0f).createDashedStroke (dashed, line, dashes, 2);
+            g.setColour (Colours::accentBright.withAlpha (0.55f * alpha));
+            g.fillPath (dashed);
+            g.setFont (font (10.5f, true));
+            g.setColour (Colours::accentBright.withAlpha (0.8f * alpha));
+            g.drawText (name, juce::Rectangle<float> (plot.getRight() - 64.0f, my - 13.0f, 60.0f, 12.0f), juce::Justification::centredRight, false);
+        };
+        marker (droneMarker, "DRONE", 1.0f);
+        if (queenAmount > 0.001f)
+            marker (queenMarker, "QUEEN", 0.4f + 0.6f * queenAmount);
     }
 
     // Trace

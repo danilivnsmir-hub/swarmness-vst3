@@ -181,15 +181,20 @@ private:
 
 //==============================================================================
 /** Scrolling display of the live transposition in semitones. */
-class PitchScope : public juce::Component
+class PitchScope : public juce::Component,
+                   public juce::SettableTooltipClient
 {
 public:
     PitchScope();
 
     void push (float semitones, bool active);
+    /** Dashed markers for the HIVE voices (semitones relative to the played note). */
+    void setVoiceMarkers (bool visible, float droneSemis, float queenSemis, float queenLevel);
     void paint (juce::Graphics&) override;
 
 private:
+    bool markersVisible = false;
+    float droneMarker = 0.0f, queenMarker = 0.0f, queenAmount = 0.0f;
     std::vector<float> history;
     int writeIndex = 0;
     bool active = true, primed = false;
