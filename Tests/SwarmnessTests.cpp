@@ -1267,6 +1267,12 @@ namespace
             check (b1note > b1up + 6.0 && b2fifth > b2note + 3.0,
                    juce::String::formatted ("BOUNCE: repeat 1 back on the note (220 Hz %+.1f vs 494 Hz %+.1f dB), repeat 2 up again (330 Hz %+.1f vs 220 Hz %+.1f dB)",
                                             b1note, b1up, b2fifth, b2note));
+            {
+                auto side = [&] (int from) { return 20.0 * std::log10 ((bounceOut.getRMSLevel (0, from, len) + 1e-9) / (bounceOut.getRMSLevel (1, from, len) + 1e-9)); };
+                const double s1 = side (r1), s2 = side (r2);
+                check (s1 * s2 < 0.0 && std::abs (s1 - s2) > 6.0,
+                       juce::String::formatted ("BOUNCE ping-pongs: repeat 1 L/R %+.1f dB, repeat 2 %+.1f dB", s1, s2));
+            }
             for (int pattern = 0; pattern < 5; ++pattern)
             {
                 const auto out = pattern == 0 ? ladder : (pattern == 1 ? bounceOut : repeats (pattern));

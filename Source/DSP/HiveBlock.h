@@ -91,6 +91,8 @@ public:
         onsetAttack  = (float) (1.0 - std::exp (-1.0 / (0.001 * sr)));
         onsetRelease = (float) (1.0 - std::exp (-1.0 / (0.03 * sr)));
         onsetSlow    = (float) (1.0 - std::exp (-1.0 / (0.05 * sr)));
+        bloomRelease = (float) (1.0 - std::exp (-1.0 / (0.25 * sr)));
+        bloomSwell   = (float) (1.0 - std::exp (-1.0 / (0.6 * sr)));
 
         const int maxLag = (int) std::ceil (sr * 0.2) + 8;
         lagLine.setMaximumDelayInSamples (maxLag);
@@ -169,6 +171,9 @@ public:
         driftCounter = 0;
         fastEnv = slowEnv = 0.0f;
         onsetHoldoff = 0;
+        bloomEnv = 0.0f;
+        bloomGain = 1.0f;
+        trailPan = { 1.0f, 0.72f };
         resetPattern();
     }
 
@@ -265,7 +270,25 @@ private:
         if (chaosPhase >= 1.0f)
         {
             chaosPhase -= std::floor (chaosPhase);
-            chaosTarget = rng.nextBipolar() * std::pow (s.frenzy, 1.5f) * 12.0f;
+            const float range = std::pow (s.frenzy, 1.5f) * 12.0f;
+            if (s.snap)
+            {
+                // SNAP: jumps land on musical intervals (4th, 5th, octave) instead of in-between pitches
+                static constexpr float steps[] { -12.0f, -7.0f, -5.0f, 0.0f, 5.0f, 7.0f, 12.0f };
+                float pick = 0.0f;
+                for (int tries = 0; tries < 4; ++tries)
+                {
+                    pick = steps[(size_t) (rng.nextInt() % 7u)];
+                    if (std::abs (pick) <= range + 0.5f)
+                        break;
+                    pick = 0.0f;
+                }
+                chaosTarget = pick;
+            }
+            else
+            {
+                chaosTarget = rng.nextBipolar() * range;
+            }
         }
         if (s.frenzy <= 0.0001f) chaosTarget = 0.0f;
         const float chaos = chaosSmoother.advance (chaosTarget, 1);
@@ -410,7 +433,7 @@ private:
     void processVoices (int numChannels, int n, float chaos, float anger, float fine) noexcept
     {
         const auto& s = settings;
-        const float loopD = sw::jmax ((float) (kControlBlock + 2), loopDelay.process (loopDelayTarget));
+        const float loopD = sw::jmax ((float) (kControlBlock + 2), loopDelay.process (loopDelayTarget * timeJitter));
 
         // Humanise: slow random pitch drift, independent per voice (BLOOM drifts much further)
         if (++driftCounter >= (int) (0.4 * sampleRate / kControlBlock))
@@ -496,12 +519,23 @@ private:
         const bool trailsRunning = loopGain.getTargetValue() > 0.0f || loopGain.isSmoothing() || loopGain.getCurrentValue() > 0.0f;
         if (trailsRunning)
         {
+            // Tape-like wow & flutter on the repeats (deeper with RAW): they drift and breathe instead of
+            // coming back sample-exact. SCATTER also jitters the repeat time from pass to pass.
+            const float wowRate = 0.55f, flutterRate = 6.3f;
+            const float raw01 = settings.raw ? 1.0f : 0.5f;
+            const float wowDepth = raw01 * 0.0045f * (float) sampleRate / (swarm::kTwoPi * wowRate);        // ~ +-8 ct
+            const float flutterDepth = raw01 * 0.0015f * (float) sampleRate / (swarm::kTwoPi * flutterRate); // ~ +-2.5 ct
             for (int i = 0; i < n; ++i)
             {
+                wowPhase += wowRate / (float) sampleRate;
+                flutterPhase += flutterRate / (float) sampleRate;
+                if (wowPhase >= 1.0f) wowPhase -= 1.0f;
+                if (flutterPhase >= 1.0f) flutterPhase -= 1.0f;
+                const float mod = wowDepth * std::sin (swarm::kTwoPi * wowPhase) + flutterDepth * std::sin (swarm::kTwoPi * flutterPhase);
                 const float g = loopGain.getNextValue();
                 for (int ch = 0; ch < numChannels; ++ch)
                 {
-                    float fb = readPattern (ch, i, loopD);
+                    float fb = readPattern (ch, i, loopD + mod);
                     if (activePattern == bloom)
                         for (auto& d : diffusers[(size_t) ch])
                             fb = d.process (fb, 0.62f);
@@ -524,6 +558,19 @@ private:
         // ---- mix the voices, feed the loop
         for (int i = 0; i < n; ++i)
         {
+            for (size_t c = 0; c < 2; ++c)
+                trailPan[c] += 0.0015f * (trailPanTarget[c] - trailPan[c]);
+            float bloomTarget = 1.0f;
+            if (activePattern == bloom)
+            {
+                float in = 0.0f;
+                for (int ch = 0; ch < numChannels; ++ch)
+                    in = sw::jmax (in, std::abs (voiceIn.getSample (ch, i)));
+                bloomEnv += (in > bloomEnv ? 0.01f : bloomRelease) * (in - bloomEnv);
+                bloomTarget = 1.0f / (1.0f + 14.0f * bloomEnv);
+            }
+            bloomGain += (bloomTarget < bloomGain ? 0.01f : bloomSwell) * (bloomTarget - bloomGain);
+
             const float on = onSmoothed.getNextValue();
             const float dl = droneLevel.getNextValue();
             const float ql = queenLevel.getNextValue();
@@ -544,7 +591,10 @@ private:
                 const float dPan = right ? 0.72f : 1.0f;
                 const float qPan = numChannels > 1 && ! right ? 0.72f : 1.0f;
 
-                const float voices = voiceSubsonic[(size_t) ch].process ((dlp + tlp) * dl * dPan + qlp * ql * qPan);
+                // Repeats: placed per PATTERN (BOUNCE ping-pongs, SCATTER jumps around), BLOOM ducks them
+                // while you play so they swell up in the gaps
+                const float tPan = numChannels > 1 ? trailPan[(size_t) ch] : 1.0f;
+                const float voices = voiceSubsonic[(size_t) ch].process ((dlp * dPan + tlp * tPan * bloomGain) * dl + qlp * ql * qPan);
                 auto& z = toneState[(size_t) ch];
                 z = voices + toneCoeff * (z - voices);
 
@@ -577,6 +627,8 @@ private:
         patternSemis = 0.0f;
         patternStarted = false;
         scatterPrimed = false;
+        timeJitter = 1.0f;
+        trailPanTarget = { 1.0f, 0.72f };
     }
 
     /** Called once per control block: detects repeat boundaries and picks the next interval. */
@@ -600,6 +652,7 @@ private:
                         if (wasStarted)
                             bounceUp = ! bounceUp;
                         patternSemis = bounceUp ? -pitch : pitch;
+                        trailPanTarget = bounceUp ? std::array<float, 2> { 1.0f, 0.2f } : std::array<float, 2> { 0.2f, 1.0f };   // ping-pong
                     }
                     else
                     {
@@ -612,6 +665,10 @@ private:
                             next += next > 0.0f ? -12.0f : 12.0f;
                         patternSemis = sw::jlimit (-24.0f, 24.0f, next - scatterAt);
                         scatterAt = next;
+                        // ...at a random place in the stereo field, a little early or late
+                        const float pan = rng.nextBipolar();
+                        trailPanTarget = { sw::jmin (1.0f, 1.0f - pan), sw::jmin (1.0f, 1.0f + pan) };
+                        timeJitter = 0.7f + 0.6f * rng.nextFloat();
                     }
                 }
                 break;
@@ -621,6 +678,9 @@ private:
             case bloom:
             default:
                 patternSemis = pitch;
+                // LADDER sits with the DRONE (slightly left); REVERSE and BLOOM spread wide
+                trailPanTarget = activePattern == ladder ? std::array<float, 2> { 1.0f, 0.72f } : std::array<float, 2> { 1.0f, 1.0f };
+                timeJitter = 1.0f;
                 break;
         }
     }
@@ -742,4 +802,7 @@ private:
     bool bounceUp = false, patternStarted = false, scatterPrimed = false;
     float fastEnv = 0.0f, slowEnv = 0.0f, onsetAttack = 0.3f, onsetRelease = 0.001f, onsetSlow = 0.0005f;
     int onsetHoldoff = 0;
+    float timeJitter = 1.0f, wowPhase = 0.0f, flutterPhase = 0.37f;
+    std::array<float, 2> trailPan { 1.0f, 0.72f }, trailPanTarget { 1.0f, 0.72f };
+    float bloomEnv = 0.0f, bloomGain = 1.0f, bloomRelease = 0.0001f, bloomSwell = 0.0001f;
 };

@@ -67,7 +67,7 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     blendKnob .attach (state, stingMix, "BLEND: how much the shifted note replaces your note while SHIFT is held (100% = only the shifted note, 50% = doubled)");
     // VOICES
     attachButton (fxPage, hivePower, rbOn, "HIVE on/off (voices + trails). The SHIFT A / B and VENOM footswitches work even while it is off - like momentary pedals");
-    attachButton (fxPage, snapToggle, rbSnap, "SNAP: PITCH in whole semitones (off = atonal in-between intervals)");
+    attachButton (fxPage, snapToggle, rbSnap, "SNAP: PITCH in whole semitones, and FRENZY jumps land on 4ths / 5ths / octaves (off = atonal in-between pitches)");
     attachButton (fxPage, followToggle, hiveFollow, "FOLLOW: the voices harmonise the SHIFTed note instead of the note you play");
     pitchKnob    .attach (state, rbPitch,     "PITCH: DRONE interval, -12..+12 semitones (SNAP = whole semitones). Also the step of the TRAILS");
     pitchKnob.setSnap ([this] (double v) { return paramOn (ParamIDs::rbSnap) ? std::round (v) : v; });
@@ -80,7 +80,7 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     rbDivKnob .attach (state, rbDiv,   "TIME as a tempo division (SYNC on)");
     toneKnob  .attach (state, rbTone,  "TONE: brightness of the voices and the trails");
     attachButton (fxPage, rbSyncToggle, rbSync, "SYNC: lock the repeats to the host tempo");
-    patternSelector.setTooltip ("PATTERN - how the repeats move: LADDER = one more PITCH step each time, BOUNCE = flip between the voice and your note, "
+    patternSelector.setTooltip ("PATTERN (needs TRAILS above 0) - how the repeats move: LADDER = one more PITCH step each time, BOUNCE = flip between the voice and your note, "
                                 "SCATTER = random chord tones, REVERSE = backwards repeats, BLOOM = diffused swelling cloud");
     // MANGLE
     panicKnob.attach (state, panic, "ANGER: sour second voices detuned against the shifted note and the harmonies - beating, dissonant clusters");
@@ -90,7 +90,7 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     rbMixKnob.attach (state, rbMix, "MIX: dry / HIVE voices. 50% = both at full level, 100% = only the voices and trails (a held SHIFT still sounds)");
     attachButton (fxPage, rbRawToggle, rbRaw, "RAW: cheap-pedal-DSP character for every HIVE voice - warble, rough splices, lo-fi converters. Off = clean modern engine");
 
-    pitchScope.setTooltip ("Live SHIFT transposition; dashed lines = where the HIVE voices sound");
+    pitchScope.setTooltip ("Live SHIFT transposition (with FRENZY / ANGER movement)");
     for (auto* c : std::initializer_list<juce::Component*> { &pitchScope, &shiftAKnob, &shiftBKnob, &riseKnob, &fallKnob, &blendKnob,
                                                              &pitchKnob, &primaryKnob, &secondaryKnob, &trackingKnob,
                                                              &magicKnob, &rbTimeKnob, &toneKnob, &patternSelector,
@@ -491,16 +491,6 @@ void MainPanel::tick()
     oct1Switch.setLitExternally (venom && paramOn (ParamIDs::linkOct1));
     oct2Switch.setLitExternally (venom && paramOn (ParamIDs::linkOct2));
     pitchScope.push (meters.pitchSemitones.load(), noiseOn);
-    {
-        const float droneSemis = paramOn (ParamIDs::rbSnap) ? std::round (state.getRawParameterValue (ParamIDs::rbPitch)->load())
-                                                           : state.getRawParameterValue (ParamIDs::rbPitch)->load();
-        // FOLLOW: the voices ride on the shifted note
-        const float base = paramOn (ParamIDs::hiveFollow) ? meters.pitchSemitones.load() : 0.0f;
-        pitchScope.setVoiceMarkers (paramOn (ParamIDs::rbOn) || venom, base + droneSemis,
-                                    base + droneSemis + (droneSemis >= 0.0f ? 12.0f : -12.0f),
-                                    state.getRawParameterValue (ParamIDs::rbSecondary)->load() * 0.01f);
-    }
-
     // Footswitch captions follow the SHIFT intervals
     const int a = juce::roundToInt (state.getRawParameterValue (ParamIDs::shiftA)->load());
     const int b = juce::roundToInt (state.getRawParameterValue (ParamIDs::shiftB)->load());
@@ -533,8 +523,10 @@ void MainPanel::tick()
     const std::array<bool, 5> states { noiseOn || voicesOn, voicesOn, paramOn (ParamIDs::swarmOn),
                                        paramOn (ParamIDs::fuzzOn), paramOn (ParamIDs::flowOn) };
 
-    setSectionDimmed ({ &snapToggle, &followToggle, &rbSyncToggle, &pitchKnob, &primaryKnob, &secondaryKnob, &toneKnob, &trackingKnob,
-                        &magicKnob, &rbTimeKnob, &rbDivKnob, &patternSelector }, ! states[1]);
+    setSectionDimmed ({ &snapToggle, &followToggle, &pitchKnob, &primaryKnob, &secondaryKnob, &trackingKnob, &magicKnob }, ! states[1]);
+    // PATTERN / TIME / TONE only matter once there are repeats: TRAILS up (or VENOM held)
+    const bool trailsAudible = states[1] && (state.getRawParameterValue (ParamIDs::rbMagic)->load() > 0.5f || venom);
+    setSectionDimmed ({ &rbSyncToggle, &rbTimeKnob, &rbDivKnob, &toneKnob, &patternSelector }, ! trailsAudible);
     setSectionDimmed ({ &deepToggle, &swarmDepthKnob, &swarmRateKnob, &swarmMixKnob }, ! states[2]);
     setSectionDimmed ({ &fuzzVoiceSelector, &fuzzKnob, &fuzzToneKnob, &fuzzScoopKnob,
                         &fuzzGlareKnob, &fuzzGateKnob, &fuzzSagKnob, &fuzzBlendKnob }, ! states[3]);
