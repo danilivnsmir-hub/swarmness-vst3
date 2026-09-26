@@ -90,7 +90,9 @@ set(SWARMNESS_DSP_SOURCES
 set(SWARMNESS_GUI_SOURCES
     Source/PluginEditor.cpp
     Source/GUI/SwarmLookAndFeel.cpp
-    Source/GUI/Controls.cpp)
+    Source/GUI/Controls.cpp
+    Source/GUI/ChainStrip.cpp
+    Source/GUI/Pages.cpp)
 
 target_sources(Swarmness PRIVATE ${SWARMNESS_DSP_SOURCES} ${SWARMNESS_GUI_SOURCES})
 

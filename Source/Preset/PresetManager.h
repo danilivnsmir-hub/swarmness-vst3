@@ -1,6 +1,7 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include <functional>
 #include <map>
 
 /**
@@ -47,6 +48,10 @@ public:
 
     static juce::File getPresetsDirectory();
 
+    /** Non-parameter data stored with user presets (the CRYPT impulse response path). */
+    std::function<void (juce::DynamicObject&)> onSaveExtras;
+    std::function<void (const juce::var&)> onLoadExtras;
+
 private:
     using ValueMap = std::map<juce::String, float>;
 
@@ -57,8 +62,9 @@ private:
     void setCurrentName (const juce::String&);
     void stepPreset (bool userBank, int delta);
 
-    static juce::var toJson (const juce::String& name, const ValueMap& values);
+    juce::var toJson (const juce::String& name, const ValueMap& values) const;
     static bool fromJson (const juce::var& json, juce::String& name, ValueMap& values);
+    static void migrate (ValueMap& values);
 
     juce::AudioProcessorValueTreeState& apvts;
     struct FactoryPreset

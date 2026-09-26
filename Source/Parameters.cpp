@@ -135,7 +135,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     // ------------------------------------------------------------------- FUZZ
     auto fz = std::make_unique<Group> ("fuzz", "Smoke", "|");
     fz->addChild (toggle (fuzzOn, "Smoke On", false));
-    fz->addChild (toggle (fuzzPost, "Smoke Post", false));
     fz->addChild (percent (fuzz, "Smoke Fuzz", 70.0f));
     fz->addChild (percent (fuzzTone, "Smoke Tone", 50.0f));
     fz->addChild (std::make_unique<juce::AudioParameterChoice> (pid (fuzzVoice), "Smoke Voice", ParamChoices::fuzzVoices, 1));
@@ -155,6 +154,85 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
                                                                  skewedRange (0.5f, 30.0f, 5.0f, 0.01f), 8.0f, hzAttr()));
     flow->addChild (std::make_unique<juce::AudioParameterChoice> (pid (flowDiv), "Wings Division", ParamChoices::divisions, 4));
 
+    auto dbAttr = []
+    {
+        return Attr().withLabel ("dB").withStringFromValueFunction ([] (float v, int)
+        {
+            return (v > 0.05f ? "+" : "") + juce::String (v, 1) + " dB";
+        });
+    };
+    auto gainParam = [&] (const char* id, const juce::String& name, float maxDb)
+    {
+        return std::make_unique<juce::AudioParameterFloat> (pid (id), name, juce::NormalisableRange<float> (-maxDb, maxDb, 0.1f), 0.0f, dbAttr());
+    };
+    auto freqParam = [] (const char* id, const juce::String& name, float min, float max, float centre, float def)
+    {
+        return std::make_unique<juce::AudioParameterFloat> (pid (id), name, skewedRange (min, max, centre, 0.1f), def, hzAttr());
+    };
+    auto qParam = [] (const char* id, const juce::String& name)
+    {
+        return std::make_unique<juce::AudioParameterFloat> (pid (id), name, skewedRange (0.3f, 10.0f, 1.2f, 0.01f), 1.0f,
+                                                            Attr().withStringFromValueFunction ([] (float v, int) { return "Q " + juce::String (v, 2); }));
+    };
+
+    // ------------------------------------------------------------ COMB (graphic EQ)
+    auto comb = std::make_unique<Group> ("comb", "Comb EQ", "|");
+    comb->addChild (toggle (geqOn, "Comb On", false));
+    for (int i = 0; i < 10; ++i)
+    {
+        const float hz = ParamRanges::geqBandHz[i];
+        const auto label = hz >= 1000.0f ? juce::String (juce::roundToInt (hz / 1000.0f)) + "k" : juce::String (juce::roundToInt (hz));
+        comb->addChild (gainParam (geqBands[i], "Comb " + label, ParamRanges::geqMaxDb));
+    }
+    comb->addChild (gainParam (geqLevel, "Comb Level", ParamRanges::geqMaxDb));
+
+    // ---------------------------------------------------------- CARVE (parametric EQ)
+    auto carve = std::make_unique<Group> ("carve", "Carve EQ", "|");
+    carve->addChild (toggle (peqOn, "Carve On", false));
+    carve->addChild (std::make_unique<juce::AudioParameterFloat> (
+        pid (peqHpFreq), "Carve Low Cut", skewedRange (ParamRanges::peqHpOff, 1000.0f, 90.0f, 0.1f), ParamRanges::peqHpOff,
+        Attr().withLabel ("Hz").withStringFromValueFunction ([] (float v, int) { return v <= ParamRanges::peqHpOff + 0.05f ? juce::String ("Off") : formatHz (v); })));
+    carve->addChild (std::make_unique<juce::AudioParameterFloat> (
+        pid (peqLpFreq), "Carve High Cut", skewedRange (1000.0f, ParamRanges::peqLpOff, 6000.0f, 1.0f), ParamRanges::peqLpOff,
+        Attr().withLabel ("Hz").withStringFromValueFunction ([] (float v, int) { return v >= ParamRanges::peqLpOff - 0.5f ? juce::String ("Off") : formatHz (v); })));
+    carve->addChild (freqParam (peqLowFreq, "Carve Low Shelf Freq", 30.0f, 600.0f, 120.0f, 100.0f));
+    carve->addChild (gainParam (peqLowGain, "Carve Low Shelf Gain", ParamRanges::peqMaxDb));
+    carve->addChild (freqParam (peqB1Freq, "Carve Bell 1 Freq", 30.0f, 16000.0f, 700.0f, 250.0f));
+    carve->addChild (gainParam (peqB1Gain, "Carve Bell 1 Gain", ParamRanges::peqMaxDb));
+    carve->addChild (qParam (peqB1Q, "Carve Bell 1 Q"));
+    carve->addChild (freqParam (peqB2Freq, "Carve Bell 2 Freq", 30.0f, 16000.0f, 700.0f, 800.0f));
+    carve->addChild (gainParam (peqB2Gain, "Carve Bell 2 Gain", ParamRanges::peqMaxDb));
+    carve->addChild (qParam (peqB2Q, "Carve Bell 2 Q"));
+    carve->addChild (freqParam (peqB3Freq, "Carve Bell 3 Freq", 30.0f, 16000.0f, 700.0f, 3000.0f));
+    carve->addChild (gainParam (peqB3Gain, "Carve Bell 3 Gain", ParamRanges::peqMaxDb));
+    carve->addChild (qParam (peqB3Q, "Carve Bell 3 Q"));
+    carve->addChild (freqParam (peqHighFreq, "Carve High Shelf Freq", 1500.0f, 16000.0f, 5000.0f, 6000.0f));
+    carve->addChild (gainParam (peqHighGain, "Carve High Shelf Gain", ParamRanges::peqMaxDb));
+
+    // ----------------------------------------------------------------- CRYPT (reverb)
+    auto crypt = std::make_unique<Group> ("crypt", "Crypt Reverb", "|");
+    crypt->addChild (toggle (revOn, "Crypt On", false));
+    crypt->addChild (std::make_unique<juce::AudioParameterChoice> (pid (revType), "Crypt Type", ParamChoices::reverbTypes, 2));
+    crypt->addChild (percent (revMix, "Crypt Mix", 25.0f));
+    crypt->addChild (std::make_unique<juce::AudioParameterFloat> (
+        pid (revDecay), "Crypt Decay", skewedRange (0.2f, 20.0f, 2.5f, 0.01f), 2.5f,
+        Attr().withLabel ("s").withStringFromValueFunction ([] (float v, int) { return juce::String (v, v < 10.0f ? 2 : 1) + " s"; })));
+    crypt->addChild (percent (revSize, "Crypt Size", 60.0f));
+    crypt->addChild (std::make_unique<juce::AudioParameterFloat> (
+        pid (revPreDelay), "Crypt Pre-Delay", skewedRange (0.0f, 250.0f, 40.0f, 0.1f), 15.0f,
+        Attr().withLabel ("ms").withStringFromValueFunction ([] (float v, int) { return juce::String (juce::roundToInt (v)) + " ms"; })));
+    crypt->addChild (percent (revTone, "Crypt Tone", 50.0f));
+    crypt->addChild (freqParam (revLowCut, "Crypt Low Cut", 20.0f, 800.0f, 150.0f, 150.0f));
+    crypt->addChild (percent (revMod, "Crypt Mod", 30.0f));
+    crypt->addChild (percent (revDuck, "Crypt Duck", 0.0f));
+
+    // ------------------------------------------------------------------ CHAIN ORDER
+    auto chain = std::make_unique<Group> ("chain", "Chain", "|");
+    for (int b = 0; b < Chain::numBlocks; ++b)
+        chain->addChild (std::make_unique<juce::AudioParameterInt> (
+            pid (Chain::slotIds[b]), juce::String ("Chain Slot ") + Chain::names[b], 0, Chain::slotMax, Chain::defaultSlots[b],
+            juce::AudioParameterIntAttributes().withAutomatable (false)));
+
     // ----------------------------------------------------------------- OUTPUT
     auto out = std::make_unique<Group> ("output", "Output", "|");
     out->addChild (std::make_unique<juce::AudioParameterFloat> (
@@ -172,6 +250,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     out->addChild (std::make_unique<juce::AudioParameterChoice> (pid (switchMode), "Footswitch Mode", ParamChoices::switchModes, 0));
     out->addChild (toggle (bypass, "Bypass", false));
 
-    layout.add (std::move (noise), std::move (rainbow), std::move (swarm), std::move (fz), std::move (flow), std::move (out));
+    layout.add (std::move (noise), std::move (rainbow), std::move (swarm), std::move (fz), std::move (flow),
+                std::move (comb), std::move (carve), std::move (crypt), std::move (chain), std::move (out));
     return layout;
 }

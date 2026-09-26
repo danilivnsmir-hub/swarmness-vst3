@@ -4,18 +4,24 @@
 #include "PluginProcessor.h"
 #include "GUI/SwarmLookAndFeel.h"
 #include "GUI/Controls.h"
+#include "GUI/ChainStrip.h"
+#include "GUI/Pages.h"
 
 /** All controls laid out at a fixed base resolution; the editor scales it as a whole. */
 class MainPanel : public juce::Component
 {
 public:
     static constexpr int baseWidth  = 1100;
-    static constexpr int baseHeight = 680;
+    static constexpr int baseHeight = 740;
 
     explicit MainPanel (SwarmnessAudioProcessor&);
 
     void resized() override;
     void tick();   // called by the editor's timer
+
+    enum Page { fxPageIndex = 0, eqPageIndex, spacePageIndex, numPages };
+    void showPage (int page);
+    static int pageForBlock (int block);
 
 private:
     /** Static artwork, cached as an image so animated controls repaint cheaply. */
@@ -29,7 +35,7 @@ private:
 
     using APVTS = juce::AudioProcessorValueTreeState;
 
-    void attachButton (juce::Button&, const juce::String& id, const juce::String& tooltip);
+    void attachButton (juce::Component& parent, juce::Button&, const juce::String& id, const juce::String& tooltip);
     bool paramOn (const char* id) const;
     bool footswitchesMomentary() const;
     void setSectionDimmed (std::initializer_list<juce::Component*>, bool dimmed);
@@ -39,6 +45,13 @@ private:
 
     juce::Image logo, emblem;
     Backdrop backdrop;
+
+    // Chain + pages (the FX page holds the original sections; EQ and CRYPT have their own components)
+    ChainStrip chainStrip;
+    juce::Component fxPage;
+    EqPage eqPage;
+    ReverbPage reverbPage;
+    int currentPage = fxPageIndex;
 
     // Header
     PresetBar presetBar;
@@ -65,7 +78,6 @@ private:
 
     // SMOKE (fuzz)
     PowerButton fuzzPower;
-    PillToggle postToggle { "POST" };
     SegmentedChoice fuzzVoiceSelector;
     Knob fuzzKnob { "FUZZ" }, fuzzToneKnob { "TONE" }, fuzzScoopKnob { "SCOOP" };
     Knob fuzzGlareKnob { "GLARE" }, fuzzGateKnob { "GATE" }, fuzzSagKnob { "SAG" }, fuzzBlendKnob { "BLEND" };

@@ -39,17 +39,44 @@ SwarmnessAudioProcessor::SwarmnessAudioProcessor()
     p.rbMix = get (id::rbMix);           p.rbTime = get (id::rbTime);         p.rbSync = get (id::rbSync);           p.rbDiv = get (id::rbDiv);
     p.swarmOn = get (id::swarmOn);       p.swarmDeep = get (id::swarmDeep);     p.swarmRate = get (id::swarmRate);
     p.swarmDepth = get (id::swarmDepth); p.swarmMix = get (id::swarmMix);
-    p.fuzzOn = get (id::fuzzOn);         p.fuzzPost = get (id::fuzzPost);       p.fuzz = get (id::fuzz);
+    p.fuzzOn = get (id::fuzzOn);         p.fuzz = get (id::fuzz);
     p.fuzzTone = get (id::fuzzTone);     p.fuzzGate = get (id::fuzzGate);       p.fuzzVoice = get (id::fuzzVoice);
     p.fuzzScoop = get (id::fuzzScoop);   p.fuzzGlare = get (id::fuzzGlare);     p.fuzzBlend = get (id::fuzzBlend);   p.fuzzSag = get (id::fuzzSag);
     p.flowOn = get (id::flowOn);         p.flowHard = get (id::flowHard);       p.flowSync = get (id::flowSync);
     p.flowAmount = get (id::flowAmount); p.flowSpeed = get (id::flowSpeed);     p.flowDiv = get (id::flowDiv);
     p.output = get (id::output);         p.input = get (id::input);           p.bypass = get (id::bypass);
 
+    p.geqOn = get (id::geqOn);           p.geqLevel = get (id::geqLevel);
+    for (int b = 0; b < swarm::GraphicEq::numBands; ++b)
+        p.geqBands[(size_t) b] = get (id::geqBands[b]);
+    p.peqOn = get (id::peqOn);           p.peqHpFreq = get (id::peqHpFreq);     p.peqLpFreq = get (id::peqLpFreq);
+    p.peqLowFreq = get (id::peqLowFreq); p.peqLowGain = get (id::peqLowGain);   p.peqHighFreq = get (id::peqHighFreq); p.peqHighGain = get (id::peqHighGain);
+    p.peqBellFreq = { get (id::peqB1Freq), get (id::peqB2Freq), get (id::peqB3Freq) };
+    p.peqBellGain = { get (id::peqB1Gain), get (id::peqB2Gain), get (id::peqB3Gain) };
+    p.peqBellQ    = { get (id::peqB1Q),    get (id::peqB2Q),    get (id::peqB3Q) };
+    p.revOn = get (id::revOn);           p.revType = get (id::revType);         p.revMix = get (id::revMix);
+    p.revDecay = get (id::revDecay);     p.revSize = get (id::revSize);         p.revPreDelay = get (id::revPreDelay);
+    p.revTone = get (id::revTone);       p.revLowCut = get (id::revLowCut);     p.revMod = get (id::revMod);         p.revDuck = get (id::revDuck);
+    for (int b = 0; b < Chain::numBlocks; ++b)
+        p.chainSlots[(size_t) b] = get (Chain::slotIds[b]);
+
     bypassParam = dynamic_cast<juce::AudioParameterBool*> (apvts.getParameter (id::bypass));
     jassert (bypassParam != nullptr);
 
     presetManager = std::make_unique<PresetManager> (apvts);
+    presetManager->onSaveExtras = [this] (juce::DynamicObject& json)
+    {
+        const auto ir = getReverbIRFile();
+        if (ir != juce::File())
+            json.setProperty ("reverbIR", ir.getFullPathName());
+    };
+    presetManager->onLoadExtras = [this] (const juce::var& json)
+    {
+        // A preset that used an impulse response brings it back (if the file is still there).
+        const auto path = json["reverbIR"].toString();
+        if (path.isNotEmpty() && juce::File::isAbsolutePath (path) && juce::File (path).existsAsFile())
+            loadReverbIR (juce::File (path));
+    };
 }
 
 //==============================================================================
@@ -68,14 +95,17 @@ void SwarmnessAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBl
     currentSampleRate = sampleRate;
     maxBlockSize = juce::jmax (1, samplesPerBlock);
 
-    fuzzPre .prepare (sampleRate, maxBlockSize);
-    fuzzPost.prepare (sampleRate, maxBlockSize);
-    noise   .prepare (sampleRate, maxBlockSize);
-    rainbow .prepare (sampleRate, maxBlockSize);
+    fuzzStage.prepare (sampleRate, maxBlockSize);
+    noise    .prepare (sampleRate, maxBlockSize);
+    rainbow  .prepare (sampleRate, maxBlockSize);
     swarmChorus.prepare (sampleRate);
-    flow.prepare (sampleRate);
+    flow .prepare (sampleRate);
+    comb .prepare (sampleRate);
+    carve.prepare (sampleRate);
+    crypt.prepare (sampleRate, maxBlockSize);
 
-    const int latency = fuzzPre.getLatencySamples() + fuzzPost.getLatencySamples();
+    // Only SMOKE (oversampling) adds latency, and it is there wherever SMOKE sits in the chain.
+    const int latency = fuzzStage.getLatencySamples();
     dryDelay.setMaximumDelayInSamples (latency + 8);
     dryDelay.prepare ({ sampleRate, (juce::uint32) maxBlockSize, 2 });
     dryDelay.setDelay ((float) latency);
@@ -92,6 +122,8 @@ void SwarmnessAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBl
     init (inputGainSmoothed,  0.03, juce::Decibels::decibelsToGain (p.input->load()));
     init (hiveVoiceGain,      0.02, 1.0f);
     init (bypassSmoothed,     0.02, on (p.bypass) ? 1.0f : 0.0f);
+    init (chainFade,          0.008, 1.0f);
+    activeOrder = getRequestedChainOrder();
 
     setLatencySamples (latency);
 
@@ -101,11 +133,13 @@ void SwarmnessAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBl
 
 void SwarmnessAudioProcessor::releaseResources()
 {
-    fuzzPre.reset();
-    fuzzPost.reset();
+    fuzzStage.reset();
     noise.reset();
     rainbow.reset();
     swarmChorus.reset();
+    comb.reset();
+    carve.reset();
+    crypt.reset();
     dryDelay.reset();
 }
 
@@ -183,99 +217,39 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     for (int ch = 0; ch < numChannels; ++ch)
         updatePeak (meters.input[(size_t) ch], buffer.getMagnitude (ch, 0, numSamples));
 
-    // ---- FUZZ (pre)
     // Footswitches behave like real momentary pedals: holding one always engages its effect,
-    // even while the plug-in is bypassed (ON off) or the RAINBOW section is switched off.
-    const bool magicHeld = on (p.magicHold);
+    // even while the plug-in is bypassed (ON off) or the HIVE section is switched off.
+    BlockContext ctx;
+    ctx.bpm = transport.bpm;
+    ctx.ppq = transport.ppq;
+    ctx.magicHeld = on (p.magicHold);
     // LINK mini switches: the VENOM (magic) footswitch can drag the octaves in with it.
-    const bool oct1Held = on (p.oct1) || (magicHeld && on (p.linkOct1));
-    const bool oct2Held = on (p.oct2) || (magicHeld && on (p.linkOct2));
-    const bool anySwitchHeld = oct1Held || oct2Held || magicHeld;
+    ctx.oct1Held = on (p.oct1) || (ctx.magicHeld && on (p.linkOct1));
+    ctx.oct2Held = on (p.oct2) || (ctx.magicHeld && on (p.linkOct2));
+    const bool anySwitchHeld = ctx.oct1Held || ctx.oct2Held || ctx.magicHeld;
 
-    const bool fuzzOn = on (p.fuzzOn), fuzzIsPost = on (p.fuzzPost);
-    FuzzStage::Settings fuzzSettings;
-    fuzzSettings.fuzz  = pct (p.fuzz);
-    fuzzSettings.tone  = pct (p.fuzzTone);
-    fuzzSettings.scoop = pct (p.fuzzScoop);
-    fuzzSettings.glare = pct (p.fuzzGlare);
-    fuzzSettings.gate  = pct (p.fuzzGate);
-    fuzzSettings.blend = pct (p.fuzzBlend);
-    fuzzSettings.sag   = pct (p.fuzzSag);
-    fuzzSettings.voice = (int) p.fuzzVoice->load();
-    fuzzPre.setParams (fuzzOn && ! fuzzIsPost, fuzzSettings);
-    fuzzPre.process (audio, numChannels, numSamples);
+    // ---- the chain. A new order is faded in: dip the output, swap, come back (~8 ms each way).
+    if (getRequestedChainOrder() != activeOrder && chainFade.getTargetValue() > 0.5f)
+        chainFade.setTargetValue (0.0f);
 
-    // STING and HIVE run in parallel from the same (played) signal, so HIVE harmonises the note
-    // you play - not the STING octave - and the TRAILS never pick up the octave.
-    for (int ch = 0; ch < numChannels; ++ch)
-        hiveBuffer.copyFrom (ch, 0, audio[ch], numSamples);
+    for (int block : activeOrder)
+        processChainBlock (block, ctx, audio, numChannels, numSamples);
 
-    // HIVE MIX (pedal law): 50% = dry and voices both full, 100% = voices only. It only turns down
-    // the dry part, so the STING octave still sounds on top when a footswitch is held.
-    const bool hiveOn = on (p.rbOn) || magicHeld;
-    const float hiveMix = pct (p.rbMix);
-    noise.setDryLevel (hiveOn ? juce::jmin (1.0f, 2.0f * (1.0f - hiveMix)) : 1.0f);
-    hiveVoiceGain.setTargetValue (hiveOn ? juce::jmin (1.0f, 2.0f * hiveMix) : 1.0f);
-
-    // ---- NOISE (footswitch octaves)
+    if (chainFade.isSmoothing() || chainFade.getCurrentValue() < 1.0f)
     {
-        const float dir = on (p.noiseDown) ? -1.0f : 1.0f;
-        const float interval = oct2Held ? 24.0f : (oct1Held ? 12.0f : 0.0f);
-        noise.setParams (p.rise->load(), p.fall->load(), pct (p.panic), pct (p.chaos), pct (p.speed), pct (p.stingMix), on (p.stingRaw));
-        noise.setInterval (dir * interval);
-        noise.setDetuneCents (p.stingDetune->load());
-        noise.process (audio, numChannels, numSamples);
-        meters.pitchSemitones.store (noise.getCurrentSemitones(), std::memory_order_relaxed);
-        meters.noiseEngaged.store (noise.isEngaged(), std::memory_order_relaxed);
-    }
-
-    // ---- RAINBOW
-    {
-        float pitch = p.rbPitch->load();
-        if (on (p.rbSnap))
-            pitch = std::round (pitch);
-        double repeatSeconds = p.rbTime->load() * 0.001;
-        if (on (p.rbSync))
-            repeatSeconds = ParamChoices::divisionInBeats ((int) p.rbDiv->load()) * 60.0 / transport.bpm;
-        rainbow.setParams (on (p.rbOn) || magicHeld, pitch, pct (p.rbPrimary), pct (p.rbSecondary), pct (p.rbTone),
-                           pct (p.rbTracking), pct (p.rbMagic), (float) repeatSeconds, magicHeld, on (p.rbRaw),
-                           p.rbDetune->load());
-        float* hive[2] = { hiveBuffer.getWritePointer (0), hiveBuffer.getWritePointer (1) };
-        rainbow.process (hive, numChannels, numSamples);
         for (int i = 0; i < numSamples; ++i)
         {
-            const float g = hiveVoiceGain.getNextValue();
+            const float g = chainFade.getNextValue();
             for (int ch = 0; ch < numChannels; ++ch)
-                audio[ch][i] += g * hive[ch][i];
+                audio[ch][i] *= g;
+        }
+        if (chainFade.getCurrentValue() <= 0.0f && ! chainFade.isSmoothing())
+        {
+            activeOrder = getRequestedChainOrder();
+            chainFade.setTargetValue (1.0f);
         }
     }
-
-    // ---- SWARM
-    swarmChorus.setParams (p.swarmRate->load(), pct (p.swarmDepth), on (p.swarmOn) ? pct (p.swarmMix) : 0.0f, on (p.swarmDeep));
-    swarmChorus.process (audio, numChannels, numSamples);
-
-    // ---- FUZZ (post)
-    fuzzPost.setParams (fuzzOn && fuzzIsPost, fuzzSettings);
-    fuzzPost.process (audio, numChannels, numSamples);
-
-    // ---- FLOW (gate over the whole signal)
-    const bool flowOn = on (p.flowOn);
-    flow.setParams (flowOn ? pct (p.flowAmount) : 0.0f, on (p.flowHard));
-
-    if (on (p.flowSync))
-    {
-        std::optional<double> ppq;
-        if (transport.ppq.has_value())
-            ppq = *transport.ppq - (double) getLatencySamples() / currentSampleRate * transport.bpm / 60.0; // align with PDC
-        flow.setSynced (ParamChoices::divisionInBeats ((int) p.flowDiv->load()), transport.bpm, ppq);
-    }
-    else
-    {
-        flow.setRateHz (p.flowSpeed->load());
-    }
-
-    if (flowOn || ! flow.isIdle())
-        flow.process (audio, numChannels, numSamples);
+    meters.reverbLevel.store (juce::jmax (meters.reverbLevel.load (std::memory_order_relaxed), crypt.getWetLevel()), std::memory_order_relaxed);
 
     // ---- OUTPUT gain + bypass crossfade
     outputGainSmoothed.setTargetValue (juce::Decibels::decibelsToGain (p.output->load()));
@@ -309,6 +283,265 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
 
     for (int ch = 0; ch < numChannels; ++ch)
         updatePeak (meters.output[(size_t) ch], buffer.getMagnitude (ch, 0, numSamples));
+
+    spectrumTap.push (audio[0], numChannels > 1 ? audio[1] : nullptr, numSamples);
+}
+
+//==============================================================================
+void SwarmnessAudioProcessor::processChainBlock (int block, const BlockContext& ctx, float* const* audio, int numChannels, int numSamples) noexcept
+{
+    switch (block)
+    {
+        case Chain::pitch: processPitch (ctx, audio, numChannels, numSamples); break;
+        case Chain::smoke: processSmoke (audio, numChannels, numSamples); break;
+        case Chain::wings: processWings (ctx, audio, numChannels, numSamples); break;
+
+        case Chain::swarm:
+            swarmChorus.setParams (p.swarmRate->load(), pct (p.swarmDepth), on (p.swarmOn) ? pct (p.swarmMix) : 0.0f, on (p.swarmDeep));
+            swarmChorus.process (audio, numChannels, numSamples);
+            break;
+
+        case Chain::comb:
+        {
+            std::array<float, swarm::GraphicEq::numBands> gains {};
+            for (size_t b = 0; b < gains.size(); ++b)
+                gains[b] = p.geqBands[b]->load();
+            comb.setParams (on (p.geqOn), gains, p.geqLevel->load());
+            comb.process (audio, numChannels, numSamples);
+            break;
+        }
+
+        case Chain::carve:
+        {
+            swarm::ParametricEq::Settings s;
+            s.hpHz = p.peqHpFreq->load();
+            s.lpHz = p.peqLpFreq->load();
+            s.lowHz = p.peqLowFreq->load();
+            s.lowDb = p.peqLowGain->load();
+            s.highHz = p.peqHighFreq->load();
+            s.highDb = p.peqHighGain->load();
+            for (size_t b = 0; b < 3; ++b)
+            {
+                s.bellHz[b] = p.peqBellFreq[b]->load();
+                s.bellDb[b] = p.peqBellGain[b]->load();
+                s.bellQ[b]  = p.peqBellQ[b]->load();
+            }
+            carve.setParams (on (p.peqOn), s);
+            carve.process (audio, numChannels, numSamples);
+            break;
+        }
+
+        case Chain::crypt:
+        {
+            ReverbStage::Settings s;
+            s.on = on (p.revOn);
+            s.type = (int) p.revType->load();
+            s.mix = pct (p.revMix);
+            s.decay = p.revDecay->load();
+            s.size = pct (p.revSize);
+            s.preDelayMs = p.revPreDelay->load();
+            s.tone = pct (p.revTone);
+            s.lowCutHz = p.revLowCut->load();
+            s.mod = pct (p.revMod);
+            s.duck = pct (p.revDuck);
+            crypt.setParams (s);
+            crypt.process (audio, numChannels, numSamples);
+            break;
+        }
+
+        default: break;
+    }
+}
+
+void SwarmnessAudioProcessor::processSmoke (float* const* audio, int numChannels, int numSamples) noexcept
+{
+    FuzzStage::Settings s;
+    s.fuzz  = pct (p.fuzz);
+    s.tone  = pct (p.fuzzTone);
+    s.scoop = pct (p.fuzzScoop);
+    s.glare = pct (p.fuzzGlare);
+    s.gate  = pct (p.fuzzGate);
+    s.blend = pct (p.fuzzBlend);
+    s.sag   = pct (p.fuzzSag);
+    s.voice = (int) p.fuzzVoice->load();
+    fuzzStage.setParams (on (p.fuzzOn), s);
+    fuzzStage.process (audio, numChannels, numSamples);
+}
+
+void SwarmnessAudioProcessor::processPitch (const BlockContext& ctx, float* const* audio, int numChannels, int numSamples) noexcept
+{
+    // STING and HIVE run in parallel from the same (played) signal, so HIVE harmonises the note
+    // you play - not the STING octave - and the TRAILS never pick up the octave.
+    for (int ch = 0; ch < numChannels; ++ch)
+        hiveBuffer.copyFrom (ch, 0, audio[ch], numSamples);
+
+    // HIVE MIX (pedal law): 50% = dry and voices both full, 100% = voices only. It only turns down
+    // the dry part, so the STING octave still sounds on top when a footswitch is held.
+    const bool hiveOn = on (p.rbOn) || ctx.magicHeld;
+    const float hiveMix = pct (p.rbMix);
+    noise.setDryLevel (hiveOn ? juce::jmin (1.0f, 2.0f * (1.0f - hiveMix)) : 1.0f);
+    hiveVoiceGain.setTargetValue (hiveOn ? juce::jmin (1.0f, 2.0f * hiveMix) : 1.0f);
+
+    // ---- STING (footswitch octaves)
+    {
+        const float dir = on (p.noiseDown) ? -1.0f : 1.0f;
+        const float interval = ctx.oct2Held ? 24.0f : (ctx.oct1Held ? 12.0f : 0.0f);
+        noise.setParams (p.rise->load(), p.fall->load(), pct (p.panic), pct (p.chaos), pct (p.speed), pct (p.stingMix), on (p.stingRaw));
+        noise.setInterval (dir * interval);
+        noise.setDetuneCents (p.stingDetune->load());
+        noise.process (audio, numChannels, numSamples);
+        meters.pitchSemitones.store (noise.getCurrentSemitones(), std::memory_order_relaxed);
+        meters.noiseEngaged.store (noise.isEngaged(), std::memory_order_relaxed);
+    }
+
+    // ---- HIVE
+    {
+        float pitch = p.rbPitch->load();
+        if (on (p.rbSnap))
+            pitch = std::round (pitch);
+        double repeatSeconds = p.rbTime->load() * 0.001;
+        if (on (p.rbSync))
+            repeatSeconds = ParamChoices::divisionInBeats ((int) p.rbDiv->load()) * 60.0 / ctx.bpm;
+        rainbow.setParams (hiveOn, pitch, pct (p.rbPrimary), pct (p.rbSecondary), pct (p.rbTone),
+                           pct (p.rbTracking), pct (p.rbMagic), (float) repeatSeconds, ctx.magicHeld, on (p.rbRaw),
+                           p.rbDetune->load());
+        float* hive[2] = { hiveBuffer.getWritePointer (0), hiveBuffer.getWritePointer (1) };
+        rainbow.process (hive, numChannels, numSamples);
+        for (int i = 0; i < numSamples; ++i)
+        {
+            const float g = hiveVoiceGain.getNextValue();
+            for (int ch = 0; ch < numChannels; ++ch)
+                audio[ch][i] += g * hive[ch][i];
+        }
+    }
+}
+
+void SwarmnessAudioProcessor::processWings (const BlockContext& ctx, float* const* audio, int numChannels, int numSamples) noexcept
+{
+    const bool flowOn = on (p.flowOn);
+    flow.setParams (flowOn ? pct (p.flowAmount) : 0.0f, on (p.flowHard));
+
+    if (on (p.flowSync))
+    {
+        std::optional<double> ppq;
+        if (ctx.ppq.has_value())
+            ppq = *ctx.ppq - (double) getLatencySamples() / currentSampleRate * ctx.bpm / 60.0; // align with PDC
+        flow.setSynced (ParamChoices::divisionInBeats ((int) p.flowDiv->load()), ctx.bpm, ppq);
+    }
+    else
+    {
+        flow.setRateHz (p.flowSpeed->load());
+    }
+
+    if (flowOn || ! flow.isIdle())
+        flow.process (audio, numChannels, numSamples);
+}
+
+//==============================================================================
+Chain::Order SwarmnessAudioProcessor::getRequestedChainOrder() const noexcept
+{
+    std::array<float, Chain::numBlocks> slots {};
+    for (size_t b = 0; b < slots.size(); ++b)
+        slots[b] = p.chainSlots[b]->load();
+    return Chain::orderFromSlots (slots);
+}
+
+void SwarmnessAudioProcessor::setChainOrder (const Chain::Order& order)
+{
+    const auto slots = Chain::slotsForOrder (order);
+    for (int b = 0; b < Chain::numBlocks; ++b)
+        if (auto* param = apvts.getParameter (Chain::slotIds[b]))
+        {
+            const float norm = param->convertTo0to1 (slots[(size_t) b]);
+            if (std::abs (param->getValue() - norm) > 1.0e-6f)
+            {
+                param->beginChangeGesture();
+                param->setValueNotifyingHost (norm);
+                param->endChangeGesture();
+            }
+        }
+}
+
+//==============================================================================
+juce::String SwarmnessAudioProcessor::loadReverbIR (const juce::File& file)
+{
+    juce::AudioFormatManager formats;
+    formats.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> reader (formats.createReaderFor (file));
+    if (reader == nullptr)
+        return "Can't read \"" + file.getFileName() + "\" (WAV / AIFF / FLAC / OGG)";
+
+    // Up to 12 s (long enough for any hall or cathedral); stereo IRs keep their width.
+    const auto maxLength = (juce::int64) (reader->sampleRate * 12.0);
+    const int length = (int) juce::jmin (reader->lengthInSamples, maxLength);
+    if (length < 16 || reader->sampleRate <= 0.0)
+        return "\"" + file.getFileName() + "\" is too short";
+
+    const int channels = reader->numChannels > 1 ? 2 : 1;
+    juce::AudioBuffer<float> ir (2, length);
+    reader->read (&ir, 0, length, 0, true, channels > 1);
+    if (channels == 1)
+        ir.copyFrom (1, 0, ir, 0, 0, length);
+
+    // Envelope for the editor (peak per slice, normalised)
+    std::vector<float> envelope (256, 0.0f);
+    const int slice = juce::jmax (1, length / (int) envelope.size());
+    float maxPeak = 1.0e-9f;
+    for (size_t k = 0; k < envelope.size(); ++k)
+    {
+        const int from = (int) k * slice;
+        if (from >= length) break;
+        const int n = juce::jmin (slice, length - from);
+        envelope[k] = juce::jmax (ir.getMagnitude (0, from, n), ir.getMagnitude (1, from, n));
+        maxPeak = juce::jmax (maxPeak, envelope[k]);
+    }
+    for (auto& v : envelope)
+        v /= maxPeak;
+
+    const double seconds = (double) length / reader->sampleRate;
+    crypt.setImpulseResponse (std::move (ir), reader->sampleRate);
+
+    const juce::ScopedLock sl (irInfoLock);
+    reverbIREnvelope = std::move (envelope);
+    reverbIRSeconds = seconds;
+    reverbIRFile = file;
+    reverbIRDescription = file.getFileNameWithoutExtension() + "  -  " + juce::String ((double) length / reader->sampleRate, 1) + " s, "
+                        + (channels > 1 ? "stereo" : "mono");
+    return {};
+}
+
+void SwarmnessAudioProcessor::clearReverbIR()
+{
+    crypt.clearImpulseResponse();
+    const juce::ScopedLock sl (irInfoLock);
+    reverbIRFile = juce::File();
+    reverbIRDescription.clear();
+    reverbIREnvelope.clear();
+    reverbIRSeconds = 0.0;
+}
+
+std::vector<float> SwarmnessAudioProcessor::getReverbIREnvelope() const
+{
+    const juce::ScopedLock sl (irInfoLock);
+    return reverbIREnvelope;
+}
+
+double SwarmnessAudioProcessor::getReverbIRSeconds() const
+{
+    const juce::ScopedLock sl (irInfoLock);
+    return reverbIRSeconds;
+}
+
+juce::File SwarmnessAudioProcessor::getReverbIRFile() const
+{
+    const juce::ScopedLock sl (irInfoLock);
+    return reverbIRFile;
+}
+
+juce::String SwarmnessAudioProcessor::getReverbIRDescription() const
+{
+    const juce::ScopedLock sl (irInfoLock);
+    return reverbIRDescription;
 }
 
 //==============================================================================
@@ -397,6 +630,7 @@ void SwarmnessAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
     state.setProperty ("presetName", presetManager->getCurrentPresetName(), nullptr);
     state.setProperty ("pluginVersion", JucePlugin_VersionString, nullptr);
     state.setProperty ("uiScale", uiScale.load(), nullptr);
+    state.setProperty ("reverbIR", getReverbIRFile().getFullPathName(), nullptr);
     for (int t = 0; t < kNumMidiTargets; ++t)
         state.setProperty ("midi" + juce::String (t),
                            juce::String (midiMap[(size_t) t].kind.load()) + ":" + juce::String (midiMap[(size_t) t].number.load()), nullptr);
@@ -420,7 +654,23 @@ void SwarmnessAudioProcessor::setStateInformation (const void* data, int sizeInB
                 midiMap[(size_t) t].number.store (v.fromFirstOccurrenceOf (":", false, false).getIntValue());
                 midiMap[(size_t) t].down.store (false);
             }
+            // Sessions from before the chain: SMOKE "POST" becomes SMOKE placed after SWARM.
+            const auto legacyPost = tree.getChildWithProperty ("id", ParamIDs::fuzzPostLegacy);
+            const bool migrateSmoke = legacyPost.isValid() && (float) legacyPost.getProperty ("value", 0.0f) > 0.5f
+                                      && ! tree.getChildWithProperty ("id", Chain::slotIds[Chain::smoke]).isValid();
+
             apvts.replaceState (tree);
+
+            if (migrateSmoke)
+                if (auto* slot = apvts.getParameter (Chain::slotIds[Chain::smoke]))
+                    slot->setValueNotifyingHost (slot->convertTo0to1 ((float) Chain::legacyPostSmokeSlot));
+
+            const auto irPath = tree.getProperty ("reverbIR").toString();
+            if (irPath.isNotEmpty() && juce::File::isAbsolutePath (irPath) && juce::File (irPath).existsAsFile())
+                loadReverbIR (juce::File (irPath));
+            else
+                clearReverbIR();
+
             presetManager->restoreFromState (tree.getProperty ("presetName").toString());
 
             // Momentary footswitches must never come back "stuck down" after reloading a session.

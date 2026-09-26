@@ -16,6 +16,9 @@ namespace
 MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     : processor (p),
       state (p.getAPVTS()),
+      chainStrip (p.getAPVTS()),
+      eqPage (p),
+      reverbPage (p),
       presetBar (p.getPresetManager()),
       switchModeSelector (param (state, ParamIDs::switchMode), { "MOMENTARY", "LATCH" }),
       fuzzVoiceSelector (param (state, ParamIDs::fuzzVoice), { "DOWN", "MID", "UP" }),
@@ -35,6 +38,19 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     backdrop.setOpaque (true);
     addAndMakeVisible (backdrop);
 
+    // Pages
+    fxPage.setInterceptsMouseClicks (false, true);
+    addAndMakeVisible (fxPage);
+    addChildComponent (eqPage);
+    addChildComponent (reverbPage);
+
+    // Chain strip
+    chainStrip.getOrder = [this] { return processor.getRequestedChainOrder(); };
+    chainStrip.setOrder = [this] (const Chain::Order& o) { processor.setChainOrder (o); };
+    chainStrip.onBlockClicked = [this] (int block) { showPage (pageForBlock (block)); };
+    chainStrip.isBlockActive = [this] (int block) { return block == Chain::pitch && processor.getMeters().noiseEngaged.load(); };
+    addAndMakeVisible (chainStrip);
+
     addAndMakeVisible (presetBar);
     addAndMakeVisible (switchModeSelector);
     switchModeSelector.setTooltip ("Footswitches: MOMENTARY = active only while held, LATCH = click on / click off");
@@ -43,8 +59,8 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     infoButton.onClick = [this] { infoOverlay.setVisible (true); infoOverlay.toFront (false); };
 
     // NOISE
-    attachButton (downToggle, noiseDown, "DIVE: the octave footswitches shift DOWN (drop-tune) instead of up");
-    attachButton (stingRawToggle, stingRaw, "RAW: vintage lo-fi shifter like the pedal - grainy, buzzy octaves. Off = clean modern engine");
+    attachButton (fxPage, downToggle, noiseDown, "DIVE: the octave footswitches shift DOWN (drop-tune) instead of up");
+    attachButton (fxPage, stingRawToggle, stingRaw, "RAW: vintage lo-fi shifter like the pedal - grainy, buzzy octaves. Off = clean modern engine");
     riseKnob .attach (state, rise,  "RISE: time to glide into the octave when a footswitch goes down");
     fallKnob .attach (state, fall,  "FALL: time to glide back home when the footswitch is released");
     panicKnob.attach (state, panic, "ANGER: detunes the shifted signal against a second voice - dissonance, beating, sour clusters");
@@ -53,11 +69,11 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     stingMixKnob.attach (state, stingMix, "MIX: dry / shifted blend while a footswitch is down (100% = only the octave, like the pedal)");
     stingDetuneKnob.attach (state, stingDetune, "DETUNE: fine offset of the octave, +-50 cents (a slightly sour octave is nastier)");
     for (auto* c : std::initializer_list<juce::Component*> { &riseKnob, &fallKnob, &panicKnob, &chaosKnob, &speedKnob, &stingDetuneKnob, &stingMixKnob, &pitchScope })
-        addAndMakeVisible (c);
+        fxPage.addAndMakeVisible (c);
 
     // RAINBOW
-    attachButton (rainbowPower, rbOn, "HIVE harmony section on/off (the VENOM footswitch engages it by itself)");
-    attachButton (snapToggle, rbSnap, "Snap PITCH to semitones (off = atonal in-between intervals)");
+    attachButton (fxPage, rainbowPower, rbOn, "HIVE harmony section on/off (the VENOM footswitch engages it by itself)");
+    attachButton (fxPage, snapToggle, rbSnap, "Snap PITCH to semitones (off = atonal in-between intervals)");
     pitchKnob    .attach (state, rbPitch,     "PITCH: DRONE interval, -12..+12 semitones (SNAP = whole semitones). Click the value to type it");
     pitchKnob.setSnap ([this] (double v) { return paramOn (ParamIDs::rbSnap) ? std::round (v) : v; });
     primaryKnob  .attach (state, rbPrimary,   "DRONE: level of the main harmony voice");
@@ -69,24 +85,23 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     rbDetuneKnob .attach (state, rbDetune,    "DETUNE: spreads the voices, DRONE up and QUEEN down by up to 50 cents - doubling / width (works with SNAP)");
     rbMixKnob    .attach (state, rbMix,       "MIX: dry / HIVE voices. 50% = both at full level, 100% = only the HIVE voices and trails (the STING octave still sounds)");
     rbDivKnob    .attach (state, rbDiv,       "TIME as a tempo division (SYNC on)");
-    attachButton (rbSyncToggle, rbSync, "SYNC: lock the TRAILS repeats to the host tempo");
-    attachButton (rbRawToggle, rbRaw, "RAW: vintage FV-1-style shifter - warbly, dark, gritty voices; TRACKING sets its window. Off = clean modern engine");
+    attachButton (fxPage, rbSyncToggle, rbSync, "SYNC: lock the TRAILS repeats to the host tempo");
+    attachButton (fxPage, rbRawToggle, rbRaw, "RAW: vintage FV-1-style shifter - warbly, dark, gritty voices; TRACKING sets its window. Off = clean modern engine");
     for (auto* c : std::initializer_list<juce::Component*> { &pitchKnob, &primaryKnob, &secondaryKnob, &toneKnob, &trackingKnob, &magicKnob, &rbTimeKnob, &rbMixKnob, &rbDetuneKnob })
-        addAndMakeVisible (c);
-    addChildComponent (rbDivKnob);
+        fxPage.addAndMakeVisible (c);
+    fxPage.addChildComponent (rbDivKnob);
 
     // SWARM
-    attachButton (swarmPower, swarmOn,   "Swarm chorus on/off");
-    attachButton (deepToggle, swarmDeep, "Deep mode: 8 voices with feedback");
+    attachButton (fxPage, swarmPower, swarmOn,   "Swarm chorus on/off");
+    attachButton (fxPage, deepToggle, swarmDeep, "Deep mode: 8 voices with feedback");
     swarmDepthKnob.attach (state, swarmDepth, "Modulation depth");
     swarmRateKnob .attach (state, swarmRate,  "Modulation rate");
     swarmMixKnob  .attach (state, swarmMix,   "Chorus mix: 50% = dry and chorus both at full level, 100% = pure vibrato");
     for (auto* c : std::initializer_list<juce::Component*> { &swarmDepthKnob, &swarmRateKnob, &swarmMixKnob })
-        addAndMakeVisible (c);
+        fxPage.addAndMakeVisible (c);
 
     // FUZZ
-    attachButton (fuzzPower, fuzzOn,   "SMOKE fuzz on/off");
-    attachButton (postToggle, fuzzPost, "POST: fuzz after the pitch effects. Off: fuzz before them (glitchier tracking)");
+    attachButton (fxPage, fuzzPower, fuzzOn,   "SMOKE fuzz on/off");
     fuzzVoiceSelector.setTooltip ("VOICE: DOWN = doom low-mids and full bottom, MID = jumbo fuzz, UP = tight, screaming upper mids");
     fuzzKnob     .attach (state, fuzz,      "FUZZ: from dirty crunch to wall-of-fuzz sustain");
     fuzzToneKnob .attach (state, fuzzTone,  "TONE: dark <-> bright (also opens the fizz)");
@@ -97,18 +112,18 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     fuzzSagKnob  .attach (state, fuzzSag,   "SAG: how much the fuzz breathes - the supply sags on the pick (compressed, darker) and the note blooms back as it recovers");
     for (auto* c : std::initializer_list<juce::Component*> { &fuzzVoiceSelector, &fuzzKnob, &fuzzToneKnob, &fuzzScoopKnob,
                                                              &fuzzGlareKnob, &fuzzGateKnob, &fuzzSagKnob, &fuzzBlendKnob })
-        addAndMakeVisible (c);
+        fxPage.addAndMakeVisible (c);
 
     // FLOW
-    attachButton (flowPower,  flowOn,   "WINGS gate on/off");
-    attachButton (hardToggle, flowHard, "Hard stutter gate (off = smooth tremolo)");
-    attachButton (syncToggle, flowSync, "Sync to host tempo");
+    attachButton (fxPage, flowPower,  flowOn,   "WINGS gate on/off");
+    attachButton (fxPage, hardToggle, flowHard, "Hard stutter gate (off = smooth tremolo)");
+    attachButton (fxPage, syncToggle, flowSync, "Sync to host tempo");
     flowAmountKnob.attach (state, flowAmount, "Gate depth");
     flowSpeedKnob .attach (state, flowSpeed,  "Gate rate (free)");
     flowDivKnob   .attach (state, flowDiv,    "Gate rate (tempo division)");
-    addAndMakeVisible (flowAmountKnob);
-    addAndMakeVisible (flowSpeedKnob);
-    addChildComponent (flowDivKnob);
+    fxPage.addAndMakeVisible (flowAmountKnob);
+    fxPage.addAndMakeVisible (flowSpeedKnob);
+    fxPage.addChildComponent (flowDivKnob);
 
     // OUTPUT
     inputKnob .attach (state, input,  "INPUT sensitivity: how hard the effects are hit (SMOKE, tracking). Aim for peaks in the green zone of the IN meter; the output level is compensated");
@@ -144,22 +159,51 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
             };
         }
     }
-    attachButton (link1Switch, linkOct1, "LINK: pressing VENOM also engages +1 OCT");
-    attachButton (link2Switch, linkOct2, "LINK: pressing VENOM also engages +2 OCT");
+    attachButton (*this, link1Switch, linkOct1, "LINK: pressing VENOM also engages +1 OCT");
+    attachButton (*this, link2Switch, linkOct2, "LINK: pressing VENOM also engages +2 OCT");
     for (auto* c : std::initializer_list<juce::Component*> { &oct1Switch, &oct2Switch, &magicSwitch, &bypassSwitch, &inMeter, &outMeter })
         addAndMakeVisible (c);
 
     addChildComponent (infoOverlay);
 
     setSize (baseWidth, baseHeight);
+    showPage (processor.getUiPage());
     tick();
 }
 
-void MainPanel::attachButton (juce::Button& b, const juce::String& id, const juce::String& tooltip)
+void MainPanel::attachButton (juce::Component& parent, juce::Button& b, const juce::String& id, const juce::String& tooltip)
 {
-    addAndMakeVisible (b);
+    parent.addAndMakeVisible (b);
     b.setTooltip (tooltip);
     buttonAttachments.push_back (std::make_unique<APVTS::ButtonAttachment> (state, id, b));
+}
+
+int MainPanel::pageForBlock (int block)
+{
+    switch (block)
+    {
+        case Chain::comb:
+        case Chain::carve: return eqPageIndex;
+        case Chain::crypt: return spacePageIndex;
+        default:           return fxPageIndex;
+    }
+}
+
+void MainPanel::showPage (int page)
+{
+    currentPage = juce::jlimit (0, numPages - 1, page);
+    processor.setUiPage (currentPage);
+    fxPage.setVisible (currentPage == fxPageIndex);
+    eqPage.setVisible (currentPage == eqPageIndex);
+    reverbPage.setVisible (currentPage == spacePageIndex);
+    if (currentPage != eqPageIndex)
+        processor.getSpectrumTap().setActive (false);
+
+    std::array<bool, Chain::numBlocks> hi {};
+    for (int b = 0; b < Chain::numBlocks; ++b)
+        hi[(size_t) b] = pageForBlock (b) == currentPage;
+    chainStrip.setHighlighted (hi);
+    backdrop.repaint();
 }
 
 bool MainPanel::paramOn (const char* id) const
@@ -186,10 +230,17 @@ void MainPanel::resized()
     switchModeSelector.setBounds (822, 18, 196, 28);
     infoButton.setBounds (baseWidth - 16 - 32, 16, 32, 32);
 
-    // Section areas
-    noiseArea   = { 16.0f,  76.0f, 536.0f, 262.0f };
-    rainbowArea = { 564.0f, 76.0f, 520.0f, 262.0f };
-    const float rowY = 350.0f, rowH = 190.0f;
+    // Chain strip and the page area below it
+    chainStrip.setBounds (16, 72, baseWidth - 32, 54);
+    const auto pageArea = juce::Rectangle<int> (16, 136, baseWidth - 32, 464);
+    eqPage.setBounds (pageArea);
+    reverbPage.setBounds (pageArea);
+    fxPage.setBounds (getLocalBounds());
+
+    // FX page section areas
+    noiseArea   = { 16.0f,  136.0f, 536.0f, 262.0f };
+    rainbowArea = { 564.0f, 136.0f, 520.0f, 262.0f };
+    const float rowY = 410.0f, rowH = 190.0f;
     swarmArea  = { 16.0f,  rowY, 250.0f, rowH };
     fuzzArea   = { 278.0f, rowY, 500.0f, rowH };
     flowArea   = { 790.0f, rowY, 294.0f, rowH };
@@ -247,8 +298,7 @@ void MainPanel::resized()
 
     // FUZZ
     fuzzPower.setBounds (powerFor (fuzzArea));
-    postToggle.setBounds (pillFor (fuzzArea, 0));
-    fuzzVoiceSelector.setBounds (postToggle.getX() - 8 - 150, (int) fuzzArea.getY() + 10, 150, 22);
+    fuzzVoiceSelector.setBounds ((int) fuzzArea.getRight() - 40 - 8 - 150, (int) fuzzArea.getY() + 10, 150, 22);
     threeKnobs (fuzzArea, { &fuzzKnob, &fuzzToneKnob, &fuzzScoopKnob, &fuzzGlareKnob, &fuzzGateKnob, &fuzzSagKnob, &fuzzBlendKnob });
 
     // FLOW
@@ -261,7 +311,7 @@ void MainPanel::resized()
 
     // Footer: footswitches centred (LINK mini switches beside the octaves), meters at the sides
     {
-        const int fy = 552, fw = 92, fh = 118, spacing = 136;
+        const int fy = 612, fw = 92, fh = 118, spacing = 136;
         const int total = spacing * 3 + fw;
         int x = (baseWidth - total) / 2;
         for (auto* f : { &oct1Switch, &oct2Switch, &magicSwitch, &bypassSwitch })
@@ -274,9 +324,9 @@ void MainPanel::resized()
         footswitchArea = juce::Rectangle<float> ((float) oct1Switch.getX() - 14.0f, (float) fy - 4.0f,
                                                  (float) (bypassSwitch.getRight() - oct1Switch.getX()) + 28.0f, (float) fh + 6.0f);
         inputKnob .setBounds (16, fy - 8, 72, 104);
-        inMeter   .setBounds (96, 600, 176, 26);
+        inMeter   .setBounds (96, fy + 48, 176, 26);
         volumeKnob.setBounds (baseWidth - 16 - 72, fy - 8, 72, 104);
-        outMeter  .setBounds (baseWidth - 16 - 72 - 8 - 176, 600, 176, 26);
+        outMeter  .setBounds (baseWidth - 16 - 72 - 8 - 176, fy + 48, 176, 26);
     }
 
     infoOverlay.setBounds (getLocalBounds());
@@ -356,11 +406,19 @@ void MainPanel::paintBackdrop (juce::Graphics& g)
         }
     }
 
-    for (auto a : { noiseArea, rainbowArea, swarmArea, fuzzArea, flowArea })
-        drawPanel (g, a);
-
     // Footswitch plate (pedalboard strip behind the stomps and LINK switches)
     drawPanel (g, footswitchArea, 12.0f);
+
+    g.setFont (font (13.0f));
+    g.setColour (Colours::textFaint);
+    g.drawText ("v" + juce::String (JucePlugin_VersionString), juce::Rectangle<float> (16.0f, (float) baseHeight - 22.0f, 120.0f, 16.0f),
+                juce::Justification::centredLeft, false);
+
+    if (currentPage != fxPageIndex)
+        return;
+
+    for (auto a : { noiseArea, rainbowArea, swarmArea, fuzzArea, flowArea })
+        drawPanel (g, a);
 
     auto titleRow = [] (juce::Rectangle<float> a) { return a.reduced (16.0f, 0.0f).withTrimmedTop (8.0f).withHeight (26.0f); };
 
@@ -373,10 +431,6 @@ void MainPanel::paintBackdrop (juce::Graphics& g)
     g.setFont (font (12.5f, true));
     g.setColour (Colours::textFaint);
     g.drawText ("hold the footswitches below", titleRow (noiseArea).withTrimmedLeft (98.0f),
-                juce::Justification::centredLeft, false);
-
-    g.setFont (font (13.0f));
-    g.drawText ("v" + juce::String (JucePlugin_VersionString), juce::Rectangle<float> (16.0f, (float) baseHeight - 22.0f, 120.0f, 16.0f),
                 juce::Justification::centredLeft, false);
 }
 
@@ -396,6 +450,9 @@ void MainPanel::tick()
     pitchScope.push (meters.pitchSemitones.load(), noiseOn);
 
     presetBar.refresh();
+    chainStrip.refresh();
+    eqPage.tick();
+    reverbPage.tick();
 
     const int learning = processor.getMidiLearnTarget();
     int t = 0;
@@ -415,7 +472,7 @@ void MainPanel::tick()
     setSectionDimmed ({ &snapToggle, &rbSyncToggle, &rbRawToggle, &pitchKnob, &primaryKnob, &secondaryKnob, &toneKnob, &trackingKnob,
                         &magicKnob, &rbTimeKnob, &rbDivKnob, &rbMixKnob, &rbDetuneKnob }, ! states[1]);
     setSectionDimmed ({ &deepToggle, &swarmDepthKnob, &swarmRateKnob, &swarmMixKnob }, ! states[2]);
-    setSectionDimmed ({ &postToggle, &fuzzVoiceSelector, &fuzzKnob, &fuzzToneKnob, &fuzzScoopKnob,
+    setSectionDimmed ({ &fuzzVoiceSelector, &fuzzKnob, &fuzzToneKnob, &fuzzScoopKnob,
                         &fuzzGlareKnob, &fuzzGateKnob, &fuzzSagKnob, &fuzzBlendKnob }, ! states[3]);
     setSectionDimmed ({ &hardToggle, &syncToggle, &flowAmountKnob, &flowSpeedKnob, &flowDivKnob }, ! states[4]);
 

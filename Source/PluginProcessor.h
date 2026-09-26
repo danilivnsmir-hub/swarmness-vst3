@@ -7,10 +7,14 @@
 #include "DSP/FuzzStage.h"
 #include "DSP/SwarmChorus.h"
 #include "DSP/FlowGate.h"
+#include "DSP/Equalisers.h"
+#include "DSP/ReverbStage.h"
+#include "DSP/SpectrumTap.h"
 #include "Preset/PresetManager.h"
 
 #include <array>
 #include <atomic>
+#include <optional>
 
 class SwarmnessAudioProcessor : public juce::AudioProcessor
 {
@@ -33,7 +37,7 @@ public:
     bool acceptsMidi() const override  { return true; }   // footswitch MIDI learn
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
-    double getTailLengthSeconds() const override { return 10.0; }   // TRAILS up to 2 s x high feedback
+    double getTailLengthSeconds() const override { return 20.0; }   // CRYPT decay up to 20 s, TRAILS up to ~10 s
 
     int getNumPrograms() override    { return 1; }
     int getCurrentProgram() override { return 0; }
@@ -57,13 +61,34 @@ public:
         std::array<std::atomic<float>, 2> output {};
         std::atomic<float> pitchSemitones { 0.0f };   // current NOISE transposition
         std::atomic<bool>  noiseEngaged { false };
+        std::atomic<float> reverbLevel { 0.0f };       // CRYPT wet peak
     };
 
     Meters& getMeters() noexcept { return meters; }
 
+    /** Output tap for the EQ analyser (the editor switches it on while it is visible). */
+    SpectrumTap& getSpectrumTap() noexcept { return spectrumTap; }
+    double getCurrentSampleRate() const noexcept { return currentSampleRate; }
+
+    /** The chain order the parameters ask for (message or audio thread). */
+    Chain::Order getRequestedChainOrder() const noexcept;
+    /** Writes the slot parameters for a new order (message thread, one undoable host gesture per slot). */
+    void setChainOrder (const Chain::Order&);
+
+    /** CRYPT impulse response (message thread). Returns an error message, empty on success. */
+    juce::String loadReverbIR (const juce::File&);
+    void clearReverbIR();
+    juce::File getReverbIRFile() const;
+    juce::String getReverbIRDescription() const;   // "name - 2.4 s, stereo" (empty = none)
+    std::vector<float> getReverbIREnvelope() const; // peak envelope (0..1) for the editor, empty = none
+    double getReverbIRSeconds() const;
+
     /** Editor scale factor, persisted with the plug-in state. */
     float getUiScale() const noexcept     { return uiScale.load(); }
     void setUiScale (float scale) noexcept { uiScale = scale; }
+    /** Last page shown in the editor (FX / EQ / CRYPT), kept while the plug-in is loaded. */
+    int getUiPage() const noexcept         { return uiPage.load(); }
+    void setUiPage (int page) noexcept     { uiPage = page; }
 
 private:
     juce::AudioProcessorValueTreeState apvts;
@@ -101,22 +126,58 @@ private:
         std::atomic<float>* rbMix {};      std::atomic<float>* rbTime {};     std::atomic<float>* rbSync {};      std::atomic<float>* rbDiv {};
         std::atomic<float>* swarmOn {};    std::atomic<float>* swarmDeep {};   std::atomic<float>* swarmRate {};
         std::atomic<float>* swarmDepth {}; std::atomic<float>* swarmMix {};
-        std::atomic<float>* fuzzOn {};     std::atomic<float>* fuzzPost {};    std::atomic<float>* fuzz {};
+        std::atomic<float>* fuzzOn {};     std::atomic<float>* fuzz {};
         std::atomic<float>* fuzzTone {};   std::atomic<float>* fuzzGate {};    std::atomic<float>* fuzzVoice {};
         std::atomic<float>* fuzzScoop {};  std::atomic<float>* fuzzGlare {};   std::atomic<float>* fuzzBlend {};   std::atomic<float>* fuzzSag {};
         std::atomic<float>* flowOn {};     std::atomic<float>* flowHard {};    std::atomic<float>* flowSync {};
         std::atomic<float>* flowAmount {}; std::atomic<float>* flowSpeed {};   std::atomic<float>* flowDiv {};
         std::atomic<float>* output {};      std::atomic<float>* input {};      std::atomic<float>* bypass {};
+
+        std::atomic<float>* geqOn {};      std::atomic<float>* geqLevel {};
+        std::array<std::atomic<float>*, swarm::GraphicEq::numBands> geqBands {};
+        std::atomic<float>* peqOn {};      std::atomic<float>* peqHpFreq {};   std::atomic<float>* peqLpFreq {};
+        std::atomic<float>* peqLowFreq {}; std::atomic<float>* peqLowGain {};  std::atomic<float>* peqHighFreq {}; std::atomic<float>* peqHighGain {};
+        std::array<std::atomic<float>*, 3> peqBellFreq {}, peqBellGain {}, peqBellQ {};
+        std::atomic<float>* revOn {};      std::atomic<float>* revType {};     std::atomic<float>* revMix {};
+        std::atomic<float>* revDecay {};   std::atomic<float>* revSize {};     std::atomic<float>* revPreDelay {};
+        std::atomic<float>* revTone {};    std::atomic<float>* revLowCut {};   std::atomic<float>* revMod {};     std::atomic<float>* revDuck {};
+        std::array<std::atomic<float>*, Chain::numBlocks> chainSlots {};
     } p;
+
+    /** Per-block state shared by the chain blocks. */
+    struct BlockContext
+    {
+        double bpm = 120.0;
+        std::optional<double> ppq;
+        bool magicHeld = false, oct1Held = false, oct2Held = false;
+    };
+
+    void processChainBlock (int block, const BlockContext&, float* const* audio, int numChannels, int numSamples) noexcept;
+    void processPitch (const BlockContext&, float* const* audio, int numChannels, int numSamples) noexcept;
+    void processSmoke (float* const* audio, int numChannels, int numSamples) noexcept;
+    void processWings (const BlockContext&, float* const* audio, int numChannels, int numSamples) noexcept;
 
     juce::AudioParameterBool* bypassParam = nullptr;
 
-    // DSP chain: [fuzz pre] -> (noise || rainbow voices) -> swarm -> [fuzz post] -> flow (each stage has its own blend)
-    FuzzStage    fuzzPre, fuzzPost;
-    NoiseStage   noise;
-    RainbowStage rainbow;
-    SwarmChorus  swarmChorus;
-    FlowGate     flow;
+    // The blocks (each once; the order comes from the chain slot parameters)
+    FuzzStage          fuzzStage;
+    NoiseStage         noise;
+    RainbowStage       rainbow;
+    SwarmChorus        swarmChorus;
+    FlowGate           flow;
+    swarm::GraphicEq    comb;
+    swarm::ParametricEq carve;
+    ReverbStage        crypt;
+
+    Chain::Order activeOrder = Chain::defaultOrder();
+    juce::SmoothedValue<float> chainFade;   // dips the chain output while the order changes
+
+    SpectrumTap spectrumTap;
+    juce::File reverbIRFile;
+    juce::String reverbIRDescription;
+    std::vector<float> reverbIREnvelope;
+    double reverbIRSeconds = 0.0;
+    juce::CriticalSection irInfoLock;
 
     juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::None> dryDelay { 1 };
     juce::AudioBuffer<float> dryBuffer, hiveBuffer;
@@ -128,6 +189,7 @@ private:
 
     Meters meters;
     std::atomic<float> uiScale { 1.0f };
+    std::atomic<int> uiPage { 0 };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SwarmnessAudioProcessor)
 };

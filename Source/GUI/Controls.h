@@ -48,6 +48,8 @@ public:
     Fader (const juce::String& caption, bool bipolar = false);
 
     juce::Slider& getSlider() noexcept { return slider; }
+    /** Narrow faders: smaller lettering, value without the unit. */
+    void setCompact (bool shouldBeCompact) { compact = shouldBeCompact; repaint(); }
     void attach (juce::AudioProcessorValueTreeState&, const juce::String& paramID, const juce::String& tooltip);
 
     void paint (juce::Graphics&) override;
@@ -56,6 +58,7 @@ public:
 private:
     juce::String caption;
     juce::Slider slider;
+    bool compact = false;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Fader)

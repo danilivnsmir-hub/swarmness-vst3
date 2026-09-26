@@ -923,6 +923,10 @@ namespace
         setParam (p, ParamIDs::swarmOn, 1.0f);
         setParam (p, ParamIDs::swarmDeep, 1.0f);
         setParam (p, ParamIDs::flowOn, 1.0f);
+        setParam (p, ParamIDs::geqOn, 1.0f);
+        setParam (p, ParamIDs::peqOn, 1.0f);
+        setParam (p, ParamIDs::revOn, 1.0f);
+        setParam (p, ParamIDs::revType, 3.0f);
         setParam (p, ParamIDs::oct1, 1.0f);
         const double sr = 48000.0;
         auto input = makeGuitar (sr, (int) sr * 10);
@@ -931,6 +935,399 @@ namespace
         const double secs = std::chrono::duration<double> (std::chrono::steady_clock::now() - t0).count();
         const double load = secs / 10.0 * 100.0;
         check (load < 25.0, juce::String::formatted ("everything on: %.2f%% of one core (realtime factor %.0fx)", load, 10.0 / secs));
+    }
+
+    //==========================================================================
+    // Modular chain, COMB / CARVE EQs, CRYPT reverb
+
+    void setOrder (SwarmnessAudioProcessor& p, std::initializer_list<int> blocks)
+    {
+        Chain::Order order {};
+        int i = 0;
+        for (int b : blocks)
+            order[(size_t) i++] = b;
+        p.setChainOrder (order);
+    }
+
+    /** Gain (dB) of a sine through the plug-in, measured after it settles, latency-aligned. */
+    double sineGainDb (SwarmnessAudioProcessor& p, double freq, double sr = 48000.0)
+    {
+        const int n = (int) sr;
+        auto input = makeSine (sr, n, freq, 0.1f);
+        auto out = render (p, input, sr, 256);
+        const int from = n / 2;
+        double eo = 0.0, ei = 0.0;
+        for (int i = from; i < n; ++i)
+        {
+            eo += (double) out.getSample (0, i) * out.getSample (0, i);
+            ei += (double) input.getSample (0, i) * input.getSample (0, i);
+        }
+        return 10.0 * std::log10 ((eo + 1.0e-30) / (ei + 1.0e-30));
+    }
+
+    void testChainOrder()
+    {
+        std::printf ("\nModular chain: order, latency, transparency, click-free reordering, migration\n");
+        {
+            std::array<float, Chain::numBlocks> slots {};
+            for (int b = 0; b < Chain::numBlocks; ++b)
+                slots[(size_t) b] = (float) Chain::defaultSlots[b];
+            const auto def = Chain::orderFromSlots (slots);
+            check (def[0] == Chain::smoke && def[1] == Chain::pitch && def[6] == Chain::crypt, "default order: SMOKE, PITCH, ..., CRYPT");
+            slots.fill (0.0f);   // all tied -> default order
+            check (Chain::orderFromSlots (slots) == def, "tied slots fall back to the default order");
+            Chain::Order custom { Chain::crypt, Chain::comb, Chain::pitch, Chain::wings, Chain::smoke, Chain::carve, Chain::swarm };
+            check (Chain::orderFromSlots (Chain::slotsForOrder (custom)) == custom, "slots <-> order round trip");
+        }
+
+        const double sr = 48000.0;
+        auto input = makeGuitar (sr, 48000);
+        {
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            p.prepareToPlay (sr, 256);
+            const int latencyDefault = p.getLatencySamples();
+            setOrder (p, { Chain::crypt, Chain::carve, Chain::comb, Chain::wings, Chain::swarm, Chain::pitch, Chain::smoke });
+            auto out = render (p, input, sr, 256);
+            check (p.getLatencySamples() == latencyDefault, juce::String::formatted ("latency independent of the order (%d samples)", latencyDefault));
+            const double db = nullDb (out, input, p.getLatencySamples(), 4096, input.getNumSamples());
+            check (db < -120.0, juce::String::formatted ("all blocks off, reversed chain: transparent (null %.1f dB)", db));
+        }
+        {
+            // SMOKE -> CRYPT vs CRYPT -> SMOKE must sound different
+            auto renderWith = [&] (std::initializer_list<int> order)
+            {
+                SwarmnessAudioProcessor p;
+                resetToInit (p);
+                setParam (p, ParamIDs::fuzzOn, 1.0f);
+                setParam (p, ParamIDs::revOn, 1.0f);
+                setParam (p, ParamIDs::revMix, 50.0f);
+                setOrder (p, order);
+                return render (p, input, sr, 256);
+            };
+            auto a = renderWith ({ Chain::smoke, Chain::pitch, Chain::swarm, Chain::wings, Chain::comb, Chain::carve, Chain::crypt });
+            auto b = renderWith ({ Chain::crypt, Chain::pitch, Chain::swarm, Chain::wings, Chain::comb, Chain::carve, Chain::smoke });
+            const double diff = nullDb (a, b, 0, 4096, a.getNumSamples());
+            check (diff > -6.0 && allFinite (a) && allFinite (b), juce::String::formatted ("fuzz -> reverb differs from reverb -> fuzz (%.1f dB)", diff));
+        }
+        {
+            // Reordering while a tone plays: a short dip, no clicks
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            auto tone = makeSine (sr, 48000, 440.0, 0.25f);
+            p.prepareToPlay (sr, 128);
+            juce::AudioBuffer<float> out (tone);
+            juce::MidiBuffer midi;
+            for (int start = 0; start < out.getNumSamples(); start += 128)
+            {
+                if (start == 24064)
+                    setOrder (p, { Chain::wings, Chain::swarm, Chain::pitch, Chain::smoke, Chain::comb, Chain::carve, Chain::crypt });
+                juce::AudioBuffer<float> view (out.getArrayOfWritePointers(), 2, start, 128);
+                p.processBlock (view, midi);
+            }
+            float maxStep = 0.0f;
+            int quiet = 0;
+            for (int i = 1; i < out.getNumSamples(); ++i)
+                maxStep = juce::jmax (maxStep, std::abs (out.getSample (0, i) - out.getSample (0, i - 1)));
+            for (int i = 24000; i < 26000; ++i)
+                if (std::abs (out.getSample (0, i)) < 0.01f && std::abs (tone.getSample (0, i - p.getLatencySamples())) > 0.1f)
+                    ++quiet;
+            check (maxStep < 0.04f && quiet < 48 * 20, juce::String::formatted ("reorder mid-note: max step %.4f, dip %.1f ms", maxStep, quiet / 48.0));
+            check (p.getRequestedChainOrder()[0] == Chain::wings, "the new order is active");
+        }
+        {
+            // Sessions from beta.15: SMOKE POST -> SMOKE after SWARM
+            SwarmnessAudioProcessor a;
+            juce::MemoryBlock mb;
+            a.getStateInformation (mb);
+            auto xml = juce::AudioProcessor::getXmlFromBinary (mb.getData(), (int) mb.getSize());
+            if (auto* slot = xml->getChildByAttribute ("id", Chain::slotIds[Chain::smoke]))
+                xml->removeChildElement (slot, true);
+            auto* legacy = xml->createNewChildElement ("PARAM");
+            legacy->setAttribute ("id", "fuzzPost");
+            legacy->setAttribute ("value", 1.0);
+            juce::MemoryBlock legacyState;
+            juce::AudioProcessor::copyXmlToBinary (*xml, legacyState);
+
+            SwarmnessAudioProcessor b;
+            b.setStateInformation (legacyState.getData(), (int) legacyState.getSize());
+            const auto order = b.getRequestedChainOrder();
+            auto pos = [&order] (int block) { return (int) (std::find (order.begin(), order.end(), block) - order.begin()); };
+            check (pos (Chain::smoke) > pos (Chain::swarm) && pos (Chain::smoke) < pos (Chain::wings), "old session with SMOKE POST: SMOKE lands after SWARM");
+
+            // ...and user presets
+            auto file = juce::File::createTempFile (".swpreset");
+            file.replaceWithText (R"({"name":"Legacy Post","plugin":"Swarmness","parameters":{"fuzzOn":1,"fuzzPost":1}})");
+            b.getPresetManager().importPreset (file);
+            const auto order2 = b.getRequestedChainOrder();
+            auto pos2 = [&order2] (int block) { return (int) (std::find (order2.begin(), order2.end(), block) - order2.begin()); };
+            check (pos2 (Chain::smoke) > pos2 (Chain::swarm), "old user preset with SMOKE POST: SMOKE lands after SWARM");
+            b.getPresetManager().deleteUserPreset ("Legacy Post");
+            file.deleteFile();
+        }
+    }
+
+    void testGraphicEq()
+    {
+        std::printf ("\nCOMB graphic EQ\n");
+        SwarmnessAudioProcessor p;
+        resetToInit (p);
+        setParam (p, ParamIDs::geqOn, 1.0f);
+        setParam (p, ParamIDs::geqBands[5], 12.0f);    // 1 kHz
+        setParam (p, ParamIDs::geqBands[1], -12.0f);   // 62 Hz
+        const double at1k = sineGainDb (p, 1000.0), at62 = sineGainDb (p, 62.5), at8k = sineGainDb (p, 8000.0);
+        check (std::abs (at1k - 12.0) < 1.0, juce::String::formatted ("1 kHz band +12 dB: %+.2f dB", at1k));
+        check (std::abs (at62 + 12.0) < 1.0, juce::String::formatted ("62 Hz band -12 dB: %+.2f dB", at62));
+        check (std::abs (at8k) < 1.0, juce::String::formatted ("8 kHz untouched: %+.2f dB", at8k));
+
+        std::array<float, swarm::GraphicEq::numBands> gains {};
+        gains[5] = 12.0f;
+        gains[1] = -12.0f;
+        const float predicted = swarm::GraphicEq::responseDb (gains, 0.0f, 48000.0, 1000.0);
+        check (std::abs (predicted - (float) at1k) < 0.3f, juce::String::formatted ("editor curve matches the DSP (%.2f vs %.2f dB)", predicted, at1k));
+
+        setParam (p, ParamIDs::geqLevel, -6.0f);
+        const double lvl = sineGainDb (p, 8000.0);
+        check (std::abs (lvl + 6.0) < 0.5, juce::String::formatted ("LEVEL -6 dB: %+.2f dB", lvl));
+    }
+
+    void testParametricEq()
+    {
+        std::printf ("\nCARVE parametric EQ\n");
+        SwarmnessAudioProcessor p;
+        resetToInit (p);
+        setParam (p, ParamIDs::peqOn, 1.0f);
+        setParam (p, ParamIDs::peqHpFreq, 200.0f);
+        const double at50 = sineGainDb (p, 50.0), at2k = sineGainDb (p, 2000.0);
+        check (at50 < -40.0, juce::String::formatted ("low cut 200 Hz, 24 dB/oct: 50 Hz at %.1f dB", at50));
+        check (std::abs (at2k) < 0.5, juce::String::formatted ("2 kHz passes: %+.2f dB", at2k));
+
+        setParam (p, ParamIDs::peqHpFreq, ParamRanges::peqHpOff);
+        setParam (p, ParamIDs::peqB2Freq, 800.0f);
+        setParam (p, ParamIDs::peqB2Gain, 10.0f);
+        setParam (p, ParamIDs::peqB2Q, 2.0f);
+        setParam (p, ParamIDs::peqLpFreq, 5000.0f);
+        const double bell = sineGainDb (p, 800.0), cut = sineGainDb (p, 15000.0);
+        check (std::abs (bell - 10.0) < 0.5, juce::String::formatted ("bell 800 Hz +10 dB: %+.2f dB", bell));
+        check (cut < -30.0, juce::String::formatted ("high cut 5 kHz: 15 kHz at %.1f dB", cut));
+
+        swarm::ParametricEq::Settings s;
+        s.bellHz[1] = 800.0f; s.bellDb[1] = 10.0f; s.bellQ[1] = 2.0f; s.lpHz = 5000.0f;
+        const float predicted = swarm::ParametricEq::responseDb (s, 48000.0, 800.0);
+        check (std::abs (predicted - (float) bell) < 0.3f, juce::String::formatted ("editor curve matches the DSP (%.2f vs %.2f dB)", predicted, bell));
+
+        // Sweeping a band hard while playing stays finite and click-free-ish
+        auto input = makeGuitar (48000.0, 48000);
+        p.prepareToPlay (48000.0, 64);
+        juce::MidiBuffer midi;
+        float peak = 0.0f;
+        for (int start = 0; start < input.getNumSamples(); start += 64)
+        {
+            setParam (p, ParamIDs::peqB1Freq, 40.0f * std::pow (400.0f, (float) (start % 12000) / 12000.0f));
+            setParam (p, ParamIDs::peqB1Gain, (start / 64) % 2 == 0 ? 18.0f : -18.0f);
+            juce::AudioBuffer<float> view (input.getArrayOfWritePointers(), 2, start, 64);
+            p.processBlock (view, midi);
+            peak = juce::jmax (peak, view.getMagnitude (0, 0, 64));
+        }
+        check (allFinite (input) && peak < 2.0f, juce::String::formatted ("wild automation: finite, peak %.2f", peak));
+    }
+
+    /** RT60 from the backward-integrated energy decay of an impulse response (-5..-25 dB fit). */
+    double measureRt60 (const juce::AudioBuffer<float>& ir, int start, double sr)
+    {
+        const int n = ir.getNumSamples();
+        std::vector<double> edc ((size_t) n, 0.0);
+        double acc = 0.0;
+        for (int i = n - 1; i >= start; --i)
+        {
+            const double v = 0.5 * ((double) ir.getSample (0, i) * ir.getSample (0, i) + (double) ir.getSample (1, i) * ir.getSample (1, i));
+            acc += v;
+            edc[(size_t) i] = acc;
+        }
+        const double total = edc[(size_t) start];
+        int t5 = -1, t25 = -1;
+        for (int i = start; i < n; ++i)
+        {
+            const double db = 10.0 * std::log10 (edc[(size_t) i] / total + 1.0e-30);
+            if (t5 < 0 && db <= -5.0) t5 = i;
+            if (t25 < 0 && db <= -25.0) { t25 = i; break; }
+        }
+        if (t5 < 0 || t25 < 0)
+            return -1.0;
+        return 3.0 * (t25 - t5) / sr;   // 20 dB span x 3 = 60 dB
+    }
+
+    juce::AudioBuffer<float> reverbImpulse (SwarmnessAudioProcessor& p, double sr, double seconds)
+    {
+        juce::AudioBuffer<float> in (2, (int) (sr * seconds));
+        in.clear();
+        in.setSample (0, 4800, 0.5f);   // after the start-up fades
+        in.setSample (1, 4800, 0.5f);
+        return render (p, in, sr, 256);
+    }
+
+    void testReverb()
+    {
+        std::printf ("\nCRYPT reverb\n");
+        const double sr = 48000.0;
+        for (int type : { 0, 2, 3 })
+            for (float decay : { 1.0f, 4.0f })
+            {
+                SwarmnessAudioProcessor p;
+                resetToInit (p);
+                setParam (p, ParamIDs::revOn, 1.0f);
+                setParam (p, ParamIDs::revMix, 100.0f);
+                setParam (p, ParamIDs::revType, (float) type);
+                setParam (p, ParamIDs::revDecay, decay);
+                setParam (p, ParamIDs::revTone, 80.0f);
+                auto out = reverbImpulse (p, sr, decay * 1.6 + 0.5);
+                const double rt = measureRt60 (out, 4800, sr);
+                check (rt > decay * 0.65 && rt < decay * 1.35 && allFinite (out),
+                       juce::String::formatted ("%s, DECAY %.1f s: measured RT60 %.2f s", ParamChoices::reverbTypes[type].toRawUTF8(), decay, rt));
+            }
+
+        {
+            // level: noise in, 100% wet at a medium hall
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            setParam (p, ParamIDs::revOn, 1.0f);
+            setParam (p, ParamIDs::revMix, 100.0f);
+            auto input = makeGuitar (sr, (int) sr * 3);
+            auto out = render (p, input, sr, 256);
+            const double ratio = 10.0 * std::log10 (std::pow (out.getRMSLevel (0, (int) sr, (int) sr * 2), 2.0) / std::pow (input.getRMSLevel (0, (int) sr, (int) sr * 2), 2.0));
+            check (ratio > -9.0 && ratio < 3.0, juce::String::formatted ("wet level vs dry (HALL 2.5 s): %+.1f dB", ratio));
+        }
+        {
+            // extreme settings: 20 s ABYSS, full MOD, loud input
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            setParam (p, ParamIDs::revOn, 1.0f);
+            setParam (p, ParamIDs::revMix, 100.0f);
+            setParam (p, ParamIDs::revType, 3.0f);
+            setParam (p, ParamIDs::revDecay, 20.0f);
+            setParam (p, ParamIDs::revMod, 100.0f);
+            setParam (p, ParamIDs::revTone, 100.0f);
+            setParam (p, ParamIDs::revSize, 100.0f);
+            auto input = makeGuitar (sr, (int) sr * 8);
+            input.applyGain (3.0f);
+            auto out = render (p, input, sr, 512);
+            const float lateRms = out.getRMSLevel (0, (int) sr * 6, (int) sr * 2);
+            check (allFinite (out) && out.getMagnitude (0, out.getNumSamples()) <= 2.0f && lateRms < 1.0f,
+                   juce::String::formatted ("ABYSS 20 s, MOD 100%%: bounded (late RMS %.2f)", lateRms));
+        }
+        {
+            // switching off: the tail rings out (spill-over), then the block goes idle and is exactly dry again
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            setParam (p, ParamIDs::revOn, 1.0f);
+            setParam (p, ParamIDs::revDecay, 0.5f);
+            setParam (p, ParamIDs::revMix, 50.0f);
+            auto input = makeGuitar (sr, (int) sr * 4);
+            for (int i = (int) sr; i < input.getNumSamples(); ++i)
+                input.setSample (0, i, 0.0f), input.setSample (1, i, 0.0f);
+            p.prepareToPlay (sr, 256);
+            juce::AudioBuffer<float> out (input);
+            juce::MidiBuffer midi;
+            for (int start = 0; start < out.getNumSamples(); start += 256)
+            {
+                if (start == 47872)
+                    setParam (p, ParamIDs::revOn, 0.0f);
+                juce::AudioBuffer<float> view (out.getArrayOfWritePointers(), 2, start, 256);
+                p.processBlock (view, midi);
+            }
+            const float tail = out.getRMSLevel (0, (int) sr + 2000, 4000);
+            check (tail > 1.0e-3f, juce::String::formatted ("switched off: tail rings out (RMS %.4f after the input stops)", tail));
+
+            auto more = makeGuitar (sr, (int) sr);
+            auto dry = more;
+            juce::AudioBuffer<float> out2 (more);
+            for (int start = 0; start < out2.getNumSamples(); start += 256)
+            {
+                juce::AudioBuffer<float> view (out2.getArrayOfWritePointers(), 2, start, juce::jmin (256, out2.getNumSamples() - start));
+                p.processBlock (view, midi);
+            }
+            const double db = nullDb (out2, dry, p.getLatencySamples(), 4096, out2.getNumSamples());
+            check (db < -120.0, juce::String::formatted ("after the tail: exactly dry again (null %.1f dB)", db));
+        }
+        {
+            // DUCK: the wet dips while playing
+            auto wetWhilePlaying = [&] (float duck)
+            {
+                SwarmnessAudioProcessor p;
+                resetToInit (p);
+                setParam (p, ParamIDs::revOn, 1.0f);
+                setParam (p, ParamIDs::revMix, 100.0f);
+                setParam (p, ParamIDs::revDuck, duck);
+                auto out = render (p, makeGuitar (sr, (int) sr * 2), sr, 256);
+                return out.getRMSLevel (0, (int) sr / 2, (int) sr);
+            };
+            const float plain = wetWhilePlaying (0.0f), ducked = wetWhilePlaying (100.0f);
+            const double dip = 20.0 * std::log10 (ducked / plain);
+            check (dip < -6.0, juce::String::formatted ("DUCK 100%%: wet %.1f dB while playing", dip));
+        }
+        {
+            // IR mode
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            setParam (p, ParamIDs::revOn, 1.0f);
+            setParam (p, ParamIDs::revMix, 100.0f);
+            setParam (p, ParamIDs::revType, 4.0f);
+            auto silent = reverbImpulse (p, sr, 0.5);
+            check (silent.getMagnitude (0, silent.getNumSamples()) < 1.0e-6f, "IR mode without an IR: silent wet");
+
+            // write a 0.6 s decaying-noise IR
+            auto irFile = juce::File::createTempFile (".wav");
+            {
+                juce::AudioBuffer<float> ir (2, (int) (sr * 0.6));
+                juce::Random rng (7);
+                for (int ch = 0; ch < 2; ++ch)
+                    for (int i = 0; i < ir.getNumSamples(); ++i)
+                        ir.setSample (ch, i, (rng.nextFloat() * 2.0f - 1.0f) * std::exp (-(float) i / (float) (sr * 0.08)));
+                juce::WavAudioFormat wav;
+                std::unique_ptr<juce::OutputStream> stream = irFile.createOutputStream();
+                auto writer = wav.createWriterFor (stream, juce::AudioFormatWriterOptions{}.withSampleRate (sr).withNumChannels (2).withBitsPerSample (24));
+                writer->writeFromAudioSampleBuffer (ir, 0, ir.getNumSamples());
+            }
+            const auto error = p.loadReverbIR (irFile);
+            check (error.isEmpty() && p.getReverbIRDescription().contains ("0.6 s"), "IR loads: " + p.getReverbIRDescription() + error);
+
+            // the convolution prepares the IR on a background thread: feed blocks until it answers
+            p.prepareToPlay (sr, 256);
+            juce::MidiBuffer midi;
+            float response = 0.0f;
+            for (int attempt = 0; attempt < 200 && response < 1.0e-3f; ++attempt)
+            {
+                juce::AudioBuffer<float> b (2, 256);
+                b.clear();
+                if (attempt % 20 == 0)
+                    b.setSample (0, 0, 0.5f), b.setSample (1, 0, 0.5f);
+                p.processBlock (b, midi);
+                response = juce::jmax (response, b.getMagnitude (0, 256));
+                juce::Thread::sleep (5);
+            }
+            check (response > 1.0e-3f, juce::String::formatted ("IR mode convolves (peak %.3f)", response));
+            {
+                juce::MidiBuffer m;
+                auto input = makeGuitar (sr, (int) sr * 2);
+                juce::AudioBuffer<float> out (input);
+                for (int start = 0; start < out.getNumSamples(); start += 256)
+                {
+                    juce::AudioBuffer<float> view (out.getArrayOfWritePointers(), 2, start, juce::jmin (256, out.getNumSamples() - start));
+                    p.processBlock (view, m);
+                }
+                const double ratio = 20.0 * std::log10 (out.getRMSLevel (0, (int) sr / 2, (int) sr) / input.getRMSLevel (0, (int) sr / 2, (int) sr));
+                check (ratio > -9.0 && ratio < 3.0, juce::String::formatted ("IR wet level vs dry: %+.1f dB", ratio));
+            }
+
+            juce::MemoryBlock mb;
+            p.getStateInformation (mb);
+            SwarmnessAudioProcessor q;
+            q.setStateInformation (mb.getData(), (int) mb.getSize());
+            check (q.getReverbIRFile() == irFile, "IR path saved with the session");
+            p.clearReverbIR();
+            check (p.getReverbIRDescription().isEmpty(), "IR cleared");
+            irFile.deleteFile();
+        }
     }
 
     void renderPresets (const juce::File& dir)
@@ -971,8 +1368,10 @@ int main (int argc, char** argv)
             p.getPresetManager().loadPreset (argv[3]);
         p.getAPVTS().getParameter (ParamIDs::oct1)->setValueNotifyingHost (1.0f);
         const float scale = argc >= 5 ? juce::String (argv[4]).getFloatValue() : 1.0f;
+        if (argc >= 6)
+            p.setUiPage (juce::String (argv[5]).getIntValue());
         std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
-        editor->setSize (juce::roundToInt (1000 * scale), juce::roundToInt (680 * scale));
+        editor->setSize (juce::roundToInt (MainPanel::baseWidth * scale), juce::roundToInt (MainPanel::baseHeight * scale));
 
         // Feed a little audio so meters and the pitch trace show activity.
         auto input = makeGuitar (48000.0, 256);
@@ -999,6 +1398,17 @@ int main (int argc, char** argv)
     {
         renderPresets (juce::File::getCurrentWorkingDirectory().getChildFile (argv[2]));
         return 0;
+    }
+
+    if (argc >= 3 && juce::String (argv[1]) == "--only")
+    {
+        const juce::String which (argv[2]);
+        if (which == "chain")   testChainOrder();
+        if (which == "comb")    testGraphicEq();
+        if (which == "carve")   testParametricEq();
+        if (which == "reverb")  testReverb();
+        std::printf ("\n%s (%d failure%s)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures, failures == 1 ? "" : "s");
+        return failures == 0 ? 0 : 1;
     }
 
     std::printf ("Swarmness DSP tests\n");
@@ -1028,6 +1438,10 @@ int main (int argc, char** argv)
     testStateRoundTrip();
     testPresetDirtyTracking();
     testPresetBanks();
+    testChainOrder();
+    testGraphicEq();
+    testParametricEq();
+    testReverb();
     testPerformance();
 
     std::printf ("\n%s (%d failure%s)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures, failures == 1 ? "" : "s");

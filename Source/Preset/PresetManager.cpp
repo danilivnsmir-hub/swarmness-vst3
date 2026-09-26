@@ -34,7 +34,10 @@ void PresetManager::initialiseFactoryPresets()
     // chaos = FRENZY, speed = BUZZ, noiseDown = DIVE, rbPrimary = DRONE, rbSecondary = QUEEN, rbMagic = TRAILS.
     // Wings division indices: 3 = 1/8, 4 = 1/16, 5 = 1/32
     const juce::String basics ("Basics"), stingCat ("Sting - hold +1/+2 OCT"), hiveCat ("Hive"),
-                       texture ("Smoke, Swarm & Wings"), attack ("Swarm Attack");
+                       texture ("Smoke, Swarm & Wings"), attack ("Swarm Attack"), space ("Chain, EQ & Crypt");
+    // Chain slots (lower = earlier). Defaults: SMOKE 10, PITCH 20, SWARM 30, WINGS 40, COMB 50, CARVE 60, CRYPT 70.
+    const juce::String slotCrypt (Chain::slotIds[Chain::crypt]), slotCarve (Chain::slotIds[Chain::carve]),
+                       slotComb (Chain::slotIds[Chain::comb]), slotSmoke (Chain::slotIds[Chain::smoke]);
 
     factoryPresets = {
         // ---------------------------------------------------------------- basics
@@ -57,8 +60,8 @@ void PresetManager::initialiseFactoryPresets()
           { { rise, 120 }, { fall, 400 }, { speed, 22 }, { panic, 25 } } },
         { "Hornet Buzz", stingCat, "High BUZZ: all-pass feedback and AM turn the octave into metallic ring-mod noise.",
           { { rise, 0 }, { fall, 0 }, { speed, 92 } } },
-        { "Dive Bomb", stingCat, "DIVE with a long RISE and a snappy FALL: hold for a slow sub-octave dive, release to snap back. SMOKE after.",
-          { { noiseDown, 1 }, { rise, 450 }, { fall, 60 }, { panic, 15 }, { fuzzOn, 1 }, { fuzzPost, 1 }, { fuzzVoice, 0 }, { fuzz, 70 }, { fuzzTone, 35 }, { fuzzScoop, 30 } } },
+        { "Dive Bomb", stingCat, "DIVE with a long RISE and a snappy FALL: hold for a slow sub-octave dive, release to snap back. SMOKE after SWARM in the chain.",
+          { { noiseDown, 1 }, { rise, 450 }, { fall, 60 }, { panic, 15 }, { fuzzOn, 1 }, { slotSmoke, 35 }, { fuzzVoice, 0 }, { fuzz, 70 }, { fuzzTone, 35 }, { fuzzScoop, 30 } } },
 
         // ------------------------------------------------------------------ HIVE
         { "Harmony Fifth", hiveCat, "Tight, clean harmony on the modern engine (RAW off): a fifth above (DRONE) plus its octave (QUEEN).",
@@ -105,11 +108,33 @@ void PresetManager::initialiseFactoryPresets()
           { { rise, 15 }, { panic, 50 }, { chaos, 15 }, { speed, 20 }, { fuzzOn, 1 }, { fuzzVoice, 2 }, { fuzz, 85 }, { fuzzTone, 60 }, { fuzzGlare, 35 } } },
         { "Broken Radio", attack, "Atonal loose HIVE, dark SMOKE after it and WINGS tremolo: a dying transmission.",
           { { rbOn, 1 }, { rbSnap, 0 }, { rbPitch, -2.6f }, { rbPrimary, 80 }, { rbTracking, 15 }, { rbTone, 30 },
-            { fuzzOn, 1 }, { fuzzPost, 1 }, { fuzz, 45 }, { fuzzTone, 20 },
+            { fuzzOn, 1 }, { slotSmoke, 35 }, { fuzz, 45 }, { fuzzTone, 20 },
             { flowOn, 1 }, { flowHard, 0 }, { flowSpeed, 6.0f }, { flowAmount, 60 } } },
         { "Hive Collapse", attack, "Everything at once. One stomp on VENOM: +2 OCT (LINK), self-oscillating HIVE and gated SMOKE.",
           { { panic, 40 }, { chaos, 40 }, { rbOn, 1 }, { rbPitch, 12 }, { rbPrimary, 60 }, { rbMagic, 100 }, { rbTracking, 55 },
-            { fuzzOn, 1 }, { fuzzPost, 1 }, { fuzz, 90 }, { fuzzScoop, 60 }, { fuzzGlare, 40 }, { fuzzGate, 30 }, { linkOct2, 1 } } },
+            { fuzzOn, 1 }, { slotSmoke, 35 }, { fuzz, 90 }, { fuzzScoop, 60 }, { fuzzGlare, 40 }, { fuzzGate, 30 }, { linkOct2, 1 } } },
+
+        // ------------------------------------------------------- chain, EQ & CRYPT
+        { "Crypt Doom", space, "DOWN SMOKE into a huge dark ABYSS. CARVE cuts the mud under the fuzz and DUCK keeps the riffs clear - the tail blooms in the gaps.",
+          { { fuzzOn, 1 }, { fuzzVoice, 0 }, { fuzz, 85 }, { fuzzTone, 40 }, { fuzzScoop, 20 }, { fuzzSag, 70 },
+            { peqOn, 1 }, { peqHpFreq, 70 }, { peqB1Freq, 300 }, { peqB1Gain, -3 }, { peqB1Q, 1.2f }, { peqLpFreq, 9000 },
+            { revOn, 1 }, { revType, 3 }, { revDecay, 7 }, { revMix, 32 }, { revTone, 35 }, { revLowCut, 180 }, { revDuck, 55 }, { revPreDelay, 40 } } },
+        { "Smoke in the Crypt", space, "Chain reordered: CRYPT runs INTO SMOKE. The fuzz eats the whole reverb - a sustaining, blooming wall of noise.",
+          { { slotCrypt, 5 }, { revOn, 1 }, { revType, 2 }, { revDecay, 3.5f }, { revMix, 45 }, { revTone, 45 },
+            { fuzzOn, 1 }, { fuzzVoice, 1 }, { fuzz, 80 }, { fuzzScoop, 55 }, { fuzzSag, 40 } } },
+        { "Tight Before Smoke", space, "CARVE moved in front of SMOKE: low cut and a mid push tighten the fuzz like a boost before an amp - palm mutes stay articulate.",
+          { { slotCarve, 5 }, { peqOn, 1 }, { peqHpFreq, 120 }, { peqB2Freq, 900 }, { peqB2Gain, 5 }, { peqB2Q, 0.8f },
+            { fuzzOn, 1 }, { fuzzVoice, 2 }, { fuzz, 70 }, { fuzzScoop, 35 }, { fuzzGate, 10 } } },
+        { "Comb Smile", space, "COMB after SMOKE: the classic scooped 'smile' - deep lows, carved mids, sizzling top.",
+          { { fuzzOn, 1 }, { fuzzVoice, 1 }, { fuzz, 75 }, { fuzzScoop, 20 },
+            { geqOn, 1 }, { geqBands[1], 3 }, { geqBands[2], 4 }, { geqBands[3], 1 }, { geqBands[4], -4 },
+            { geqBands[5], -5 }, { geqBands[6], -2 }, { geqBands[7], 3 }, { geqBands[8], 2 }, { geqBands[9], -6 } } },
+        { "Hive Cathedral", space, "Octave-up HIVE voices with TRAILS drowning in a bright PLATE - choir-like, holy and wrong.",
+          { { rbOn, 1 }, { rbPitch, 12 }, { rbPrimary, 45 }, { rbSecondary, 20 }, { rbMagic, 45 }, { rbTime, 260 }, { rbTracking, 85 }, { rbTone, 55 },
+            { revOn, 1 }, { revType, 1 }, { revDecay, 5 }, { revMix, 45 }, { revTone, 65 }, { revMod, 50 }, { revPreDelay, 25 } } },
+        { "Chug Room", space, "SMOKE with a tight ROOM that ducks hard while you play - space between the chugs, dry and punchy on them.",
+          { { fuzzOn, 1 }, { fuzzVoice, 2 }, { fuzz, 70 }, { fuzzScoop, 45 }, { fuzzGate, 15 },
+            { revOn, 1 }, { revType, 0 }, { revDecay, 1.1f }, { revMix, 35 }, { revDuck, 80 }, { revLowCut, 250 } } },
     };
 }
 
@@ -265,7 +290,7 @@ void PresetManager::restoreFromState (const juce::String& presetName)
 }
 
 //==============================================================================
-juce::var PresetManager::toJson (const juce::String& name, const ValueMap& values)
+juce::var PresetManager::toJson (const juce::String& name, const ValueMap& values) const
 {
     auto* root = new juce::DynamicObject();
     root->setProperty ("name", name);
@@ -276,6 +301,8 @@ juce::var PresetManager::toJson (const juce::String& name, const ValueMap& value
     for (const auto& [id, value] : values)
         params->setProperty (id, value);
     root->setProperty ("parameters", juce::var (params));
+    if (onSaveExtras)
+        onSaveExtras (*root);
 
     return juce::var (root);
 }
@@ -290,7 +317,19 @@ bool PresetManager::fromJson (const juce::var& json, juce::String& name, ValueMa
     for (const auto& prop : params->getProperties())
         if (prop.value.isDouble() || prop.value.isInt() || prop.value.isInt64() || prop.value.isBool())
             values[prop.name.toString()] = (float) (double) prop.value;
+    migrate (values);
     return true;
+}
+
+void PresetManager::migrate (ValueMap& values)
+{
+    // Before the reorderable chain, SMOKE had a PRE / POST switch.
+    if (auto it = values.find (ParamIDs::fuzzPostLegacy); it != values.end())
+    {
+        if (it->second > 0.5f && values.find (Chain::slotIds[Chain::smoke]) == values.end())
+            values[Chain::slotIds[Chain::smoke]] = (float) Chain::legacyPostSmokeSlot;
+        values.erase (it);
+    }
 }
 
 bool PresetManager::loadPreset (const juce::String& name)
@@ -312,10 +351,13 @@ bool PresetManager::loadPreset (const juce::String& name)
 
     juce::String storedName;
     ValueMap values;
-    if (! fromJson (juce::JSON::parse (file), storedName, values))
+    const auto json = juce::JSON::parse (file);
+    if (! fromJson (json, storedName, values))
         return false;
 
     applyValues (values, true);
+    if (onLoadExtras)
+        onLoadExtras (json);
     setCurrentName (name);
     takeSnapshot();
     return true;
@@ -373,7 +415,8 @@ bool PresetManager::importPreset (const juce::File& file)
 {
     juce::String name;
     ValueMap values;
-    if (! fromJson (juce::JSON::parse (file), name, values))
+    const auto json = juce::JSON::parse (file);
+    if (! fromJson (json, name, values))
         return false;
 
     if (name.isEmpty())
@@ -383,6 +426,8 @@ bool PresetManager::importPreset (const juce::File& file)
         name << " (imported)";
 
     applyValues (values, true);
+    if (onLoadExtras)
+        onLoadExtras (json);
     return saveUserPreset (name);
 }
 

@@ -129,13 +129,16 @@ void Fader::resized()
 void Fader::paint (juce::Graphics& g)
 {
     auto r = getLocalBounds().toFloat();
-    g.setFont (font (14.5f, true));
+    g.setFont (font (compact ? 13.0f : 14.5f, true));
     g.setColour (Colours::textDim);
     g.drawText (caption, r.removeFromTop (18.0f), juce::Justification::centred, false);
 
-    g.setFont (font (15.0f, true));
+    auto value = slider.getTextFromValue (slider.getValue());
+    if (compact)
+        value = value.upToFirstOccurrenceOf (" ", false, false);
+    g.setFont (font (compact ? 13.0f : 15.0f, true));
     g.setColour (Colours::accentBright);
-    g.drawText (slider.getTextFromValue (slider.getValue()), r.removeFromBottom (18.0f), juce::Justification::centred, false);
+    g.drawText (value, r.removeFromBottom (18.0f), juce::Justification::centred, false);
 }
 
 //==============================================================================
@@ -892,8 +895,14 @@ void InfoOverlay::paint (juce::Graphics& g)
                       "LINK mini switches next to the octaves make VENOM engage +1 / +2 OCT too." },
         { "SWARM",    "Stereo chorus with bucket-brigade colour. DEEP = 8 voices with feedback. MIX 50% = dry and chorus both full, 100% = vibrato." },
         { "SMOKE",    "Jumbo fuzz. VOICE: DOWN doom / MID / UP scream. SCOOP = mid cut, GLARE = gated octave-up, GATE = starved sputter, SAG = breathing "
-                      "(the pick sags, the note blooms), BLEND = clean under the fuzz. POST = after the pitch effects (off = before)." },
+                      "(the pick sags, the note blooms), BLEND = clean under the fuzz." },
         { "WINGS",    "Rhythmic gate: HARD = stutter, off = tremolo. SYNC locks to the host tempo (DIV)." },
+        { "CHAIN",    "The strip under the header is the signal chain. Drag a block to reorder it (fuzz before or after the pitch, reverb into the fuzz...), "
+                      "click it to open its page, click its LED to switch it on / off. The order is saved with presets." },
+        { "EQ",       "COMB = 10-band graphic EQ (+-12 dB) with LEVEL. CARVE = parametric: 24 dB/oct LOW / HIGH CUT, shelves and 3 bells - drag the nodes, "
+                      "wheel = Q, double-click = reset; the output spectrum runs behind the curve." },
+        { "CRYPT",    "Reverb: ROOM / PLATE / HALL / ABYSS or your own IR (LOAD IR or drop a file). DUCK dips the tail while you play, "
+                      "LOW CUT keeps it out of the low end. Switching it off lets the tail ring out." },
         { "SWITCHES", "MOMENTARY = active while held, LATCH = click on / off. Footswitches work even while bypassed. Right-click a footswitch for MIDI learn." },
         { "LEVELS",   "INPUT sets how hard the effects are hit (aim for the green zone of the IN meter); it is compensated at the output. "
                       "VOLUME = output level." },
@@ -903,11 +912,11 @@ void InfoOverlay::paint (juce::Graphics& g)
 
     for (const auto& item : items)
     {
-        auto row = r.removeFromTop (juce::jmin (50.0f, r.getHeight()));
+        auto row = r.removeFromTop (juce::jmin (43.0f, r.getHeight()));
         g.setFont (displayFont (19.0f));
         g.setColour (Colours::accentBright);
         g.drawText (item.title, row.removeFromLeft (120.0f), juce::Justification::topLeft, false);
-        g.setFont (font (16.0f));
+        g.setFont (font (15.0f));
         g.setColour (Colours::text);
         g.drawFittedText (item.body, row.toNearestInt(), juce::Justification::topLeft, 3, 1.0f);
     }

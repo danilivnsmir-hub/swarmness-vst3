@@ -1,12 +1,16 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include <algorithm>
+#include <array>
 
 /**
  * Central definition of every automatable parameter.
  *
- * Signal flow:  [SMOKE pre] -> STING -> HIVE -> SWARM -> [SMOKE post] -> MIX -> WINGS -> OUTPUT
- * (internal IDs keep the original DSP names: noise = STING, rainbow/rb = HIVE, fuzz = SMOKE, flow = WINGS)
+ * Signal flow: INPUT -> a reorderable chain of blocks (see Chain below) -> OUTPUT.
+ * PITCH = STING (footswitch octaves) in parallel with HIVE (harmony voices).
+ * (internal IDs keep the original DSP names: noise = STING, rainbow/rb = HIVE, fuzz = SMOKE, flow = WINGS,
+ *  geq = COMB graphic EQ, peq = CARVE parametric EQ, rev = CRYPT reverb)
  */
 namespace ParamIDs
 {
@@ -51,7 +55,7 @@ namespace ParamIDs
 
     // SMOKE (fuzz)
     inline constexpr const char* fuzzOn      = "fuzzOn";
-    inline constexpr const char* fuzzPost    = "fuzzPost";     // false = before the pitch stages
+    inline constexpr const char* fuzzPostLegacy = "fuzzPost";  // removed in beta.16 (the chain order replaces it); read for migration only
     inline constexpr const char* fuzz        = "fuzz";
     inline constexpr const char* fuzzTone    = "fuzzTone";
     inline constexpr const char* fuzzGate    = "fuzzGate";
@@ -68,6 +72,42 @@ namespace ParamIDs
     inline constexpr const char* flowAmount  = "flowAmount";
     inline constexpr const char* flowSpeed   = "flowSpeed";
     inline constexpr const char* flowDiv     = "flowDiv";
+
+    // COMB (10-band graphic EQ)
+    inline constexpr const char* geqOn       = "geqOn";
+    inline constexpr const char* geqLevel    = "geqLevel";
+    inline constexpr const char* geqBands[]  { "geqB0", "geqB1", "geqB2", "geqB3", "geqB4",
+                                               "geqB5", "geqB6", "geqB7", "geqB8", "geqB9" };
+
+    // CARVE (parametric EQ): 24 dB/oct low / high cut, shelves and three bells
+    inline constexpr const char* peqOn       = "peqOn";
+    inline constexpr const char* peqHpFreq   = "peqHpFreq";
+    inline constexpr const char* peqLpFreq   = "peqLpFreq";
+    inline constexpr const char* peqLowFreq  = "peqLowFreq";
+    inline constexpr const char* peqLowGain  = "peqLowGain";
+    inline constexpr const char* peqB1Freq   = "peqB1Freq";
+    inline constexpr const char* peqB1Gain   = "peqB1Gain";
+    inline constexpr const char* peqB1Q      = "peqB1Q";
+    inline constexpr const char* peqB2Freq   = "peqB2Freq";
+    inline constexpr const char* peqB2Gain   = "peqB2Gain";
+    inline constexpr const char* peqB2Q      = "peqB2Q";
+    inline constexpr const char* peqB3Freq   = "peqB3Freq";
+    inline constexpr const char* peqB3Gain   = "peqB3Gain";
+    inline constexpr const char* peqB3Q      = "peqB3Q";
+    inline constexpr const char* peqHighFreq = "peqHighFreq";
+    inline constexpr const char* peqHighGain = "peqHighGain";
+
+    // CRYPT (reverb: algorithmic FDN or a loaded impulse response)
+    inline constexpr const char* revOn       = "revOn";
+    inline constexpr const char* revType     = "revType";
+    inline constexpr const char* revMix      = "revMix";
+    inline constexpr const char* revDecay    = "revDecay";
+    inline constexpr const char* revSize     = "revSize";
+    inline constexpr const char* revPreDelay = "revPreDelay";
+    inline constexpr const char* revTone     = "revTone";
+    inline constexpr const char* revLowCut   = "revLowCut";
+    inline constexpr const char* revMod      = "revMod";
+    inline constexpr const char* revDuck     = "revDuck";
 
     // OUTPUT / GLOBAL
     inline constexpr const char* input       = "input";        // input sensitivity (compensated at the output)
@@ -88,6 +128,7 @@ namespace ParamChoices
 {
     inline const juce::StringArray switchModes { "Momentary", "Latch" };
     inline const juce::StringArray fuzzVoices  { "Down", "Mid", "Up" };
+    inline const juce::StringArray reverbTypes { "Room", "Plate", "Hall", "Abyss", "IR" };
     inline const juce::StringArray divisions   { "1/1", "1/2", "1/4", "1/8", "1/16", "1/32",
                                                  "1/4T", "1/8T", "1/16T", "1/8D", "1/16D" };
 
@@ -97,6 +138,68 @@ namespace ParamChoices
         static constexpr double beats[] { 4.0, 2.0, 1.0, 0.5, 0.25, 0.125,
                                           2.0 / 3.0, 1.0 / 3.0, 1.0 / 6.0, 0.75, 0.375 };
         return beats[juce::jlimit (0, (int) std::size (beats) - 1, index)];
+    }
+}
+
+namespace ParamRanges
+{
+    inline constexpr float geqBandHz[] { 31.25f, 62.5f, 125.0f, 250.0f, 500.0f, 1000.0f, 2000.0f, 4000.0f, 8000.0f, 16000.0f };
+    inline constexpr float geqMaxDb  = 12.0f;
+    inline constexpr float peqMaxDb  = 18.0f;
+    inline constexpr float peqHpOff  = 10.0f;      // low cut at its minimum = off
+    inline constexpr float peqLpOff  = 22000.0f;   // high cut at its maximum = off
+}
+
+/**
+ * The reorderable effect chain. Every block exists once, so the host always sees the same
+ * parameters; each block has a (non-automatable) slot parameter and the chain is the blocks
+ * sorted by slot (ties: default order). Any combination of slot values is a valid chain, and
+ * blocks added in later versions just get a default slot in between.
+ */
+namespace Chain
+{
+    enum Block : int { pitch = 0, smoke, swarm, wings, comb, carve, crypt, numBlocks };
+
+    inline constexpr const char* slotIds[numBlocks] { "chainPitch", "chainSmoke", "chainSwarm", "chainWings",
+                                                      "chainComb", "chainCarve", "chainCrypt" };
+    inline constexpr int defaultSlots[numBlocks] { 20, 10, 30, 40, 50, 60, 70 };   // SMOKE, PITCH, SWARM, WINGS, COMB, CARVE, CRYPT
+    inline constexpr int slotMax = 99;
+    inline constexpr int legacyPostSmokeSlot = 35;   // old "SMOKE POST" = after SWARM, before WINGS
+
+    inline constexpr const char* names[numBlocks]     { "PITCH", "SMOKE", "SWARM", "WINGS", "COMB", "CARVE", "CRYPT" };
+    inline constexpr const char* subtitles[numBlocks] { "STING + HIVE", "FUZZ", "CHORUS", "TREMOLO", "GRAPHIC EQ", "PARAM EQ", "REVERB" };
+
+    using Order = std::array<int, numBlocks>;
+
+    /** Blocks sorted by slot value (stable: ties keep the default order). */
+    inline Order orderFromSlots (const std::array<float, numBlocks>& slots) noexcept
+    {
+        Order order;
+        for (int i = 0; i < numBlocks; ++i)
+            order[(size_t) i] = i;
+        std::stable_sort (order.begin(), order.end(), [&] (int a, int b)
+        {
+            const int sa = juce::roundToInt (slots[(size_t) a]), sb = juce::roundToInt (slots[(size_t) b]);
+            return sa != sb ? sa < sb : defaultSlots[a] < defaultSlots[b];
+        });
+        return order;
+    }
+
+    inline Order defaultOrder() noexcept
+    {
+        std::array<float, numBlocks> slots;
+        for (int i = 0; i < numBlocks; ++i)
+            slots[(size_t) i] = (float) defaultSlots[i];
+        return orderFromSlots (slots);
+    }
+
+    /** Slot values that realise an order (10, 20, 30, ... leaving room for future blocks). */
+    inline std::array<float, numBlocks> slotsForOrder (const Order& order) noexcept
+    {
+        std::array<float, numBlocks> slots {};
+        for (int pos = 0; pos < numBlocks; ++pos)
+            slots[(size_t) order[(size_t) pos]] = (float) (10 * (pos + 1));
+        return slots;
     }
 }
 
