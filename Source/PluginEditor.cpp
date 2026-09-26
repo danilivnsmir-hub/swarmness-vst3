@@ -51,7 +51,8 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     chaosKnob.attach (state, chaos, "FRENZY: random pitch jumps around the octave - wider and faster as you turn it up");
     speedKnob.attach (state, speed, "BUZZ: all-pass feedback + amplitude modulation - slow phasing up to metallic ring-mod shrieks");
     stingMixKnob.attach (state, stingMix, "MIX: dry / shifted blend while a footswitch is down (100% = only the octave, like the pedal)");
-    for (auto* c : std::initializer_list<juce::Component*> { &riseKnob, &fallKnob, &panicKnob, &chaosKnob, &speedKnob, &stingMixKnob, &pitchScope })
+    stingDetuneKnob.attach (state, stingDetune, "DETUNE: fine offset of the octave, +-50 cents (a slightly sour octave is nastier)");
+    for (auto* c : std::initializer_list<juce::Component*> { &riseKnob, &fallKnob, &panicKnob, &chaosKnob, &speedKnob, &stingDetuneKnob, &stingMixKnob, &pitchScope })
         addAndMakeVisible (c);
 
     // RAINBOW
@@ -65,11 +66,12 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     trackingKnob .attach (state, rbTracking,  "TRACKING: high = tight harmonies, low = lag, long repeating grains and tone clusters");
     magicKnob    .attach (state, rbMagic,     "TRAILS: repeats of the DRONE, each shifted by PITCH again - even ladders that fade out (the VENOM footswitch pushes it into self-oscillation)");
     rbTimeKnob   .attach (state, rbTime,      "TIME: time between the TRAILS repeats");
+    rbDetuneKnob .attach (state, rbDetune,    "DETUNE: spreads the voices, DRONE up and QUEEN down by up to 50 cents - doubling / width (works with SNAP)");
     rbMixKnob    .attach (state, rbMix,       "MIX: dry / HIVE voices. 50% = both at full level, 100% = only the HIVE voices and trails (the STING octave still sounds)");
     rbDivKnob    .attach (state, rbDiv,       "TIME as a tempo division (SYNC on)");
     attachButton (rbSyncToggle, rbSync, "SYNC: lock the TRAILS repeats to the host tempo");
     attachButton (rbRawToggle, rbRaw, "RAW: vintage FV-1-style shifter - warbly, dark, gritty voices; TRACKING sets its window. Off = clean modern engine");
-    for (auto* c : std::initializer_list<juce::Component*> { &pitchKnob, &primaryKnob, &secondaryKnob, &toneKnob, &trackingKnob, &magicKnob, &rbTimeKnob, &rbMixKnob })
+    for (auto* c : std::initializer_list<juce::Component*> { &pitchKnob, &primaryKnob, &secondaryKnob, &toneKnob, &trackingKnob, &magicKnob, &rbTimeKnob, &rbMixKnob, &rbDetuneKnob })
         addAndMakeVisible (c);
     addChildComponent (rbDivKnob);
 
@@ -117,10 +119,31 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     addAndMakeVisible (volumeKnob);
 
     // Footswitches
-    oct1Switch  .setTooltip ("+1 octave (hold, or click in LATCH mode) - works even while the plug-in is bypassed");
-    oct2Switch  .setTooltip ("+2 octaves (hold, or click in LATCH mode) - works even while the plug-in is bypassed");
-    magicSwitch .setTooltip ("VENOM: slams the regeneration into self-oscillation - works even with HIVE or the plug-in switched off. LINK switches bring the octaves along");
-    bypassSwitch.setTooltip ("Plug-in on / bypass. The octave and VENOM footswitches still work while bypassed, like momentary pedals");
+    oct1Switch  .setTooltip ("+1 octave (hold, or click in LATCH mode) - works even while the plug-in is bypassed. Right-click: MIDI learn");
+    oct2Switch  .setTooltip ("+2 octaves (hold, or click in LATCH mode) - works even while the plug-in is bypassed. Right-click: MIDI learn");
+    magicSwitch .setTooltip ("VENOM: slams the regeneration into self-oscillation - works even with HIVE or the plug-in switched off. LINK switches bring the octaves along. Right-click: MIDI learn");
+    bypassSwitch.setTooltip ("Plug-in on / bypass. The octave and VENOM footswitches still work while bypassed, like momentary pedals. Right-click: MIDI learn");
+    // MIDI learn: right-click a footswitch
+    {
+        int t = 0;
+        for (auto* f : { &oct1Switch, &oct2Switch, &magicSwitch, &bypassSwitch })
+        {
+            const int target = t++;
+            f->onRightClick = [this, target, f]
+            {
+                auto& proc = processor;
+                juce::PopupMenu menu;
+                const auto bound = proc.describeMidiBinding (target);
+                menu.addSectionHeader (bound.isNotEmpty() ? "MIDI: " + bound : juce::String ("MIDI: not assigned"));
+                if (proc.getMidiLearnTarget() == target)
+                    menu.addItem ("Cancel MIDI Learn", [&proc] { proc.cancelMidiLearn(); });
+                else
+                    menu.addItem ("MIDI Learn (press a pedal / key / CC)", [&proc, target] { proc.startMidiLearn (target); });
+                menu.addItem ("Clear MIDI", bound.isNotEmpty(), false, [&proc, target] { proc.clearMidiBinding (target); });
+                menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (f));
+            };
+        }
+    }
     attachButton (link1Switch, linkOct1, "LINK: pressing VENOM also engages +1 OCT");
     attachButton (link2Switch, linkOct2, "LINK: pressing VENOM also engages +2 OCT");
     for (auto* c : std::initializer_list<juce::Component*> { &oct1Switch, &oct2Switch, &magicSwitch, &bypassSwitch, &inMeter, &outMeter })
@@ -179,11 +202,11 @@ void MainPanel::resized()
     stingRawToggle.setBounds (downToggle.getX() - 6 - 64, (int) noiseArea.getY() + 9, 64, 24);
     {
         const int y = (int) noiseArea.getY() + 44;
-        int x = (int) noiseArea.getX() + 12;
-        for (auto* k : { &riseKnob, &fallKnob, &panicKnob, &chaosKnob, &speedKnob, &stingMixKnob })
+        int x = (int) noiseArea.getX() + 10;
+        for (auto* k : { &riseKnob, &fallKnob, &panicKnob, &chaosKnob, &speedKnob, &stingDetuneKnob, &stingMixKnob })
         {
-            k->setBounds (x, y, 84, 106);
-            x += 85;
+            k->setBounds (x, y, 74, 106);
+            x += 74;
         }
         pitchScope.setBounds ((int) noiseArea.getX() + 16, (int) noiseArea.getY() + 160, (int) noiseArea.getWidth() - 32, 88);
     }
@@ -195,9 +218,10 @@ void MainPanel::resized()
     rbRawToggle.setBounds (pillFor (rainbowArea, 2));
     {
         const int y1 = (int) rainbowArea.getY() + 40, y2 = (int) rainbowArea.getY() + 148;
-        int x0 = (int) rainbowArea.getX() + 20, i = 0;
-        for (auto* k : { &pitchKnob, &primaryKnob, &secondaryKnob, &rbMixKnob })
-            k->setBounds (x0 + 122 * i++, y1, 100, 106);
+        int x0 = (int) rainbowArea.getX() + 12, i = 0;
+        for (auto* k : { &pitchKnob, &rbDetuneKnob, &primaryKnob, &secondaryKnob, &rbMixKnob })
+            k->setBounds (x0 + 100 * i++, y1, 96, 106);
+        x0 = (int) rainbowArea.getX() + 20;
         i = 0;
         for (auto* k : { &toneKnob, &trackingKnob, &magicKnob, &rbTimeKnob })
             k->setBounds (x0 + 122 * i++, y2, 100, 106);
@@ -373,6 +397,11 @@ void MainPanel::tick()
 
     presetBar.refresh();
 
+    const int learning = processor.getMidiLearnTarget();
+    int t = 0;
+    for (auto* f : { &oct1Switch, &oct2Switch, &magicSwitch, &bypassSwitch })
+        f->setLearning (learning == t++);
+
     const bool synced = paramOn (ParamIDs::flowSync);
     flowSpeedKnob.setVisible (! synced);
     flowDivKnob.setVisible (synced);
@@ -384,7 +413,7 @@ void MainPanel::tick()
                                        paramOn (ParamIDs::fuzzOn), paramOn (ParamIDs::flowOn) };
 
     setSectionDimmed ({ &snapToggle, &rbSyncToggle, &rbRawToggle, &pitchKnob, &primaryKnob, &secondaryKnob, &toneKnob, &trackingKnob,
-                        &magicKnob, &rbTimeKnob, &rbDivKnob, &rbMixKnob }, ! states[1]);
+                        &magicKnob, &rbTimeKnob, &rbDivKnob, &rbMixKnob, &rbDetuneKnob }, ! states[1]);
     setSectionDimmed ({ &deepToggle, &swarmDepthKnob, &swarmRateKnob, &swarmMixKnob }, ! states[2]);
     setSectionDimmed ({ &postToggle, &fuzzVoiceSelector, &fuzzKnob, &fuzzToneKnob, &fuzzScoopKnob,
                         &fuzzGlareKnob, &fuzzGateKnob, &fuzzSagKnob, &fuzzBlendKnob }, ! states[3]);

@@ -127,10 +127,15 @@ public:
     /** Lights the LED although the parameter is off (e.g. engaged through a LINK switch). */
     void setLitExternally (bool shouldBeLit);
 
+    /** Pulsing ring while waiting for a MIDI message to learn. */
+    void setLearning (bool isLearning);
+    /** Called on right-click (MIDI learn menu). */
+    std::function<void()> onRightClick;
+
 private:
     juce::String caption;
     juce::Colour ledColour;
-    bool inverse = false, value = false, pressed = false, holding = false, externallyLit = false;
+    bool inverse = false, value = false, pressed = false, holding = false, externallyLit = false, learning = false;
     std::function<bool()> momentary;
     juce::ParameterAttachment attachment;
 

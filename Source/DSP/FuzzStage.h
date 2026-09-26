@@ -5,7 +5,7 @@
 
 /**
  * SMOKE: high-gain, Muff-family fuzz voiced after the Swollen Pickle and the Cathedral,
- * running at 4x oversampling (linear-phase FIR half-band filters).
+ * oversampled to ~176-192 kHz (linear-phase FIR half-band filters).
  *
  *  VOICE : pre-clip EQ. DOWN = doom low-mids with the full bottom end, MID = classic
  *          jumbo fuzz, UP = tight low end and screaming upper mids
@@ -29,8 +29,9 @@
  * interface hiss and pickup hum into a roar between notes. It opens instantly on a pick,
  * holds briefly and fades smoothly, so note decays are not chopped.
  *
- * The oversampler always runs and the stage crossfades to a latency-matched clean path when
- * off, so the reported latency never changes and "off" is bit-transparent.
+ * Oversampling adapts to the host rate (4x / 2x / none, always ~176-192 kHz inside). When off,
+ * the stage outputs a latency-matched clean path and skips all processing, so the reported
+ * latency never changes and "off" is bit-transparent.
  */
 class FuzzStage
 {
@@ -46,7 +47,6 @@ public:
     };
 
     FuzzStage()
-        : oversampler (kMaxChannels, 2, juce::dsp::Oversampling<float>::filterHalfBandFIREquiripple, true, true)
     {
         for (auto& f : preHp)     f.setType (swarm::SVF::Type::highPass);
         for (auto& f : preBoost)  f.setType (swarm::SVF::Type::bell);
@@ -58,8 +58,12 @@ public:
     void prepare (double sr, int maxBlockSize)
     {
         sampleRate = sr;
-        oversampler.initProcessing ((size_t) maxBlockSize);
-        oversampler.reset();
+        // Oversample to ~176-192 kHz: 4x at 44.1/48 kHz, 2x at 88.2/96 kHz, none at 176.4/192 kHz
+        osFactorLog2 = sr < 60000.0 ? 2 : (sr < 120000.0 ? 1 : 0);
+        oversampler = std::make_unique<juce::dsp::Oversampling<float>> (
+            kMaxChannels, (size_t) osFactorLog2, juce::dsp::Oversampling<float>::filterHalfBandFIREquiripple, true, true);
+        oversampler->initProcessing ((size_t) maxBlockSize);
+        oversampler->reset();
 
         cleanDelay.setMaximumDelayInSamples (getLatencySamples() + 4);
         cleanDelay.prepare ({ sr, (juce::uint32) maxBlockSize, (juce::uint32) kMaxChannels });
@@ -69,7 +73,7 @@ public:
         onMix.reset (sr, 0.02);
         onMix.setCurrentAndTargetValue (isOn ? 1.0f : 0.0f);
 
-        const double osRate = sr * 4.0;
+        const double osRate = sr * (double) (1 << osFactorLog2);
         osSampleRate = osRate;
         gateEnvRelease  = (float) (1.0 - std::exp (-1.0 / (0.03 * sr)));
         gateOpen        = (float) (1.0 - std::exp (-1.0 / (0.0005 * sr)));
@@ -101,7 +105,7 @@ public:
 
     void reset()
     {
-        oversampler.reset();
+        if (oversampler != nullptr) oversampler->reset();
         cleanDelay.reset();
         for (auto& d : dc) d.reset();
         for (auto& d : preDc) d.reset();
@@ -115,7 +119,7 @@ public:
         gateHoldCounter = 0;
     }
 
-    int getLatencySamples() const { return (int) std::round (oversampler.getLatencyInSamples()); }
+    int getLatencySamples() const { return oversampler != nullptr ? (int) std::round (oversampler->getLatencyInSamples()) : 0; }
 
     void setParams (bool on, const Settings& s) noexcept
     {
@@ -142,12 +146,17 @@ public:
         const bool active = isOn || onMix.isSmoothing() || onMix.getCurrentValue() > 0.0f;
         if (! active)
         {
-            // Keep the oversampler's delay line in step, output the aligned clean signal.
-            oversampler.processSamplesUp (sub);
-            oversampler.processSamplesDown (sub);
+            // Off: just the latency-aligned clean signal (no oversampling, no CPU).
             for (int c = 0; c < numChannels; ++c)
                 juce::FloatVectorOperations::copy (audio[c], cleanCopy.getReadPointer (c), numSamples);
+            wasIdle = true;
             return;
+        }
+        if (wasIdle)
+        {
+            // Waking up: start the oversampler from silence (the on/off crossfade hides the start).
+            oversampler->reset();
+            wasIdle = false;
         }
 
         // ---- noise gate + pre-clip EQ (base rate), per control block so VOICE changes glide
@@ -191,7 +200,7 @@ public:
         }
 
         // ---- clipping stages (4x oversampled)
-        auto up = oversampler.processSamplesUp (sub);
+        auto up = oversampler->processSamplesUp (sub);
         {
             const int upSamples = (int) up.getNumSamples();
             const float f = sFuzz.get(), g = sGate.get(), gl = sGlare.get();
@@ -286,7 +295,7 @@ public:
                 }
             }
         }
-        oversampler.processSamplesDown (sub);
+        oversampler->processSamplesDown (sub);
 
         // ---- tone stack, scoop, output (base rate)
         for (int start = 0; start < numSamples; start += kControlBlock)
@@ -363,7 +372,9 @@ private:
     void snapControls() noexcept    { setControlTargets (true); }
     void advanceControls() noexcept { setControlTargets (false); }
 
-    juce::dsp::Oversampling<float> oversampler;
+    std::unique_ptr<juce::dsp::Oversampling<float>> oversampler;
+    int osFactorLog2 = 2;
+    bool wasIdle = true;
     juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::None> cleanDelay { 1 };
     juce::AudioBuffer<float> cleanCopy;
     juce::SmoothedValue<float> onMix;

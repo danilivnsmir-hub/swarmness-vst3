@@ -130,6 +130,7 @@ public:
         dryBuffer  .setSize (2, juce::jmax (maxBlockSize, kControlBlock), false, false, true);
         chaosSmoother.setTime (sr / kControlBlock, 0.012);
         dryLevelCoeff = (float) (1.0 - std::exp (-1.0 / (0.02 * sr)));
+        for (auto& f : subsonic) { f.setType (swarm::SVF::Type::highPass); f.setParams (sr, 38.0f, 0.7071f); f.reset(); }
         envAttack  = (float) (1.0 - std::exp (-1.0 / (0.0005 * sr)));
         envRelease = (float) (1.0 - std::exp (-1.0 / (0.025 * sr)));
         gainUp     = (float) (1.0 - std::exp (-1.0 / (0.001 * sr)));
@@ -184,6 +185,9 @@ public:
         speed  = speed01;
     }
 
+    /** Fine offset of the shifted voice in cents (only while engaged). */
+    void setDetuneCents (float c) noexcept { detuneCents = c; }
+
     /** Level of the unshifted (dry) part of the output - HIVE MIX turns it down to leave only the effects. */
     void setDryLevel (float level01) noexcept { dryLevelTarget = level01; }
 
@@ -231,8 +235,9 @@ public:
             const float wobble = panic > 0.5f ? (panic - 0.5f) * 0.6f * std::sin (swarm::kTwoPi * wobblePhase) : 0.0f;
             const float detune = (std::pow (panic, 1.3f) * 1.5f + wobble) * engage;
 
-            const float mainSemis  = currentSemis + chaosOffset + 0.5f * detune;
-            const float panicSemis = currentSemis + chaosOffset - 0.5f * detune;
+            const float fine = detuneCents * 0.01f * engage;
+            const float mainSemis  = currentSemis + chaosOffset + 0.5f * detune + fine;
+            const float panicSemis = currentSemis + chaosOffset - 0.5f * detune + fine;
             displaySemis = active ? mainSemis : 0.0f;
 
             const float mainRatio  = std::pow (2.0f, mainSemis / 12.0f);
@@ -291,7 +296,8 @@ public:
                     {
                         auto& z = chipmunkLp[(size_t) ch];
                         z = sub[ch][i] + lpCoeff * (z - sub[ch][i]);
-                        sub[ch][i] = z * restoreGain;
+                        // sub-sonic cut: DIVE on low tunings would otherwise land at 20-30 Hz
+                        sub[ch][i] = subsonic[(size_t) ch].process (z * restoreGain);
                     }
                 }
             }
@@ -300,6 +306,7 @@ public:
                 restoreGain = 1.0f;
                 dryEnv = wetEnv = 0.0f;
                 chipmunkLp = { 0.0f, 0.0f };
+                for (auto& f : subsonic) f.reset();
             }
 
             // Speed only colours the shifted signal.
@@ -345,6 +352,8 @@ private:
     // attack restoration / anti-chipmunk
     float dryEnv = 0.0f, wetEnv = 0.0f, restoreGain = 1.0f;
     float dryLevel = 1.0f, dryLevelTarget = 1.0f, dryLevelCoeff = 0.001f;
+    float detuneCents = 0.0f;
     float envAttack = 0.05f, envRelease = 0.001f, gainUp = 0.02f, gainDown = 0.003f;
     std::array<float, 2> chipmunkLp {};
+    std::array<swarm::SVF, 2> subsonic;
 };

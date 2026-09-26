@@ -19,6 +19,16 @@ namespace
 
     juce::NormalisableRange<float> percentRange() { return { 0.0f, 100.0f, 0.1f }; }
 
+    std::unique_ptr<juce::AudioParameterFloat> cents (const char* id, const juce::String& name)
+    {
+        return std::make_unique<juce::AudioParameterFloat> (
+            pid (id), name, juce::NormalisableRange<float> (-50.0f, 50.0f, 0.1f), 0.0f,
+            Attr().withLabel ("ct").withStringFromValueFunction ([] (float v, int)
+            {
+                return (v > 0.05f ? "+" : "") + juce::String (v, std::abs (v) < 10.0f ? 1 : 0) + " ct";
+            }));
+    }
+
     juce::String formatHz (float hz)
     {
         if (hz >= 1000.0f)
@@ -72,6 +82,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     noise->addChild (percent (chaos, "Frenzy", 0.0f));
     noise->addChild (percent (speed, "Buzz", 0.0f));
     noise->addChild (percent (stingMix, "Sting Mix", 100.0f));
+    noise->addChild (cents (stingDetune, "Sting Detune"));
     noise->addChild (toggle (stingRaw, "Sting Raw", true));
 
     // ---------------------------------------------------------------- RAINBOW
@@ -97,6 +108,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     rainbow->addChild (percent (rbSecondary, "Queen", 0.0f));
     rainbow->addChild (percent (rbTone, "Hive Tone", 60.0f));
     rainbow->addChild (percent (rbTracking, "Hive Tracking", 80.0f));
+    rainbow->addChild (cents (rbDetune, "Hive Detune"));
     rainbow->addChild (percent (rbMix, "Hive Mix", 50.0f));
     rainbow->addChild (percent (rbMagic, "Hive Trails", 0.0f));
     rainbow->addChild (std::make_unique<juce::AudioParameterFloat> (

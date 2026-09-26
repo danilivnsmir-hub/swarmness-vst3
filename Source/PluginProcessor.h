@@ -30,10 +30,10 @@ public:
     bool hasEditor() const override { return true; }
 
     const juce::String getName() const override { return JucePlugin_Name; }
-    bool acceptsMidi() const override  { return false; }
+    bool acceptsMidi() const override  { return true; }   // footswitch MIDI learn
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
-    double getTailLengthSeconds() const override { return 1.0; }
+    double getTailLengthSeconds() const override { return 10.0; }   // TRAILS up to 2 s x high feedback
 
     int getNumPrograms() override    { return 1; }
     int getCurrentProgram() override { return 0; }
@@ -69,12 +69,31 @@ private:
     juce::AudioProcessorValueTreeState apvts;
     std::unique_ptr<PresetManager> presetManager;
 
+public:
+    //==============================================================================
+    /** MIDI learn for the footswitches: 0 = +1 OCT, 1 = +2 OCT, 2 = VENOM, 3 = ON. */
+    static constexpr int kNumMidiTargets = 4;
+    enum class MidiKind : int { none = 0, cc = 1, note = 2 };
+
+    void startMidiLearn (int target) noexcept     { midiLearnTarget.store (target); }
+    void cancelMidiLearn() noexcept               { midiLearnTarget.store (-1); }
+    void clearMidiBinding (int target) noexcept   { midiMap[(size_t) target].kind.store (0); }
+    int  getMidiLearnTarget() const noexcept      { return midiLearnTarget.load(); }
+    juce::String describeMidiBinding (int target) const;
+
+private:
+    struct MidiBinding { std::atomic<int> kind { 0 }, number { -1 }; std::atomic<bool> down { false }; };
+    std::array<MidiBinding, kNumMidiTargets> midiMap;
+    std::atomic<int> midiLearnTarget { -1 };
+    void handleMidi (const juce::MidiBuffer&);
+    void applyFootswitch (int target, bool pressed);
+
     // Parameters (cached raw pointers - lock-free reads on the audio thread)
     struct Params
     {
         std::atomic<float>* oct1 {};       std::atomic<float>* oct2 {};        std::atomic<float>* noiseDown {};
         std::atomic<float>* rise {};       std::atomic<float>* panic {};       std::atomic<float>* chaos {};
-        std::atomic<float>* speed {};      std::atomic<float>* fall {};        std::atomic<float>* stingMix {};    std::atomic<float>* stingRaw {};    std::atomic<float>* rbRaw {};
+        std::atomic<float>* speed {};      std::atomic<float>* fall {};        std::atomic<float>* stingMix {};    std::atomic<float>* stingRaw {};    std::atomic<float>* stingDetune {}; std::atomic<float>* rbDetune {};    std::atomic<float>* rbRaw {};
         std::atomic<float>* rbOn {};       std::atomic<float>* rbPitch {};     std::atomic<float>* rbSnap {};
         std::atomic<float>* rbPrimary {};  std::atomic<float>* rbSecondary {}; std::atomic<float>* rbTone {};
         std::atomic<float>* rbTracking {}; std::atomic<float>* rbMagic {};     std::atomic<float>* magicHold {};

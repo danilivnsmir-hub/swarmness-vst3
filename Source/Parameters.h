@@ -20,6 +20,7 @@ namespace ParamIDs
     inline constexpr const char* chaos       = "chaos";
     inline constexpr const char* speed       = "speed";
     inline constexpr const char* stingMix    = "stingMix";
+    inline constexpr const char* stingDetune = "stingDetune";  // fine offset of the octave, cents
     inline constexpr const char* stingRaw    = "stingRaw";     // vintage lo-fi shifter engine     // dry / shifted blend while a footswitch is down
 
     // HIVE: harmony voices with regeneration (DRONE = primary, QUEEN = secondary, TRAILS = magic; the VENOM footswitch = magicHold)
@@ -31,6 +32,7 @@ namespace ParamIDs
     inline constexpr const char* rbSecondary = "rbSecondary";
     inline constexpr const char* rbTone      = "rbTone";
     inline constexpr const char* rbTracking  = "rbTracking";
+    inline constexpr const char* rbDetune    = "rbDetune";     // cents: DRONE up, QUEEN down (width)
     inline constexpr const char* rbMix       = "rbMix";        // dry / HIVE voices (50% = both full, 100% = voices only)
     inline constexpr const char* rbMagic     = "rbMagic";      // TRAILS: regeneration (repeats climb / fall by PITCH)
     inline constexpr const char* rbTime      = "rbTime";       // time between repeats (free)

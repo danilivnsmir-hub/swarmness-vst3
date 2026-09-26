@@ -12,7 +12,7 @@
 AppId={{6C0B6C8E-2E7B-4C39-9A5E-5A1D5F2B7A11}
 AppName=Swarmness
 AppVersion={#AppVersion}
-AppPublisher=OpenAudio
+AppPublisher=Insect Audio
 AppPublisherURL=https://github.com/danilivnsmir-hub/swarmness-vst3
 DefaultDirName={autopf}\Swarmness
 DefaultGroupName=Swarmness

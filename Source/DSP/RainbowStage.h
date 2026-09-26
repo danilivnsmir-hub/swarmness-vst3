@@ -78,6 +78,8 @@ public:
             loopLp[(size_t) ch].setParams (sr, 3500.0f, 0.7071f);
             loopHp[(size_t) ch].setType (swarm::SVF::Type::highPass);
             loopHp[(size_t) ch].setParams (sr, 45.0f, 0.7071f);
+            subsonic[(size_t) ch].setType (swarm::SVF::Type::highPass);
+            subsonic[(size_t) ch].setParams (sr, 38.0f, 0.7071f);
         }
 
         const double controlRate = sr / kControlBlock;
@@ -98,6 +100,7 @@ public:
         primLp = secLp = loopTone = { 0.0f, 0.0f };
         for (auto& f : loopLp) f.reset();
         for (auto& f : loopHp) f.reset();
+        for (auto& f : subsonic) f.reset();
         for (auto& d : dc) d.reset();
         for (auto& d : driftCents) d.reset (0.0f);
         driftTarget = { 0.0f, 0.0f };
@@ -106,8 +109,10 @@ public:
     }
 
     void setParams (bool on, float pitchSemis, float primary01, float secondary01, float tone01,
-                    float tracking01, float trails01, float repeatSeconds, bool magicHeld, bool rawEngine = true) noexcept
+                    float tracking01, float trails01, float repeatSeconds, bool magicHeld, bool rawEngine = true,
+                    float detuneCentsIn = 0.0f) noexcept
     {
+        detuneCents = detuneCentsIn;
         primary  .setRaw (rawEngine);
         secondary.setRaw (rawEngine);
         // RAW: the Rainbow-Machine-style warble - deeper and slower as TRACKING goes down
@@ -162,8 +167,9 @@ public:
                 driftTarget[0] = 3.0f * rng.nextBipolar();
                 driftTarget[1] = 6.0f * rng.nextBipolar();
             }
-            const float primCents = driftCents[0].process (driftTarget[0]);
-            const float secCents  = driftCents[1].process (driftTarget[1]);
+            // DETUNE spreads the voices: DRONE up, QUEEN down (on top of the natural drift)
+            const float primCents = driftCents[0].process (driftTarget[0]) + detuneCents;
+            const float secCents  = driftCents[1].process (driftTarget[1]) - detuneCents;
 
             const float baseRatio = std::pow (2.0f, pitch / 12.0f);
             const float primRatio = baseRatio * std::pow (2.0f, primCents / 1200.0f);
@@ -225,7 +231,7 @@ public:
                     const float pPan = right ? 0.72f : 1.0f;
                     const float sPan = numChannels > 1 && ! right ? 0.72f : 1.0f;
 
-                    const float voices = plp * pl * pPan + slp * sl * sPan;
+                    const float voices = subsonic[(size_t) ch].process (plp * pl * pPan + slp * sl * sPan);
                     auto& z = toneState[(size_t) ch];
                     z = voices + toneCoeff * (z - voices);
 
@@ -276,7 +282,7 @@ private:
     float loopDelayTarget = 8000.0f;
     swarm::OnePole loopDelay;
     std::array<float, 2> toneState {}, loopTone {}, primLp {}, secLp {};
-    std::array<swarm::SVF, 2> loopLp, loopHp;
+    std::array<swarm::SVF, 2> loopLp, loopHp, subsonic;
     std::array<swarm::DCBlocker, 2> dc;
 
     std::array<swarm::OnePole, 2> driftCents;
@@ -284,6 +290,6 @@ private:
     int driftCounter = 0;
     swarm::FastRandom rng { 0x5EED1E5u };
 
-    float pitch = 7.0f, toneCoeff = 0.0f;
+    float pitch = 7.0f, toneCoeff = 0.0f, detuneCents = 0.0f;
     float lastPrimRatio = 1.0f, lastSecRatio = 1.0f;
 };

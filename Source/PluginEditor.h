@@ -48,13 +48,13 @@ private:
     // STING (internally "noise")
     PillToggle downToggle { "DIVE" }, stingRawToggle { "RAW" };
     Knob riseKnob { "RISE" }, fallKnob { "FALL" }, panicKnob { "ANGER" }, chaosKnob { "FRENZY" }, speedKnob { "BUZZ" };
-    Knob stingMixKnob { "MIX" };
+    Knob stingMixKnob { "MIX" }, stingDetuneKnob { "DETUNE", true };
     PitchScope pitchScope;
 
     // HIVE (internally "rainbow")
     PowerButton rainbowPower;
     PillToggle snapToggle { "SNAP" }, rbSyncToggle { "SYNC" }, rbRawToggle { "RAW" };
-    Knob pitchKnob { "PITCH", true }, primaryKnob { "DRONE" }, secondaryKnob { "QUEEN" }, rbMixKnob { "MIX" };
+    Knob pitchKnob { "PITCH", true }, primaryKnob { "DRONE" }, secondaryKnob { "QUEEN" }, rbMixKnob { "MIX" }, rbDetuneKnob { "DETUNE", true };
     Knob toneKnob { "TONE" }, trackingKnob { "TRACKING" }, magicKnob { "TRAILS" };
     Knob rbTimeKnob { "TIME" }, rbDivKnob { "DIV" };
 

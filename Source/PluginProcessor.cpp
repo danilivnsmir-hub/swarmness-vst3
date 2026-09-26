@@ -31,7 +31,7 @@ SwarmnessAudioProcessor::SwarmnessAudioProcessor()
     p.oct1 = get (id::oct1);             p.oct2 = get (id::oct2);               p.noiseDown = get (id::noiseDown);
     p.rise = get (id::rise);             p.panic = get (id::panic);             p.chaos = get (id::chaos);
     p.speed = get (id::speed);           p.fall = get (id::fall);               p.stingMix = get (id::stingMix);
-    p.stingRaw = get (id::stingRaw);     p.rbRaw = get (id::rbRaw);
+    p.stingRaw = get (id::stingRaw);     p.stingDetune = get (id::stingDetune); p.rbDetune = get (id::rbDetune);     p.rbRaw = get (id::rbRaw);
     p.rbOn = get (id::rbOn);             p.rbPitch = get (id::rbPitch);         p.rbSnap = get (id::rbSnap);
     p.rbPrimary = get (id::rbPrimary);   p.rbSecondary = get (id::rbSecondary); p.rbTone = get (id::rbTone);
     p.rbTracking = get (id::rbTracking); p.rbMagic = get (id::rbMagic);         p.magicHold = get (id::magicHold);
@@ -56,9 +56,11 @@ SwarmnessAudioProcessor::SwarmnessAudioProcessor()
 bool SwarmnessAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
     const auto& out = layouts.getMainOutputChannelSet();
+    const auto& in  = layouts.getMainInputChannelSet();
     if (out != juce::AudioChannelSet::mono() && out != juce::AudioChannelSet::stereo())
         return false;
-    return layouts.getMainInputChannelSet() == out;
+    // mono -> mono, stereo -> stereo, and mono guitar -> stereo (SWARM / HIVE spread)
+    return in == out || (in == juce::AudioChannelSet::mono() && out == juce::AudioChannelSet::stereo());
 }
 
 void SwarmnessAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
@@ -108,15 +110,24 @@ void SwarmnessAudioProcessor::releaseResources()
 }
 
 //==============================================================================
-void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
+    handleMidi (midiMessages);
+
     juce::ScopedNoDenormals noDenormals;
 
     const int numChannels = juce::jmin (buffer.getNumChannels(), 2);
     const int numSamples  = buffer.getNumSamples();
 
-    for (int i = getTotalNumInputChannels(); i < getTotalNumOutputChannels(); ++i)
-        buffer.clear (i, 0, numSamples);
+    // Mono in, stereo out: duplicate the guitar into both channels; other extra outputs are cleared.
+    const int numIns = getTotalNumInputChannels();
+    for (int i = numIns; i < getTotalNumOutputChannels(); ++i)
+    {
+        if (numIns == 1 && i == 1)
+            buffer.copyFrom (1, 0, buffer, 0, 0, numSamples);
+        else
+            buffer.clear (i, 0, numSamples);
+    }
 
     if (numSamples == 0 || numChannels == 0)
         return;
@@ -212,6 +223,7 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
         const float interval = oct2Held ? 24.0f : (oct1Held ? 12.0f : 0.0f);
         noise.setParams (p.rise->load(), p.fall->load(), pct (p.panic), pct (p.chaos), pct (p.speed), pct (p.stingMix), on (p.stingRaw));
         noise.setInterval (dir * interval);
+        noise.setDetuneCents (p.stingDetune->load());
         noise.process (audio, numChannels, numSamples);
         meters.pitchSemitones.store (noise.getCurrentSemitones(), std::memory_order_relaxed);
         meters.noiseEngaged.store (noise.isEngaged(), std::memory_order_relaxed);
@@ -226,7 +238,8 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
         if (on (p.rbSync))
             repeatSeconds = ParamChoices::divisionInBeats ((int) p.rbDiv->load()) * 60.0 / transport.bpm;
         rainbow.setParams (on (p.rbOn) || magicHeld, pitch, pct (p.rbPrimary), pct (p.rbSecondary), pct (p.rbTone),
-                           pct (p.rbTracking), pct (p.rbMagic), (float) repeatSeconds, magicHeld, on (p.rbRaw));
+                           pct (p.rbTracking), pct (p.rbMagic), (float) repeatSeconds, magicHeld, on (p.rbRaw),
+                           p.rbDetune->load());
         float* hive[2] = { hiveBuffer.getWritePointer (0), hiveBuffer.getWritePointer (1) };
         rainbow.process (hive, numChannels, numSamples);
         for (int i = 0; i < numSamples; ++i)
@@ -299,6 +312,80 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
 }
 
 //==============================================================================
+static const char* midiTargetParam (int target)
+{
+    switch (target)
+    {
+        case 0:  return ParamIDs::oct1;
+        case 1:  return ParamIDs::oct2;
+        case 2:  return ParamIDs::magicHold;
+        default: return ParamIDs::bypass;
+    }
+}
+
+void SwarmnessAudioProcessor::handleMidi (const juce::MidiBuffer& midi)
+{
+    for (const auto meta : midi)
+    {
+        const auto msg = meta.getMessage();
+        const bool isCC = msg.isController(), isNote = msg.isNoteOnOrOff();
+        if (! isCC && ! isNote)
+            continue;
+
+        const int number = isCC ? msg.getControllerNumber() : msg.getNoteNumber();
+        const int kind   = isCC ? (int) MidiKind::cc : (int) MidiKind::note;
+        const bool pressed = isCC ? msg.getControllerValue() >= 64 : msg.isNoteOn();
+
+        // Learn: the first CC / note-on after "MIDI Learn" becomes the binding
+        const int learn = midiLearnTarget.load();
+        if (learn >= 0 && (isCC || msg.isNoteOn()))
+        {
+            midiMap[(size_t) learn].kind.store (kind);
+            midiMap[(size_t) learn].number.store (number);
+            midiMap[(size_t) learn].down.store (false);
+            midiLearnTarget.store (-1);
+            continue;
+        }
+
+        for (int t = 0; t < kNumMidiTargets; ++t)
+        {
+            auto& b = midiMap[(size_t) t];
+            if (b.kind.load() == kind && b.number.load() == number && b.down.load() != pressed)
+            {
+                b.down.store (pressed);
+                applyFootswitch (t, pressed);
+            }
+        }
+    }
+}
+
+void SwarmnessAudioProcessor::applyFootswitch (int target, bool pressed)
+{
+    auto* param = apvts.getParameter (midiTargetParam (target));
+    if (param == nullptr)
+        return;
+
+    const bool momentary = apvts.getRawParameterValue (ParamIDs::switchMode)->load() < 0.5f;
+    if (target < 3 && momentary)
+        param->setValueNotifyingHost (pressed ? 1.0f : 0.0f);      // held = on
+    else if (pressed)
+        param->setValueNotifyingHost (param->getValue() >= 0.5f ? 0.0f : 1.0f);   // latch / ON: toggle per press
+}
+
+juce::String SwarmnessAudioProcessor::describeMidiBinding (int target) const
+{
+    const auto& b = midiMap[(size_t) juce::jlimit (0, kNumMidiTargets - 1, target)];
+    const int n = b.number.load();
+    switch ((MidiKind) b.kind.load())
+    {
+        case MidiKind::cc:   return "CC " + juce::String (n);
+        case MidiKind::note: return "Note " + juce::MidiMessage::getMidiNoteName (n, true, true, 3);
+        case MidiKind::none: break;
+    }
+    return {};
+}
+
+//==============================================================================
 juce::AudioProcessorEditor* SwarmnessAudioProcessor::createEditor()
 {
     return new SwarmnessAudioProcessorEditor (*this);
@@ -310,6 +397,9 @@ void SwarmnessAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
     state.setProperty ("presetName", presetManager->getCurrentPresetName(), nullptr);
     state.setProperty ("pluginVersion", JucePlugin_VersionString, nullptr);
     state.setProperty ("uiScale", uiScale.load(), nullptr);
+    for (int t = 0; t < kNumMidiTargets; ++t)
+        state.setProperty ("midi" + juce::String (t),
+                           juce::String (midiMap[(size_t) t].kind.load()) + ":" + juce::String (midiMap[(size_t) t].number.load()), nullptr);
 
     if (auto xml = state.createXml())
         copyXmlToBinary (*xml, destData);
@@ -323,6 +413,13 @@ void SwarmnessAudioProcessor::setStateInformation (const void* data, int sizeInB
         {
             auto tree = juce::ValueTree::fromXml (*xml);
             uiScale = juce::jlimit (0.7f, 2.0f, (float) tree.getProperty ("uiScale", 1.0f));
+            for (int t = 0; t < kNumMidiTargets; ++t)
+            {
+                const auto v = tree.getProperty ("midi" + juce::String (t), "0:-1").toString();
+                midiMap[(size_t) t].kind.store (juce::jlimit (0, 2, v.upToFirstOccurrenceOf (":", false, false).getIntValue()));
+                midiMap[(size_t) t].number.store (v.fromFirstOccurrenceOf (":", false, false).getIntValue());
+                midiMap[(size_t) t].down.store (false);
+            }
             apvts.replaceState (tree);
             presetManager->restoreFromState (tree.getProperty ("presetName").toString());
 

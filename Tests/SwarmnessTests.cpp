@@ -742,6 +742,82 @@ namespace
                juce::String::formatted ("body vs attack: %+.1f dB (SAG 0) -> %+.1f dB (SAG 100)", bloom[0], bloom[1]));
     }
 
+    void testDetune()
+    {
+        std::printf ("\nDETUNE: fine offset of the STING octave\n");
+        SwarmnessAudioProcessor p;
+        resetToInit (p);
+        setParam (p, ParamIDs::stingRaw, 0.0f);
+        setParam (p, ParamIDs::rise, 0.0f);
+        setParam (p, ParamIDs::stingDetune, -30.0f);
+        setParam (p, ParamIDs::oct1, 1.0f);
+        const double sr = 48000.0;
+        auto out = render (p, makeSine (sr, 48000 * 2, 220.0), sr, 256);
+        double purity = 0.0;
+        const double f = dominantFrequency (out, sr, 48000, purity);
+        const double cents = 1200.0 * std::log2 (f / 440.0);
+        check (std::abs (cents + 30.0) < 5.0, juce::String::formatted ("+1 OCT with DETUNE -30 ct: %.2f Hz (%+.1f cents)", f, cents));
+    }
+
+    void testMidiLearn()
+    {
+        std::printf ("\nFootswitch MIDI learn\n");
+        SwarmnessAudioProcessor p;
+        resetToInit (p);
+        p.prepareToPlay (48000.0, 256);
+        juce::AudioBuffer<float> buf (2, 256);
+        auto send = [&] (const juce::MidiMessage& m)
+        {
+            juce::MidiBuffer midi;
+            midi.addEvent (m, 0);
+            buf.clear();
+            p.processBlock (buf, midi);
+        };
+        auto value = [&] (const char* id) { return p.getAPVTS().getRawParameterValue (id)->load(); };
+
+        p.startMidiLearn (0);                                           // +1 OCT
+        send (juce::MidiMessage::controllerEvent (1, 80, 127));
+        check (p.getMidiLearnTarget() == -1 && p.describeMidiBinding (0) == "CC 80", "learned CC 80 for +1 OCT");
+        send (juce::MidiMessage::controllerEvent (1, 80, 0));
+        send (juce::MidiMessage::controllerEvent (1, 80, 127));
+        const bool held = value (ParamIDs::oct1) > 0.5f;
+        send (juce::MidiMessage::controllerEvent (1, 80, 0));
+        check (held && value (ParamIDs::oct1) < 0.5f, "MOMENTARY: pedal down = on, up = off");
+
+        p.startMidiLearn (3);                                           // ON (bypass)
+        send (juce::MidiMessage::noteOn (1, 36, (juce::uint8) 100));
+        const float before = value (ParamIDs::bypass);
+        send (juce::MidiMessage::noteOff (1, 36));
+        send (juce::MidiMessage::noteOn (1, 36, (juce::uint8) 100));
+        check (std::abs (value (ParamIDs::bypass) - before) > 0.5f, "ON toggles on each note press (" + p.describeMidiBinding (3) + ")");
+
+        juce::MemoryBlock mb;
+        p.getStateInformation (mb);
+        SwarmnessAudioProcessor q;
+        q.setStateInformation (mb.getData(), (int) mb.getSize());
+        check (q.describeMidiBinding (0) == "CC 80" && q.describeMidiBinding (3).startsWith ("Note"), "bindings saved with the session");
+    }
+
+    void testMonoToStereo()
+    {
+        std::printf ("\nMono guitar on a stereo output\n");
+        SwarmnessAudioProcessor p;
+        juce::AudioProcessor::BusesLayout layout;
+        layout.inputBuses.add (juce::AudioChannelSet::mono());
+        layout.outputBuses.add (juce::AudioChannelSet::stereo());
+        const bool ok = p.setBusesLayout (layout);
+        check (ok, "mono in / stereo out layout accepted");
+        resetToInit (p);
+        setParam (p, ParamIDs::swarmOn, 1.0f);
+        setParam (p, ParamIDs::swarmMix, 50.0f);
+        const double sr = 48000.0;
+        auto input = makeGuitar (sr, 48000);
+        input.clear (1, 0, input.getNumSamples());   // only the left (mono) channel carries the guitar
+        auto out = render (p, input, sr, 256);
+        const float l = out.getRMSLevel (0, 12000, 24000), r = out.getRMSLevel (1, 12000, 24000);
+        check (r > 0.5f * l, juce::String::formatted ("both channels carry signal (L %.3f, R %.3f)", l, r));
+    }
+
     void testSwarmBounded()
     {
         std::printf ("\nSWARM: extreme settings stay bounded\n");
@@ -944,6 +1020,9 @@ int main (int argc, char** argv)
     reportLag();
     testFuzzIdleNoise();
     testFuzzSag();
+    testMonoToStereo();
+    testMidiLearn();
+    testDetune();
     testInputSensitivity();
     testSwarmBounded();
     testStateRoundTrip();

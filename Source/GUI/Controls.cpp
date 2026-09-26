@@ -322,8 +322,14 @@ Footswitch::Footswitch (juce::RangedAudioParameter& param, const juce::String& c
     setMouseCursor (juce::MouseCursor::PointingHandCursor);
 }
 
-void Footswitch::mouseDown (const juce::MouseEvent&)
+void Footswitch::mouseDown (const juce::MouseEvent& e)
 {
+    if (e.mods.isPopupMenu())
+    {
+        if (onRightClick != nullptr)
+            onRightClick();
+        return;
+    }
     pressed = true;
     if (momentary && momentary())
     {
@@ -338,8 +344,10 @@ void Footswitch::mouseDown (const juce::MouseEvent&)
     repaint();
 }
 
-void Footswitch::mouseUp (const juce::MouseEvent&)
+void Footswitch::mouseUp (const juce::MouseEvent& e)
 {
+    if (e.mods.isPopupMenu())
+        return;
     pressed = false;
     if (holding)
     {
@@ -348,6 +356,15 @@ void Footswitch::mouseUp (const juce::MouseEvent&)
         attachment.endGesture();
     }
     repaint();
+}
+
+void Footswitch::setLearning (bool isLearning)
+{
+    if (isLearning != learning || isLearning)
+    {
+        learning = isLearning;
+        repaint();
+    }
 }
 
 void Footswitch::setLitExternally (bool shouldBeLit)
@@ -432,6 +449,15 @@ void Footswitch::paint (juce::Graphics& g)
                                              juce::Colours::transparentBlack, inner.getCentreX(), inner.getCentreY(), false));
     g.drawEllipse (inner.reduced (1.0f), 1.2f);
     drawGrime (g, inner, 3.0f);
+
+    if (learning)
+    {
+        const float pulse = 0.5f + 0.5f * std::sin ((float) juce::Time::getMillisecondCounter() * 0.012f);
+        g.setColour (Colours::accentBright.withAlpha (0.35f + 0.55f * pulse));
+        g.strokePath (hexagon (outer.expanded (4.0f), true), juce::PathStrokeType (2.5f));
+        g.setFont (font (12.0f, true));
+        g.drawText ("MIDI?", outer.withHeight (14.0f).translated (0.0f, -2.0f), juce::Justification::centred, false);
+    }
 }
 
 //==============================================================================
@@ -857,7 +883,7 @@ void InfoOverlay::paint (juce::Graphics& g)
     static const Item items[] =
     {
         { "STING",    "Hold +1 OCT / +2 OCT (or latch them) for a violent octave. RISE = glide in, FALL = glide back on release. ANGER = detuned dissonance, "
-                      "FRENZY = random pitch jumps, BUZZ = all-pass feedback + ring-mod-like AM, MIX = dry / octave blend. DIVE = shift down." },
+                      "FRENZY = random pitch jumps, BUZZ = all-pass feedback + ring-mod-like AM, DETUNE = +-50 ct, MIX = dry / octave blend. DIVE = shift down." },
         { "RAW",      "STING and HIVE: lo-fi pedal character on top of the in-tune shifter - cheap converters and a slow pitch warble "
                       "(deeper at low TRACKING in HIVE). Off = clean. HIVE runs in parallel: it harmonises the note you play, not the octave." },
         { "HIVE",     "Harmony voices: PITCH (-12..+12 st, SNAP = semitones), DRONE = main voice, QUEEN = its octave, TONE. TRACKING low = lag "
@@ -868,7 +894,7 @@ void InfoOverlay::paint (juce::Graphics& g)
         { "SMOKE",    "Jumbo fuzz. VOICE: DOWN doom / MID / UP scream. SCOOP = mid cut, GLARE = gated octave-up, GATE = starved sputter, SAG = breathing "
                       "(the pick sags, the note blooms), BLEND = clean under the fuzz. POST = after the pitch effects (off = before)." },
         { "WINGS",    "Rhythmic gate: HARD = stutter, off = tremolo. SYNC locks to the host tempo (DIV)." },
-        { "SWITCHES", "MOMENTARY = active while held, LATCH = click on / off. Footswitches work even while bypassed. MIDI-learn them in your DAW." },
+        { "SWITCHES", "MOMENTARY = active while held, LATCH = click on / off. Footswitches work even while bypassed. Right-click a footswitch for MIDI learn." },
         { "LEVELS",   "INPUT sets how hard the effects are hit (aim for the green zone of the IN meter); it is compensated at the output. "
                       "VOLUME = output level." },
         { "PRESETS",  "FACTORY / USER tabs pick the bank that the list and the < > arrows browse. SAVE stores your sound in USER "
