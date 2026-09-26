@@ -25,7 +25,7 @@ public:
     {
         sampleRate = sr;
         const int needed = (int) std::ceil (sr * 0.06) + 8;
-        bufferSize = juce::nextPowerOfTwo (needed);
+        bufferSize = sw::nextPowerOfTwo (needed);
         mask = bufferSize - 1;
         for (auto& b : buffers)
             b.assign ((size_t) bufferSize, 0.0f);
@@ -181,8 +181,8 @@ public:
             feedbackL = hpL;
             feedbackR = hpR;
 
-            const float dryG = juce::jmin (1.0f, 2.0f * (1.0f - mix));
-            const float wetG = juce::jmin (1.0f, 2.0f * mix) * 1.15f;
+            const float dryG = sw::jmin (1.0f, 2.0f * (1.0f - mix));
+            const float wetG = sw::jmin (1.0f, 2.0f * mix) * 1.15f;
 
             audio[0][i] = dryG * inL + wetG * hpL;
             if (numChannels > 1)
@@ -218,5 +218,5 @@ private:
 
     float rate = 0.6f, targetDepth = 0.5f, targetMix = 0.0f;
     bool deep = false;
-    juce::SmoothedValue<float> mixSmoothed, depthSmoothed, modeBlend;
+    sw::SmoothedValue<float> mixSmoothed, depthSmoothed, modeBlend;
 };

@@ -7,6 +7,7 @@
 #include <JuceHeader.h>
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "../Pedal/bench/BenchScenarios.h"
 
 #include <chrono>
 #include <cstdio>
@@ -1484,6 +1485,30 @@ int main (int argc, char** argv)
         juce::PNGImageFormat().writeImageToStream (image, stream);
         std::printf ("wrote %s\n", out.getFullPathName().toRawUTF8());
         return 0;
+    }
+
+    if (argc >= 3 && juce::String (argv[1]) == "--compare-pedal")
+    {
+        // The JUCE-free pedal build must sound exactly like the plug-in build of the same engine.
+        juce::File f (juce::File::getCurrentWorkingDirectory().getChildFile (argv[2]));
+        juce::MemoryBlock mb;
+        f.loadFileAsData (mb);
+        const auto ref = swarmness::bench::render (swarmness::bench::scenarios().back(), 3);
+        const auto* other = static_cast<const float*> (mb.getData());
+        const size_t n = juce::jmin (ref.size(), mb.getSize() / sizeof (float));
+        double err = 0.0, sig = 0.0, maxDiff = 0.0;
+        for (size_t i = 0; i < n; ++i)
+        {
+            const double d = (double) ref[i] - other[i];
+            err += d * d;
+            sig += (double) ref[i] * ref[i];
+            maxDiff = juce::jmax (maxDiff, std::abs (d));
+        }
+        const double nullDb = 10.0 * std::log10 ((err + 1e-30) / (sig + 1e-30));
+        std::printf ("pedal build vs plug-in build: %zu samples, null %.1f dB, max diff %.2e (%s)\n",
+                     n, nullDb, maxDiff, maxDiff == 0.0 ? "bit-exact" : "same CPU family expected bit-exact; other CPUs / libm: < -60 dB");
+        // Same compiler + CPU: bit-exact. Another architecture's libm (sin / exp) differs in the last bits.
+        return n == ref.size() && nullDb < -60.0 ? 0 : 1;
     }
 
     if (argc >= 3 && juce::String (argv[1]) == "--render")

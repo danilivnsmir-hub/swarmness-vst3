@@ -51,9 +51,9 @@ public:
 
         const int maxLag = (int) std::ceil (sr * 0.2) + 8;
         lagLine.setMaximumDelayInSamples (maxLag);
-        lagLine.prepare ({ sr, (juce::uint32) juce::jmax (maxBlockSize, kControlBlock), 2 });
+        lagLine.prepare ({ sr, (sw::uint32) sw::jmax (maxBlockSize, kControlBlock), 2 });
 
-        const int size = juce::jmax (maxBlockSize, kControlBlock);
+        const int size = sw::jmax (maxBlockSize, kControlBlock);
         primBuf.setSize (2, size, false, false, true);
         secBuf .setSize (2, size, false, false, true);
         inBuf  .setSize (2, size, false, false, true);
@@ -65,7 +65,7 @@ public:
         onSmoothed.setCurrentAndTargetValue (0.0f);
         lagSmoothed.setCurrentAndTargetValue (0.0f);
 
-        loopSize = juce::nextPowerOfTwo ((int) std::ceil (sr * kMaxRepeatSeconds) + 64);
+        loopSize = sw::nextPowerOfTwo ((int) std::ceil (sr * kMaxRepeatSeconds) + 64);
         loopMask = loopSize - 1;
         for (auto& b : loopBuf)
             b.assign ((size_t) loopSize, 0.0f);
@@ -130,11 +130,11 @@ public:
         const float loose = 1.0f - tracking01;
         lagSmoothed.setTargetValue (loose * loose * 0.12f * (float) sampleRate);
 
-        loopDelayTarget = (float) (juce::jlimit (0.02, kMaxRepeatSeconds - 0.01, (double) repeatSeconds) * sampleRate);
+        loopDelayTarget = (float) (sw::jlimit (0.02, kMaxRepeatSeconds - 0.01, (double) repeatSeconds) * sampleRate);
 
         // TRAILS: loop gain below one -> even, predictable decay. The footswitch goes past one.
         // VENOM: just past unity, so the trails swell and sustain instead of shrieking
-        loopGain.setTargetValue (magicHeld ? 1.3f : 0.9f * std::pow (juce::jlimit (0.0f, 1.0f, trails01), 0.8f));
+        loopGain.setTargetValue (magicHeld ? 1.3f : 0.9f * std::pow (sw::jlimit (0.0f, 1.0f, trails01), 0.8f));
         resonanceSmoothed.setTargetValue (magicHeld ? 0.5f : 0.0f);
     }
 
@@ -147,18 +147,18 @@ public:
             // Keep the loop quiet so re-engaging starts clean.
             if (! loopCleared)
                 clearLoop();
-            for (int ch = 0; ch < juce::jmin (numChannels, 2); ++ch)
-                juce::FloatVectorOperations::clear (audio[ch], numSamples);
+            for (int ch = 0; ch < sw::jmin (numChannels, 2); ++ch)
+                sw::FloatVectorOperations::clear (audio[ch], numSamples);
             return;
         }
 
         loopCleared = false;
-        numChannels = juce::jmin (numChannels, 2);
+        numChannels = sw::jmin (numChannels, 2);
 
         for (int start = 0; start < numSamples; start += kControlBlock)
         {
-            const int n = juce::jmin (kControlBlock, numSamples - start);
-            const float loopD = juce::jmax ((float) (kControlBlock + 2), loopDelay.process (loopDelayTarget));
+            const int n = sw::jmin (kControlBlock, numSamples - start);
+            const float loopD = sw::jmax ((float) (kControlBlock + 2), loopDelay.process (loopDelayTarget));
 
             // Humanise: slow random pitch drift, independent per voice
             if (++driftCounter >= (int) (0.4 * sampleRate / kControlBlock))
@@ -178,7 +178,7 @@ public:
             // Anti-chipmunk: darken up-shifted voices in proportion to the shift
             const auto voiceLpCoeff = [this] (float ratio)
             {
-                const float hz = 16000.0f / std::pow (juce::jmax (1.0f, ratio), 0.9f);
+                const float hz = 16000.0f / std::pow (sw::jmax (1.0f, ratio), 0.9f);
                 return std::exp (-swarm::kTwoPi * hz / (float) sampleRate);
             };
             const bool raw = primary.isRaw();   // RAW keeps the converters' own darkness instead
@@ -272,9 +272,9 @@ private:
 
     double sampleRate = 44100.0;
     PitchVoice primary, secondary;
-    juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::Linear> lagLine { 1 };
-    juce::AudioBuffer<float> primBuf, secBuf, inBuf;
-    juce::SmoothedValue<float> onSmoothed, primLevel, secLevel, loopGain, resonanceSmoothed, lagSmoothed;
+    sw::dsp::DelayLine<float, sw::dsp::DelayLineInterpolationTypes::Linear> lagLine { 1 };
+    sw::AudioBuffer<float> primBuf, secBuf, inBuf;
+    sw::SmoothedValue<float> onSmoothed, primLevel, secLevel, loopGain, resonanceSmoothed, lagSmoothed;
 
     std::array<std::vector<float>, 2> loopBuf;
     int loopSize = 0, loopMask = 0, loopWrite = 0;

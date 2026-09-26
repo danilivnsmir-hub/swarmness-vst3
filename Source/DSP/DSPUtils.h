@@ -1,13 +1,13 @@
 #pragma once
 
-#include <JuceHeader.h>
+#include "Platform.h"
 #include <cmath>
 #include <cstdint>
 
 namespace swarm
 {
-    constexpr float kPi    = juce::MathConstants<float>::pi;
-    constexpr float kTwoPi = juce::MathConstants<float>::twoPi;
+    constexpr float kPi    = sw::MathConstants<float>::pi;
+    constexpr float kTwoPi = sw::MathConstants<float>::twoPi;
 
     /** 4-point, 3rd-order Hermite interpolation (x is the fractional offset between y1 and y2). */
     inline float hermite (float y0, float y1, float y2, float y3, float x) noexcept
@@ -82,7 +82,7 @@ namespace swarm
         /** Recomputes coefficients. gainDb only matters for the bell type. */
         void setParams (double sampleRate, float freq, float q, float gainDb = 0.0f) noexcept
         {
-            freq = juce::jlimit (5.0f, (float) (sampleRate * 0.49), freq);
+            freq = sw::jlimit (5.0f, (float) (sampleRate * 0.49), freq);
             const float g = std::tan (kPi * freq / (float) sampleRate);
 
             if (type == Type::bell)

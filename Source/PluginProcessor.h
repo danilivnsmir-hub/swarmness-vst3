@@ -2,8 +2,7 @@
 
 #include <JuceHeader.h>
 #include "Parameters.h"
-#include "DSP/NoiseStage.h"
-#include "DSP/RainbowStage.h"
+#include "DSP/PitchBlock.h"
 #include "DSP/FuzzStage.h"
 #include "DSP/SwarmChorus.h"
 #include "DSP/FlowGate.h"
@@ -165,8 +164,7 @@ private:
 
     // The blocks (each once; the order comes from the chain slot parameters)
     FuzzStage          fuzzStage;
-    NoiseStage         noise;
-    RainbowStage       rainbow;
+    PitchBlock         pitchBlock;   // STING || HIVE
     SwarmChorus        swarmChorus;
     FlowGate           flow;
     swarm::GraphicEq    comb;
@@ -188,9 +186,9 @@ private:
     juce::CriticalSection irInfoLock;
 
     juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::None> dryDelay { 1 };
-    juce::AudioBuffer<float> dryBuffer, hiveBuffer;
+    juce::AudioBuffer<float> dryBuffer;
     std::vector<float> inputGainTrack;     // per-sample INPUT gain of the current block
-    juce::SmoothedValue<float> inputGainSmoothed, outputGainSmoothed, hiveVoiceGain, bypassSmoothed;
+    juce::SmoothedValue<float> inputGainSmoothed, outputGainSmoothed, bypassSmoothed;
 
     double currentSampleRate = 44100.0;
     int maxBlockSize = 512;

@@ -32,8 +32,8 @@ public:
 
     void setAmount (float s) noexcept
     {
-        amount = juce::jlimit (0.0f, 1.0f, s);
-        mixSmoothed.setTargetValue (juce::jmin (1.0f, amount * 5.0f));
+        amount = sw::jlimit (0.0f, 1.0f, s);
+        mixSmoothed.setTargetValue (sw::jmin (1.0f, amount * 5.0f));
     }
 
     void process (float* const* audio, int numChannels, int numSamples) noexcept
@@ -60,7 +60,7 @@ public:
             const float am  = 1.0f - amDepth * (0.5f + 0.5f * std::sin (swarm::kTwoPi * (float) phase + 1.3f));
             const float mix = mixSmoothed.getNextValue();
 
-            for (int c = 0; c < juce::jmin (numChannels, 2); ++c)
+            for (int c = 0; c < sw::jmin (numChannels, 2); ++c)
             {
                 const float x = audio[c][i];
                 float v = x + fb * std::tanh (feedback[(size_t) c]);
@@ -90,7 +90,7 @@ private:
     std::array<float, 2> feedback {};
     double phase = 0.0;
     unsigned int counter = 0;
-    juce::SmoothedValue<float> mixSmoothed;
+    sw::SmoothedValue<float> mixSmoothed;
 };
 
 //==============================================================================
@@ -126,8 +126,8 @@ public:
             v->setLoFi (26000.0f, 13.0f, 10000.0f);  // cheap converters (shared RAW voicing with HIVE)
         }
         speedStage.prepare (sr);
-        panicBuffer.setSize (2, juce::jmax (maxBlockSize, kControlBlock), false, false, true);
-        dryBuffer  .setSize (2, juce::jmax (maxBlockSize, kControlBlock), false, false, true);
+        panicBuffer.setSize (2, sw::jmax (maxBlockSize, kControlBlock), false, false, true);
+        dryBuffer  .setSize (2, sw::jmax (maxBlockSize, kControlBlock), false, false, true);
         chaosSmoother.setTime (sr / kControlBlock, 0.012);
         dryLevelCoeff = (float) (1.0 - std::exp (-1.0 / (0.02 * sr)));
         for (auto& f : subsonic) { f.setType (swarm::SVF::Type::highPass); f.setParams (sr, 38.0f, 0.7071f); f.reset(); }
@@ -159,14 +159,14 @@ public:
     /** interval in semitones selected by the footswitches (0 = released). */
     void setInterval (float semis) noexcept
     {
-        if (! juce::exactlyEqual (semis, targetSemis))
+        if (! sw::exactlyEqual (semis, targetSemis))
         {
             // Moving away from home (footswitch down / switching octaves) uses RISE,
             // returning home (footswitch released) uses FALL.
             const bool returning = std::abs (semis) < std::abs (targetSemis) || std::abs (semis) < 0.001f;
             targetSemis = semis;
             const float ms = returning ? fallMs : riseMs;
-            const float glideSamples = juce::jmax (1.0f, ms * 0.001f * (float) sampleRate);
+            const float glideSamples = sw::jmax (1.0f, ms * 0.001f * (float) sampleRate);
             rampStep = std::abs (targetSemis - currentSemis) / glideSamples;
         }
     }
@@ -198,7 +198,7 @@ public:
 
     void process (float* const* audio, int numChannels, int numSamples) noexcept
     {
-        numChannels = juce::jmin (numChannels, 2);
+        numChannels = sw::jmin (numChannels, 2);
 
         for (int ch = 0; ch < numChannels; ++ch)
             dryBuffer.copyFrom (ch, 0, audio[ch], numSamples);
@@ -207,12 +207,12 @@ public:
 
         for (int start = 0; start < numSamples; start += kControlBlock)
         {
-            const int n = juce::jmin (kControlBlock, numSamples - start);
+            const int n = sw::jmin (kControlBlock, numSamples - start);
 
             // Rise: linear glide in semitones (Whammy-style)
             const float stepThisBlock = rampStep * (float) n;
-            if (currentSemis < targetSemis) currentSemis = juce::jmin (targetSemis, currentSemis + stepThisBlock);
-            else                            currentSemis = juce::jmax (targetSemis, currentSemis - stepThisBlock);
+            if (currentSemis < targetSemis) currentSemis = sw::jmin (targetSemis, currentSemis + stepThisBlock);
+            else                            currentSemis = sw::jmax (targetSemis, currentSemis - stepThisBlock);
 
             const bool active = isEngaged();
             const float engage = active ? 1.0f : 0.0f;
@@ -259,7 +259,7 @@ public:
                 panicVoice.process (psub, numChannels, n, lastPanicRatio, panicRatio);
                 lastPanicRatio = panicRatio;
 
-                const float targetLevel = juce::jmin (1.0f, panic * 2.5f) * 0.85f;
+                const float targetLevel = sw::jmin (1.0f, panic * 2.5f) * 0.85f;
                 for (int i = 0; i < n; ++i)
                 {
                     panicLevel += 0.002f * (targetLevel - panicLevel);
@@ -273,7 +273,7 @@ public:
             {
                 // Anti-chipmunk: darken up-shifts in proportion to the shift
                 // (modern engine only - in RAW the converter emulation does the darkening)
-                const float ratio = std::pow (2.0f, juce::jmax (0.0f, mainSemis) / 12.0f);
+                const float ratio = std::pow (2.0f, sw::jmax (0.0f, mainSemis) / 12.0f);
                 const float lpHz = 16000.0f / std::pow (ratio, 0.9f);
                 const float lpCoeff = mainVoice.isRaw() ? 0.0f : std::exp (-swarm::kTwoPi * lpHz / (float) sampleRate);
 
@@ -284,12 +284,12 @@ public:
                     float dryA = 0.0f, wetA = 0.0f;
                     for (int ch = 0; ch < numChannels; ++ch)
                     {
-                        dryA = juce::jmax (dryA, std::abs (dryBuffer.getSample (ch, start + i)));
-                        wetA = juce::jmax (wetA, std::abs (sub[ch][i]));
+                        dryA = sw::jmax (dryA, std::abs (dryBuffer.getSample (ch, start + i)));
+                        wetA = sw::jmax (wetA, std::abs (sub[ch][i]));
                     }
                     dryEnv += (dryA > dryEnv ? envAttack : envRelease) * (dryA - dryEnv);
                     wetEnv += (wetA > wetEnv ? envAttack : envRelease) * (wetA - wetEnv);
-                    const float target = juce::jlimit (0.6f, 2.0f, (dryEnv + 1.0e-4f) / (wetEnv + 1.0e-4f));
+                    const float target = sw::jlimit (0.6f, 2.0f, (dryEnv + 1.0e-4f) / (wetEnv + 1.0e-4f));
                     restoreGain += (target > restoreGain ? gainUp : gainDown) * (target - restoreGain);
 
                     for (int ch = 0; ch < numChannels; ++ch)
@@ -339,7 +339,7 @@ private:
     PitchVoice mainVoice, panicVoice;
     bool raw = true;
     SpeedStage speedStage;
-    juce::AudioBuffer<float> panicBuffer, dryBuffer;
+    sw::AudioBuffer<float> panicBuffer, dryBuffer;
     swarm::FastRandom rng { 0xBADC0DEu };
     swarm::OnePole chaosSmoother;
 

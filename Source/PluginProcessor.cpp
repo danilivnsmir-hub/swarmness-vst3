@@ -101,8 +101,7 @@ void SwarmnessAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBl
     maxBlockSize = juce::jmax (1, samplesPerBlock);
 
     fuzzStage.prepare (sampleRate, maxBlockSize);
-    noise    .prepare (sampleRate, maxBlockSize);
-    rainbow  .prepare (sampleRate, maxBlockSize);
+    pitchBlock.prepare (sampleRate, maxBlockSize);
     swarmChorus.prepare (sampleRate);
     flow .prepare (sampleRate);
     comb .prepare (sampleRate);
@@ -116,7 +115,6 @@ void SwarmnessAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBl
     dryDelay.setDelay ((float) latency);
     dryBuffer.setSize (2, maxBlockSize, false, false, true);
     inputGainTrack.assign ((size_t) maxBlockSize, 1.0f);
-    hiveBuffer.setSize (2, maxBlockSize, false, false, true);
 
     auto init = [sampleRate] (juce::SmoothedValue<float>& s, double seconds, float value)
     {
@@ -125,7 +123,6 @@ void SwarmnessAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBl
     };
     init (outputGainSmoothed, 0.03, juce::Decibels::decibelsToGain (p.output->load()));
     init (inputGainSmoothed,  0.03, juce::Decibels::decibelsToGain (p.input->load()));
-    init (hiveVoiceGain,      0.02, 1.0f);
     init (bypassSmoothed,     0.02, on (p.bypass) ? 1.0f : 0.0f);
     init (chainFade,          0.008, 1.0f);
     for (int sp = 0; sp < Chain::maxSplits; ++sp)
@@ -149,8 +146,7 @@ void SwarmnessAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBl
 void SwarmnessAudioProcessor::releaseResources()
 {
     fuzzStage.reset();
-    noise.reset();
-    rainbow.reset();
+    pitchBlock.reset();
     swarmChorus.reset();
     comb.reset();
     carve.reset();
@@ -327,7 +323,7 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     // ---- OUTPUT gain + bypass crossfade
     outputGainSmoothed.setTargetValue (juce::Decibels::decibelsToGain (p.output->load()));
     // (the NOISE return glide after releasing a footswitch is allowed to finish, too)
-    bypassSmoothed.setTargetValue (on (p.bypass) && ! anySwitchHeld && ! noise.isEngaged() ? 1.0f : 0.0f);
+    bypassSmoothed.setTargetValue (on (p.bypass) && ! anySwitchHeld && ! pitchBlock.isStingEngaged() ? 1.0f : 0.0f);
 
     for (int i = 0; i < numSamples; ++i)
     {
@@ -443,50 +439,38 @@ void SwarmnessAudioProcessor::processSmoke (float* const* audio, int numChannels
 
 void SwarmnessAudioProcessor::processPitch (const BlockContext& ctx, float* const* audio, int numChannels, int numSamples) noexcept
 {
-    // STING and HIVE run in parallel from the same (played) signal, so HIVE harmonises the note
-    // you play - not the STING octave - and the TRAILS never pick up the octave.
-    for (int ch = 0; ch < numChannels; ++ch)
-        hiveBuffer.copyFrom (ch, 0, audio[ch], numSamples);
+    PitchBlock::Settings s;
+    s.oct1 = ctx.oct1Held;
+    s.oct2 = ctx.oct2Held;
+    s.venom = ctx.magicHeld;
+    s.dive = on (p.noiseDown);
+    s.stingRaw = on (p.stingRaw);
+    s.riseMs = p.rise->load();
+    s.fallMs = p.fall->load();
+    s.anger = pct (p.panic);
+    s.frenzy = pct (p.chaos);
+    s.buzz = pct (p.speed);
+    s.stingMix = pct (p.stingMix);
+    s.stingDetuneCents = p.stingDetune->load();
 
-    // HIVE MIX (pedal law): 50% = dry and voices both full, 100% = voices only. It only turns down
-    // the dry part, so the STING octave still sounds on top when a footswitch is held.
-    const bool hiveOn = on (p.rbOn) || ctx.magicHeld;
-    const float hiveMix = pct (p.rbMix);
-    noise.setDryLevel (hiveOn ? juce::jmin (1.0f, 2.0f * (1.0f - hiveMix)) : 1.0f);
-    hiveVoiceGain.setTargetValue (hiveOn ? juce::jmin (1.0f, 2.0f * hiveMix) : 1.0f);
+    s.hiveOn = on (p.rbOn);
+    s.snap = on (p.rbSnap);
+    s.hiveRaw = on (p.rbRaw);
+    s.pitchSemis = p.rbPitch->load();
+    s.drone = pct (p.rbPrimary);
+    s.queen = pct (p.rbSecondary);
+    s.tone = pct (p.rbTone);
+    s.tracking = pct (p.rbTracking);
+    s.trails = pct (p.rbMagic);
+    s.hiveMix = pct (p.rbMix);
+    s.hiveDetuneCents = p.rbDetune->load();
+    s.repeatSeconds = on (p.rbSync) ? (float) (ParamChoices::divisionInBeats ((int) p.rbDiv->load()) * 60.0 / ctx.bpm)
+                                    : p.rbTime->load() * 0.001f;
 
-    // ---- STING (footswitch octaves)
-    {
-        const float dir = on (p.noiseDown) ? -1.0f : 1.0f;
-        const float interval = ctx.oct2Held ? 24.0f : (ctx.oct1Held ? 12.0f : 0.0f);
-        noise.setParams (p.rise->load(), p.fall->load(), pct (p.panic), pct (p.chaos), pct (p.speed), pct (p.stingMix), on (p.stingRaw));
-        noise.setInterval (dir * interval);
-        noise.setDetuneCents (p.stingDetune->load());
-        noise.process (audio, numChannels, numSamples);
-        meters.pitchSemitones.store (noise.getCurrentSemitones(), std::memory_order_relaxed);
-        meters.noiseEngaged.store (noise.isEngaged(), std::memory_order_relaxed);
-    }
-
-    // ---- HIVE
-    {
-        float pitch = p.rbPitch->load();
-        if (on (p.rbSnap))
-            pitch = std::round (pitch);
-        double repeatSeconds = p.rbTime->load() * 0.001;
-        if (on (p.rbSync))
-            repeatSeconds = ParamChoices::divisionInBeats ((int) p.rbDiv->load()) * 60.0 / ctx.bpm;
-        rainbow.setParams (hiveOn, pitch, pct (p.rbPrimary), pct (p.rbSecondary), pct (p.rbTone),
-                           pct (p.rbTracking), pct (p.rbMagic), (float) repeatSeconds, ctx.magicHeld, on (p.rbRaw),
-                           p.rbDetune->load());
-        float* hive[2] = { hiveBuffer.getWritePointer (0), hiveBuffer.getWritePointer (1) };
-        rainbow.process (hive, numChannels, numSamples);
-        for (int i = 0; i < numSamples; ++i)
-        {
-            const float g = hiveVoiceGain.getNextValue();
-            for (int ch = 0; ch < numChannels; ++ch)
-                audio[ch][i] += g * hive[ch][i];
-        }
-    }
+    pitchBlock.setParams (s);
+    pitchBlock.process (audio, numChannels, numSamples);
+    meters.pitchSemitones.store (pitchBlock.getStingSemitones(), std::memory_order_relaxed);
+    meters.noiseEngaged.store (pitchBlock.isStingEngaged(), std::memory_order_relaxed);
 }
 
 void SwarmnessAudioProcessor::processWings (const BlockContext& ctx, float* const* audio, int numChannels, int numSamples) noexcept

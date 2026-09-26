@@ -155,6 +155,13 @@ jobs:
       - name: DSP tests
         run: build/SwarmnessTests_artefacts/Release/SwarmnessTests
 
+      - name: Pedal engine without JUCE sounds exactly like the plug-in
+        run: |
+          cmake -S Pedal/bench -B build-bench -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-bench
+          build-bench/pedal_bench --render pedal.raw
+          build/SwarmnessTests_artefacts/Release/SwarmnessTests --compare-pedal pedal.raw
+
       - name: pluginval
         run: |
           curl -sSL -o pluginval.zip https://github.com/Tracktion/pluginval/releases/latest/download/pluginval_Linux.zip
@@ -172,10 +179,53 @@ jobs:
           path: dist/*.zip
 
   # ---------------------------------------------------------------------------
+  pedal:
+    name: Pedal engine (Daisy Seed firmware + Raspberry Pi benchmark)
+    runs-on: ubuntu-24.04
+    env:
+      LIBDAISY_COMMIT: facb66c76b5482918741695f4268b0185e474644
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchains
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib g++-aarch64-linux-gnu
+
+      - name: libDaisy (MIT)
+        run: |
+          git clone https://github.com/electro-smith/libDaisy.git Pedal/daisy/libDaisy
+          git -C Pedal/daisy/libDaisy checkout $LIBDAISY_COMMIT
+          git -C Pedal/daisy/libDaisy submodule update --init --recursive --depth 1
+          make -C Pedal/daisy/libDaisy -j4
+
+      - name: Daisy Seed benchmark firmware
+        run: make -C Pedal/daisy/bench -j4
+
+      - name: Raspberry Pi (aarch64) benchmark
+        run: |
+          aarch64-linux-gnu-g++ -std=c++17 -O2 -static -DSWARM_NO_JUCE -ISource -IPedal/bench \
+            Pedal/bench/pedal_bench.cpp -o pedal_bench_pi4 -mcpu=cortex-a72
+          aarch64-linux-gnu-g++ -std=c++17 -O2 -static -DSWARM_NO_JUCE -ISource -IPedal/bench \
+            Pedal/bench/pedal_bench.cpp -o pedal_bench_pi5 -mcpu=cortex-a76
+
+      - name: Package
+        run: |
+          mkdir -p dist pedal
+          cp Pedal/daisy/bench/build/swarmness_bench.bin pedal/swarmness_bench_daisy_seed.bin
+          cp pedal_bench_pi4 pedal_bench_pi5 Pedal/README.md pedal/
+          (cd pedal && zip -q ../dist/Swarmness-Pedal-Bench.zip *)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Swarmness-Pedal
+          path: dist/*.zip
+
+  # ---------------------------------------------------------------------------
   release:
     name: GitHub Release
     if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
-    needs: [ windows, macos, linux ]
+    needs: [ windows, macos, linux, pedal ]
     runs-on: ubuntu-latest
     permissions:
       contents: write

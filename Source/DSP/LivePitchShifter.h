@@ -20,11 +20,11 @@ public:
     void prepare (double sr, int numChannels)
     {
         sampleRate = sr;
-        bufferSize = juce::nextPowerOfTwo ((int) std::ceil (sr * 0.7) + 16);
+        bufferSize = sw::nextPowerOfTwo ((int) std::ceil (sr * 0.7) + 16);
         mask = bufferSize - 1;
-        buffers.assign ((size_t) juce::jmax (1, numChannels), std::vector<float> ((size_t) bufferSize, 0.0f));
+        buffers.assign ((size_t) sw::jmax (1, numChannels), std::vector<float> ((size_t) bufferSize, 0.0f));
 
-        corrLength   = juce::jmax (32, (int) (sr * 0.012));
+        corrLength   = sw::jmax (32, (int) (sr * 0.012));
         corrStep     = sr > 60000.0 ? 4 : 2;
         maxDelay     = (float) bufferSize - (float) corrLength - 8.0f;
         setTightness (tightness);
@@ -38,10 +38,10 @@ public:
      */
     void setTightness (float t) noexcept
     {
-        tightness = juce::jlimit (0.0f, 1.0f, t);
+        tightness = sw::jlimit (0.0f, 1.0f, t);
         const float loose = 1.0f - tightness;
         const auto ms = [this] (float v) { return (float) (sampleRate * v * 0.001); };
-        fadeLength     = juce::jmax (16, (int) ms (10.0f + 18.0f * loose));
+        fadeLength     = sw::jmax (16, (int) ms (10.0f + 18.0f * loose));
         searchRange    = ms (8.0f);
         downJump       = ms (28.0f + 170.0f * loose * loose);
         minUpJump      = ms (18.0f + 160.0f * loose * loose);
@@ -63,7 +63,7 @@ public:
     /** Writes the input without producing output (keeps the delay line current while unused). */
     void pushOnly (const float* const* channels, int numChannels, int numSamples) noexcept
     {
-        numChannels = juce::jmin (numChannels, (int) buffers.size());
+        numChannels = sw::jmin (numChannels, (int) buffers.size());
         for (int i = 0; i < numSamples; ++i)
         {
             for (int ch = 0; ch < numChannels; ++ch)
@@ -74,8 +74,8 @@ public:
 
     void process (float* const* channels, int numChannels, int numSamples, float ratioStart, float ratioEnd) noexcept
     {
-        numChannels = juce::jmin (numChannels, (int) buffers.size());
-        const float ratioStep = (ratioEnd - ratioStart) / (float) juce::jmax (1, numSamples);
+        numChannels = sw::jmin (numChannels, (int) buffers.size());
+        const float ratioStep = (ratioEnd - ratioStart) / (float) sw::jmax (1, numSamples);
 
         // At exactly unity, fade to the direct signal (no splices at all).
         const bool unity = std::abs (ratioStart - 1.0f) < 1.0e-4f && std::abs (ratioEnd - 1.0f) < 1.0e-4f;
@@ -138,7 +138,7 @@ private:
             // Tap approaches the write head: jump further back in time.
             if (d > minDelay + fadeTravel * 1.1f + 1.0f)
                 return;
-            target = d + juce::jmax (minUpJump, fadeTravel * 1.5f + minUpJump * 0.5f);
+            target = d + sw::jmax (minUpJump, fadeTravel * 1.5f + minUpJump * 0.5f);
         }
         else if (ratio < 1.0f)
         {
@@ -152,7 +152,7 @@ private:
             return;
         }
 
-        target = juce::jlimit (minDelay + searchRange + fadeTravel, maxDelay - searchRange, target);
+        target = sw::jlimit (minDelay + searchRange + fadeTravel, maxDelay - searchRange, target);
         delay[(size_t) (1 - active)] = alignSplices ? findBestDelay (d, target, numChannels) : target;
         fading = true;
         fadePos = 0;

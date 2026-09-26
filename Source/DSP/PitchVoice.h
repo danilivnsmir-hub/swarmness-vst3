@@ -26,7 +26,7 @@ public:
         rateHz = targetRateHz;
         bits = bitDepth;
         bandHz = bandLimitHz;
-        holdStep = juce::jmin (1.0f, rateHz / (float) sampleRate);
+        holdStep = sw::jmin (1.0f, rateHz / (float) sampleRate);
         quant = std::pow (2.0f, bits - 1.0f);
         for (auto& f : preLp)  f.setParams (sampleRate, bandHz * 1.3f, 0.6f);
         for (auto& f : postLp) f.setParams (sampleRate, bandHz, 0.7071f);
@@ -99,18 +99,18 @@ public:
     void setRawCharacter (float warbleCents, float warbleRateHz, float roughness01) noexcept
     {
         warbleDepth = warbleCents;
-        warbleRate = juce::jmax (0.5f, warbleRateHz);
-        roughness = juce::jlimit (0.0f, 1.0f, roughness01);
+        warbleRate = sw::jmax (0.5f, warbleRateHz);
+        roughness = sw::jlimit (0.0f, 1.0f, roughness01);
         applyTightness();
     }
     bool isRaw() const noexcept                      { return rawMix > 0.5f; }
 
     void process (float* const* channels, int numChannels, int numSamples, float ratioStart, float ratioEnd) noexcept
     {
-        numChannels = juce::jmin (numChannels, 2);
+        numChannels = sw::jmin (numChannels, 2);
         for (int start = 0; start < numSamples; start += kMaxChunk)
         {
-            const int n = juce::jmin (kMaxChunk, numSamples - start);
+            const int n = sw::jmin (kMaxChunk, numSamples - start);
             const float r0 = ratioStart + (ratioEnd - ratioStart) * (float) start / (float) numSamples;
             const float r1 = ratioStart + (ratioEnd - ratioStart) * (float) (start + n) / (float) numSamples;
             float* sub[2] = { channels[0] + start, channels[numChannels > 1 ? 1 : 0] + start };
@@ -128,7 +128,7 @@ private:
     {
         const float step = (float) n / (float) (0.03 * sampleRate);
         const float mixStart = rawMix;
-        rawMix = rawTarget ? juce::jmin (1.0f, rawMix + step) : juce::jmax (0.0f, rawMix - step);
+        rawMix = rawTarget ? sw::jmin (1.0f, rawMix + step) : sw::jmax (0.0f, rawMix - step);
         const float mixEnd = rawMix;
 
         // Warble (scaled by the RAW amount so switching is smooth)

@@ -136,6 +136,10 @@ VST3 / AU / Standalone · Windows, macOS (Universal: Apple Silicon + Intel), Lin
 
 > Сессии и пресеты версий 1.x и 2.x в 3.0 не переносятся: набор параметров полностью новый.
 
+## Педаль
+
+Движок педали SWARMNESS (STING + HIVE + SWARM) собирается без JUCE и звучит бит в бит как плагин: замеры, выбор железа (Daisy Seed / Raspberry Pi) и прошивка-бенчмарк — в [`Pedal/README.md`](Pedal/README.md).
+
 ## Установка
 
 Готовые сборки создаются GitHub Actions для каждого коммита (вкладка **Actions** → последний запуск → **Artifacts**), а для тегов `v*` публикуются в **Releases**.
