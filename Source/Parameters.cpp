@@ -143,9 +143,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     hive->addChild (toggle (linkOct2, "Venom Links Shift B", false));
 
     // MANGLE
-    hive->addChild (percent (hvAnger, "Hive Anger", 0.0f));
-    hive->addChild (percent (hvFrenzy, "Hive Frenzy", 0.0f));
-    hive->addChild (percent (hvBuzz, "Hive Buzz", 0.0f));
+    hive->addChild (percent (hvMangle, "Hive Mangle", 0.0f));
     hive->addChild (toggle (rbRaw, "Hive Raw", true));
     hive->addChild (cents (rbDetune, "Hive Detune"));
     hive->addChild (percent (rbMix, "Hive Mix", 50.0f));

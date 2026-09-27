@@ -52,6 +52,25 @@ public:
     enum Fill : int { fillLadder = 0, fillBounce, fillScatter, fillReverse, fillSwell, fillEcho, fillStutter,
                       fillGallop, fillOffbeat, fillGlitch, numFills };
 
+    /**
+     * MANGLE: one knob for the chaos of the voices and trails. It brings in ANGER first (sour
+     * detuned voices), then FRENZY (random pitch jumps), then BUZZ (all-pass + AM) on top.
+     */
+    struct Mangle { float anger, frenzy, buzz; };
+    static Mangle mangleFor (float m) noexcept
+    {
+        auto ramp = [m] (float from, float to) { return sw::jlimit (0.0f, 1.0f, (m - from) / (to - from)); };
+        return { 0.6f * ramp (0.0f, 0.45f) + 0.3f * ramp (0.5f, 1.0f), 0.55f * ramp (0.3f, 0.8f), 0.6f * ramp (0.6f, 1.0f) };
+    }
+    /** The MANGLE setting closest to separate ANGER / FRENZY / BUZZ amounts (0..1). */
+    static float mangleFromParts (float anger, float frenzy, float buzz) noexcept
+    {
+        const float a = sw::jmin (anger, 0.6f) / 0.6f * 0.45f;
+        const float f = frenzy > 0.001f ? 0.3f + sw::jmin (frenzy, 0.55f) / 0.55f * 0.5f : 0.0f;
+        const float b = buzz > 0.001f ? 0.6f + sw::jmin (buzz, 0.6f) / 0.6f * 0.4f : 0.0f;
+        return sw::jlimit (0.0f, 1.0f, sw::jmax (a, sw::jmax (f, b)));
+    }
+
     static StepPattern makeFill (int fill) noexcept
     {
         StepPattern p;

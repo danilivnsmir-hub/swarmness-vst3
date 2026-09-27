@@ -153,7 +153,7 @@ private:
         std::atomic<float>* rise {};       std::atomic<float>* panic {};       std::atomic<float>* chaos {};
         std::atomic<float>* speed {};      std::atomic<float>* fall {};        std::atomic<float>* stingMix {};    std::atomic<float>* rbDetune {};    std::atomic<float>* rbRaw {};
         std::atomic<float>* shStack {};    std::atomic<float>* shSnap {};      std::atomic<float>* shRaw {};       std::atomic<float>* shDetune {};
-        std::atomic<float>* hvAnger {};    std::atomic<float>* hvFrenzy {};    std::atomic<float>* hvBuzz {};
+        std::atomic<float>* hvMangle {};
         std::atomic<float>* rbOn {};       std::atomic<float>* rbPitch {};     std::atomic<float>* rbSnap {};
         std::atomic<float>* rbPrimary {};  std::atomic<float>* rbSecondary {}; std::atomic<float>* rbTone {};
         std::atomic<float>* rbTracking {}; std::atomic<float>* rbMagic {};     std::atomic<float>* magicHold {};

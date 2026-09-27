@@ -925,8 +925,8 @@ void InfoOverlay::paint (juce::Graphics& g)
         { "TRAILS",   "Repeats of the DRONE, shaped by STEPS like a pattern tremolo: each bar = one repeat (LEVEL, 0 = silent) and its MOVE "
                       "(= hold, up / down by PITCH, ? random, < backwards). GATE chops every step (0 = full repeats). DRY = repeats of your note (a delay). FILL = ready-made patterns. TIME / SYNC = step length. "
                       "The VENOM footswitch = self-oscillation; LINK drags SHIFT A / B in." },
-        { "MANGLE",   "HIVE's own: ANGER = sour detuned voices, FRENZY = random pitch jumps, BUZZ = all-pass + ring-mod AM, "
-                      "RAW = cheap-pedal-DSP character, DETUNE = fine offset / width, MIX = dry vs voices (100% = voices only)." },
+        { "MANGLE",   "HIVE's MANGLE is one knob: sour detuned voices first, then random pitch jumps, then buzz / AM on top. "
+                      "RAW = cheap-pedal-DSP character, DETUNE = width, MIX = dry vs voices (100% = voices only)." },
         { "SWARM",    "Stereo chorus with bucket-brigade colour. DEEP = 8 voices with feedback. MIX 50% = dry and chorus both full, 100% = vibrato." },
         { "SMOKE",    "Jumbo fuzz. VOICE: DOWN doom / MID / UP scream. SCOOP = mid cut, GLARE = gated octave-up, GATE = starved sputter, SAG = breathing "
                       "(the pick sags, the note blooms), CLEAN = clean signal under the fuzz." },

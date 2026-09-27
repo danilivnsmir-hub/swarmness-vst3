@@ -57,9 +57,7 @@ namespace ParamIDs
     inline constexpr const char* linkOct1    = "linkOct1";     // VENOM also engages SHIFT A
     inline constexpr const char* linkOct2    = "linkOct2";     // VENOM also engages SHIFT B
     // MANGLE (on the voices and trails)
-    inline constexpr const char* hvAnger     = "hvAnger";
-    inline constexpr const char* hvFrenzy    = "hvFrenzy";
-    inline constexpr const char* hvBuzz      = "hvBuzz";
+    inline constexpr const char* hvMangle    = "hvMangle";     // one knob: ANGER -> FRENZY -> BUZZ
     inline constexpr const char* rbRaw       = "rbRaw";        // RAW engine character
     inline constexpr const char* rbDetune    = "rbDetune";     // cents: fine offset / spread
     inline constexpr const char* rbMix       = "rbMix";        // dry / effect (50% = both full, 100% = effect only)
@@ -74,6 +72,10 @@ namespace ParamIDs
     inline constexpr const char* hiveFollowLegacy  = "hiveFollow";
     // Beta.23-25: GATE as the part of each step that sounds (100 = open); now trChop (0 = open)
     inline constexpr const char* trGateLegacy      = "trGate";
+    // Beta.25-27: HIVE had its own ANGER / FRENZY / BUZZ (now the single MANGLE knob)
+    inline constexpr const char* hvAngerLegacy     = "hvAnger";
+    inline constexpr const char* hvFrenzyLegacy    = "hvFrenzy";
+    inline constexpr const char* hvBuzzLegacy      = "hvBuzz";
 
     // SWARM (chorus)
     inline constexpr const char* swarmOn     = "swarmOn";

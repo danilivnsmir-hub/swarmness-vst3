@@ -30,7 +30,7 @@ SwarmnessAudioProcessor::SwarmnessAudioProcessor()
     namespace id = ParamIDs;
     p.oct1 = get (id::oct1);             p.oct2 = get (id::oct2);               p.shiftA = get (id::shiftA);  p.shiftB = get (id::shiftB);
     p.shStack = get (id::shStack);       p.shSnap = get (id::shSnap);           p.shRaw = get (id::shRaw);    p.shDetune = get (id::shDetune);
-    p.hvAnger = get (id::hvAnger);       p.hvFrenzy = get (id::hvFrenzy);       p.hvBuzz = get (id::hvBuzz);
+    p.hvMangle = get (id::hvMangle);
     p.trSteps = get (id::trSteps);       p.trChop = get (id::trChop);         p.trDry = get (id::trDry);             p.shOn = get (id::shOn);
     for (int k = 0; k < 16; ++k)
     {
@@ -504,9 +504,10 @@ void SwarmnessAudioProcessor::processHive (const BlockContext& ctx, float* const
     // SYNC while the host plays: the steps follow the song grid instead of restarting on every note
     s.hostStep = on (p.rbSync) && ctx.ppq.has_value() ? *ctx.ppq / divBeats : -1.0;
 
-    s.anger = pct (p.hvAnger);
-    s.frenzy = pct (p.hvFrenzy);
-    s.buzz = pct (p.hvBuzz);
+    const auto mangle = HiveBlock::mangleFor (pct (p.hvMangle));
+    s.anger = mangle.anger;
+    s.frenzy = mangle.frenzy;
+    s.buzz = mangle.buzz;
     s.raw = on (p.rbRaw);
     s.detuneCents = p.rbDetune->load();
     s.mix = pct (p.rbMix);
@@ -858,6 +859,7 @@ void SwarmnessAudioProcessor::setStateInformation (const void* data, int sizeInB
         {
             auto tree = juce::ValueTree::fromXml (*xml);
             restoringState = true;   // the scene parameter comes back with the state; its scenes are restored below
+            cancelPendingUpdate();   // a scene switch queued before the restore must not land on top of it
             const auto scenesJson = tree.getProperty ("scenes").toString();
             tree.removeProperty ("scenes", nullptr);
             uiScale = juce::jlimit (0.7f, 2.0f, (float) tree.getProperty ("uiScale", 1.0f));
@@ -913,6 +915,16 @@ void SwarmnessAudioProcessor::setStateInformation (const void* data, int sizeInB
                                       && ! tree.getChildWithProperty ("id", Chain::slotIds[Chain::smoke]).isValid();
 
             apvts.replaceState (tree);
+            // replaceState skips a parameter whose stored value equals its current (rounded) value, so a
+            // switch left at e.g. 0.44 would stay there: put every parameter exactly on the stored value
+            for (const auto& child : tree)
+                if (child.hasType ("PARAM"))
+                    if (auto* param = apvts.getParameter (child.getProperty ("id").toString()))
+                    {
+                        const float target = param->convertTo0to1 ((float) child.getProperty ("value", 0.0f));
+                        if (std::abs (param->getValue() - target) > 1.0e-6f)
+                            param->setValueNotifyingHost (target);
+                    }
 
             if (migrateSmoke)
                 if (auto* slot = apvts.getParameter (Chain::slotIds[Chain::smoke]))
@@ -932,6 +944,7 @@ void SwarmnessAudioProcessor::setStateInformation (const void* data, int sizeInB
             presetManager->scenesFromVar (juce::JSON::parse (scenesJson),
                                           juce::roundToInt (apvts.getRawParameterValue (ParamIDs::scene)->load()));
             presetManager->restoreFromState (tree.getProperty ("presetName").toString());
+            pendingScene.store (presetManager->getCurrentScene());
             restoringState = false;
 
             // Momentary footswitches must never come back "stuck down" after reloading a session.

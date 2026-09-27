@@ -132,9 +132,8 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
                                                  "(HOLD steps = plain echoes, UP / DOWN = a pitch-shifting delay). DRONE / QUEEN still sound on top if turned up");
     attachButton (pitchPage, rbSyncToggle, rbSync, "SYNC: lock the repeats to the host tempo - while the song plays, the STEPS follow the bar grid");
     // MANGLE
-    hvAngerKnob .attach (state, hvAnger,  "ANGER: sour detuned voices against the harmonies and trails - beating, dissonant clusters");
-    hvFrenzyKnob.attach (state, hvFrenzy, "FRENZY: random pitch jumps of the voices and trails (SNAP = on 4ths / 5ths / octaves)");
-    hvBuzzKnob  .attach (state, hvBuzz,   "BUZZ: all-pass feedback + amplitude modulation on the voices and trails");
+    hvMangleKnob.attach (state, hvMangle, "MANGLE: chaos for the voices and trails in one knob - first sour detuned voices (ANGER), "
+                                          "then random pitch jumps (FRENZY, on 4ths / 5ths / octaves with SNAP), then all-pass buzz and AM (BUZZ) on top");
     rbDetuneKnob.attach (state, rbDetune, "DETUNE: -50..+50 cents - DRONE up / QUEEN down for width");
     rbMixKnob.attach (state, rbMix, "MIX: dry / HIVE voices. 50% = both at full level, 100% = only the voices and trails");
     attachButton (pitchPage, rbRawToggle, rbRaw, "RAW: cheap-pedal-DSP character for the voices - warble, rough splices, lo-fi converters. Off = clean modern engine");
@@ -143,7 +142,7 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
                                                              &panicKnob, &chaosKnob, &speedKnob, &shDetuneKnob,
                                                              &pitchKnob, &primaryKnob, &secondaryKnob, &trackingKnob,
                                                              &magicKnob, &rbTimeKnob, &toneKnob, &gateKnob, &stepGrid,
-                                                             &hvAngerKnob, &hvFrenzyKnob, &hvBuzzKnob, &rbDetuneKnob, &rbMixKnob })
+                                                             &hvMangleKnob, &rbDetuneKnob, &rbMixKnob })
         pitchPage.addAndMakeVisible (c);
     pitchPage.addChildComponent (rbDivKnob);
 
@@ -358,7 +357,7 @@ void MainPanel::resized()
         }
 
         rbRawToggle.setBounds ((int) mangleSec.getRight() - 12 - 60, (int) mangleSec.getY() + 36, 60, 22);
-        row (mangleSec, y1, { &hvAngerKnob, &hvFrenzyKnob, &hvBuzzKnob });
+        row (mangleSec, y1, { &hvMangleKnob }, 1);
         row (mangleSec, y2, { &rbDetuneKnob, &rbMixKnob }, 2);
     }
 
@@ -627,7 +626,7 @@ void MainPanel::tick()
                                        paramOn (ParamIDs::fuzzOn), paramOn (ParamIDs::flowOn) };
 
     setSectionDimmed ({ &snapToggle, &pitchKnob, &primaryKnob, &secondaryKnob, &trackingKnob, &magicKnob,
-                        &hvAngerKnob, &hvFrenzyKnob, &hvBuzzKnob, &rbDetuneKnob, &rbMixKnob, &rbRawToggle }, ! states[1]);
+                        &hvMangleKnob, &rbDetuneKnob, &rbMixKnob, &rbRawToggle }, ! states[1]);
     // STEPS / TIME / TONE / GATE only matter once there are repeats: TRAILS up (or VENOM held)
     const bool trailsAudible = states[1] && (state.getRawParameterValue (ParamIDs::rbMagic)->load() > 0.5f || venom);
     setSectionDimmed ({ &rbSyncToggle, &trDryToggle, &rbTimeKnob, &rbDivKnob, &toneKnob, &gateKnob, &stepGrid }, ! trailsAudible);

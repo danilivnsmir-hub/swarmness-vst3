@@ -1505,7 +1505,7 @@ namespace
             a.getStateInformation (mb);
             auto xml = juce::AudioProcessor::getXmlFromBinary (mb.getData(), (int) mb.getSize());
             for (auto* id : { ParamIDs::shiftA, ParamIDs::shiftB, ParamIDs::shRaw, ParamIDs::shDetune, ParamIDs::shSnap,
-                              ParamIDs::hvAnger, ParamIDs::hvFrenzy, ParamIDs::hvBuzz, Chain::slotIds[Chain::shift], Chain::laneIds[Chain::shift] })
+                              ParamIDs::hvMangle, Chain::slotIds[Chain::shift], Chain::laneIds[Chain::shift] })
                 if (auto* e = xml->getChildByAttribute ("id", id))
                     xml->removeChildElement (e, true);
             auto addLegacy = [&xml] (const char* id, double v)
@@ -1533,6 +1533,13 @@ namespace
                    "old session: DIVE -> SHIFT -12 / -24, STING RAW off and DETUNE -20 ct carried over to SHIFT");
             check (b.getRequestedLayout().order[0] == Chain::smoke && b.getRequestedLayout().order[1] == Chain::shift
                    && b.getRequestedLayout().order[2] == Chain::pitch, "old session: SHIFT lands right before HIVE");
+            {
+                PresetManager::ValueMap beta25 { { "hvAnger", 0.0f }, { "hvFrenzy", 55.0f }, { "hvBuzz", 0.0f }, { ParamIDs::shRaw, 1.0f } };
+                PresetManager::migrateLegacyValues (beta25);
+                const auto m = HiveBlock::mangleFor (beta25[ParamIDs::hvMangle] * 0.01f);
+                check (beta25.count ("hvFrenzy") == 0 && std::abs (m.frenzy - 0.55f) < 0.02f,
+                       juce::String::formatted ("beta.25 HIVE FRENZY 55%% -> MANGLE %.0f%% (frenzy %.2f)", beta25[ParamIDs::hvMangle], m.frenzy));
+            }
             check (juce::roundToInt (v (ParamIDs::trMoves[0])) == HiveBlock::random && juce::roundToInt (v (ParamIDs::trMoves[5])) == HiveBlock::random
                    && juce::roundToInt (v (ParamIDs::trSteps)) == 8,
                    "old session: PATTERN SCATTER -> 8 RANDOM steps");

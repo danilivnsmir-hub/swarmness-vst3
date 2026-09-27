@@ -452,9 +452,9 @@ void PresetManager::migrateLegacyValues (ValueMap& values)
         {
             values[shRaw] = get (rbRaw, 1.0f);
             values[shDetune] = get (rbDetune, 0.0f);
-            values[hvAnger] = get (panic, 0.0f);
-            values[hvFrenzy] = get (chaos, 0.0f);
-            values[hvBuzz] = get (speed, 0.0f);
+            values[hvAngerLegacy] = get (panic, 0.0f);
+            values[hvFrenzyLegacy] = get (chaos, 0.0f);
+            values[hvBuzzLegacy] = get (speed, 0.0f);
         }
         values[shSnap] = get (rbSnap, 1.0f);
     }
@@ -465,6 +465,17 @@ void PresetManager::migrateLegacyValues (ValueMap& values)
         values[Chain::laneIds[Chain::shift]] = get (Chain::laneIds[Chain::pitch], 0.0f);
     }
     values.erase (hiveFollowLegacy);
+
+    // Beta.25-27: HIVE's ANGER / FRENZY / BUZZ -> the single MANGLE knob
+    if (has (hvAngerLegacy) || has (hvFrenzyLegacy) || has (hvBuzzLegacy))
+    {
+        if (! has (hvMangle))
+            values[hvMangle] = 100.0f * HiveBlock::mangleFromParts (get (hvAngerLegacy, 0.0f) * 0.01f, get (hvFrenzyLegacy, 0.0f) * 0.01f,
+                                                                   get (hvBuzzLegacy, 0.0f) * 0.01f);
+        values.erase (hvAngerLegacy);
+        values.erase (hvFrenzyLegacy);
+        values.erase (hvBuzzLegacy);
+    }
 
     // GATE turned the right way round: 0 = full repeats, more = shorter chops
     if (auto it = values.find (trGateLegacy); it != values.end())

@@ -92,7 +92,7 @@ private:
     Knob magicKnob { "TRAILS" }, rbTimeKnob { "TIME" }, rbDivKnob { "DIV" }, toneKnob { "TONE" }, gateKnob { "GATE" };
     StepGrid stepGrid;
     PillToggle rbRawToggle { "RAW" };
-    Knob hvAngerKnob { "ANGER" }, hvFrenzyKnob { "FRENZY" }, hvBuzzKnob { "BUZZ" }, rbDetuneKnob { "DETUNE", true }, rbMixKnob { "MIX" };
+    Knob hvMangleKnob { "MANGLE" }, rbDetuneKnob { "DETUNE", true }, rbMixKnob { "MIX" };
 
     // SWARM
     PowerButton swarmPower;
