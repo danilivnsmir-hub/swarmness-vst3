@@ -70,7 +70,8 @@ private:
     juce::TextButton infoButton { "?" };
 
     // SHIFT (footswitch shifter)
-    Knob shiftAKnob { "SHIFT A", true }, shiftBKnob { "SHIFT B", true }, riseKnob { "RISE" }, fallKnob { "FALL" }, blendKnob { "BLEND" };
+    Knob shiftAKnob { "SHIFT A", true }, shiftBKnob { "SHIFT B", true }, riseKnob { "RISE" }, fallKnob { "FALL" }, blendKnob { "MIX" };
+    PowerButton shiftPower;
     Knob panicKnob { "ANGER" }, chaosKnob { "FRENZY" }, speedKnob { "BUZZ" }, shDetuneKnob { "DETUNE", true };
     PillToggle stackToggle { "STACK" }, shSnapToggle { "SNAP" }, shRawToggle { "RAW" };
     PitchScope pitchScope;
@@ -79,7 +80,7 @@ private:
     PowerButton hivePower;
     PillToggle snapToggle { "SNAP" };
     Knob pitchKnob { "PITCH", true }, primaryKnob { "DRONE" }, secondaryKnob { "QUEEN" }, trackingKnob { "TRACKING" };
-    PillToggle rbSyncToggle { "SYNC" };
+    PillToggle rbSyncToggle { "SYNC" }, trDryToggle { "DRY" };
     Knob magicKnob { "TRAILS" }, rbTimeKnob { "TIME" }, rbDivKnob { "DIV" }, toneKnob { "TONE" }, gateKnob { "GATE" };
     StepGrid stepGrid;
     PillToggle rbRawToggle { "RAW" };
@@ -94,7 +95,7 @@ private:
     PowerButton fuzzPower;
     SegmentedChoice fuzzVoiceSelector;
     Knob fuzzKnob { "FUZZ" }, fuzzToneKnob { "TONE" }, fuzzScoopKnob { "SCOOP" };
-    Knob fuzzGlareKnob { "GLARE" }, fuzzGateKnob { "GATE" }, fuzzSagKnob { "SAG" }, fuzzBlendKnob { "BLEND" };
+    Knob fuzzGlareKnob { "GLARE" }, fuzzGateKnob { "GATE" }, fuzzSagKnob { "SAG" }, fuzzBlendKnob { "CLEAN" };
 
     // WINGS (gate)
     PowerButton flowPower;

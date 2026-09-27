@@ -6,14 +6,16 @@
 #include <array>
 
 /**
- * SHIFT - the footswitch pitch shifter (Whammy / Tallon "The Noise" style). It has no power
- * button: like a momentary pedal it only sounds while a footswitch is held.
+ * SHIFT - the footswitch pitch shifter (Whammy / Tallon "The Noise" style). The footswitches
+ * engage it while held (like a momentary pedal); its power button keeps SHIFT A engaged
+ * (the caller passes that in as shiftA).
  *
  *  SHIFT A / SHIFT B  footswitch intervals (-24..+24 st). Holding both: B wins - or with STACK
  *                     both sound at once (A stays, a second voice splits off to B; releasing B
  *                     merges it back into A)
  *  RISE / FALL        glide into the interval / back home
- *  BLEND              how much the shifted note replaces the dry one (100% = only shifted)
+ *  MIX                dry / shifted, the same law as every MIX: 50% = both at full level,
+ *                     100% = only the shifted note (like the pedal)
  *  ANGER              a second voice detuned against the shifted one (sour beating, "Panic")
  *  FRENZY             random pitch jumps ("Chaos"); SNAP = jumps land on 4ths / 5ths / octaves
  *  BUZZ               all-pass feedback + AM ("Speed")
@@ -28,7 +30,7 @@ public:
     {
         bool shiftA = false, shiftB = false, stack = false;
         float shiftASemis = 12.0f, shiftBSemis = 24.0f;
-        float riseMs = 30.0f, fallMs = 30.0f, blend = 1.0f;
+        float riseMs = 30.0f, fallMs = 30.0f, mix = 1.0f;
         float anger = 0.0f, frenzy = 0.0f, buzz = 0.0f, detuneCents = 0.0f;
         bool raw = true, snap = true;
     };
@@ -117,6 +119,9 @@ public:
 
     bool isEngaged() const noexcept      { return std::abs (targetSemis) > 0.001f || std::abs (currentSemis) > 0.001f || stackLevel > 0.0f; }
     float getSemitones() const noexcept  { return displaySemis; }
+    /** The STACK voice (while it sounds), for the display. */
+    bool isStacked() const noexcept      { return stackLevel > 0.02f; }
+    float getStackSemitones() const noexcept { return displayStack; }
 
     void process (float* const* audio, int numChannels, int numSamples) noexcept
     {
@@ -195,15 +200,17 @@ private:
         else
             idle = true;
         displaySemis = engaged ? currentSemis + chaos + 0.5f * anger + fine : 0.0f;
+        displayStack = stackSemis + chaos - 0.5f * anger - fine;
 
-        // dry / shifted (BLEND while engaged)
+        // dry / shifted: MIX while engaged (50% = both full, 100% = shifted only), faded in and out
+        const float dryAtMix = sw::jmin (1.0f, 2.0f * (1.0f - s.mix)), wetAtMix = sw::jmin (1.0f, 2.0f * s.mix);
         for (int i = 0; i < n; ++i)
         {
-            wet += 0.004f * (engage * s.blend - wet);
+            wet += 0.004f * (engage - wet);
             if (! engaged && wet < 1.0e-5f)
                 wet = 0.0f;
-            float dryG, wetG;
-            swarm::equalPowerGains (wet, dryG, wetG);
+            const float dryG = 1.0f - wet * (1.0f - dryAtMix);
+            const float wetG = wet * wetAtMix;
             for (int ch = 0; ch < numChannels; ++ch)
                 audio[ch][i] = dryG * dry.getSample (ch, i) + (running ? wetG * shifted.getSample (ch, i) : 0.0f);
         }
@@ -325,7 +332,7 @@ private:
     swarm::FastRandom rng { 0x5EED1E5u };
     swarm::OnePole chaosSmoother;
 
-    float currentSemis = 0.0f, targetSemis = 0.0f, rampStep = 0.0f, displaySemis = 0.0f;
+    float currentSemis = 0.0f, targetSemis = 0.0f, rampStep = 0.0f, displaySemis = 0.0f, displayStack = 0.0f;
     float stackSemis = 0.0f, stackTarget = 0.0f, stackStep = 0.0f, stackLevel = 0.0f;
     bool stackActive = false;
     float wet = 0.0f, angerLevel = 0.0f;

@@ -53,8 +53,6 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     {
         if (auto* id = ChainStrip::powerParamFor (block))
             showMidiMenu (id, &chainStrip);
-        else if (block == Chain::shift)
-            showMidiMenu (ParamIDs::oct1, &oct1Switch);   // SHIFT has no on / off: its footswitches are the controls
     };
     chainStrip.isBlockActive = [this] (int block)
     {
@@ -74,12 +72,14 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     pitchPage.setInterceptsMouseClicks (false, true);
     addChildComponent (pitchPage);
 
-    // SHIFT (footswitch shifter - no power button: it sounds while SHIFT A / B is held)
+    // SHIFT (footswitch shifter: the power button keeps SHIFT A on, the footswitches engage it while held)
+    attachButton (pitchPage, shiftPower, shOn, "SHIFT on / off: on = SHIFT A sounds all the time (like a latched pedal). "
+                                               "The SHIFT A / B footswitches still engage it while held when it is off"); 
     shiftAKnob.attach (state, shiftA, "SHIFT A: interval of the SHIFT A footswitch, -24..+24 semitones (octaves, fifths, fourths...)");
     shiftBKnob.attach (state, shiftB, "SHIFT B: interval of the SHIFT B footswitch (while both are held it wins - or both sound with STACK)");
     riseKnob  .attach (state, rise,   "RISE: time to glide into the interval when a SHIFT footswitch goes down");
     fallKnob  .attach (state, fall,   "FALL: time to glide back home when the footswitch is released");
-    blendKnob .attach (state, stingMix, "BLEND: how much the shifted note replaces your note while SHIFT is held (100% = only the shifted note, 50% = doubled)");
+    blendKnob .attach (state, stingMix, "MIX: dry / shifted while SHIFT is engaged. 50% = both at full level (doubled), 100% = only the shifted note");
     panicKnob .attach (state, panic,  "ANGER (The Noise: Panic): a second voice detuned against the shifted note - sour beating, dissonant clusters");
     chaosKnob .attach (state, chaos,  "FRENZY (The Noise: Chaos): random pitch jumps, wider and faster as you turn it up (SNAP = on 4ths / 5ths / octaves)");
     speedKnob .attach (state, speed,  "BUZZ (The Noise: Speed): all-pass feedback + amplitude modulation - slow phasing up to ring-mod shrieks");
@@ -102,7 +102,9 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     rbTimeKnob.attach (state, rbTime,  "TIME: time between the repeats = length of one step");
     rbDivKnob .attach (state, rbDiv,   "TIME as a tempo division (SYNC on) = length of one step");
     toneKnob  .attach (state, rbTone,  "TONE: brightness of the voices and the trails");
-    gateKnob  .attach (state, trGate,  "GATE: how much of every step sounds - 100% = whole repeats, low = short stuttering chops");
+    gateKnob  .attach (state, trChop,  "GATE: chops every step - 0% = whole repeats, higher = shorter, stuttering chops");
+    attachButton (pitchPage, trDryToggle, trDry, "DRY: the repeats start from your note instead of the DRONE - HIVE becomes a delay "
+                                                 "(HOLD steps = plain echoes, UP / DOWN = a pitch-shifting delay). DRONE / QUEEN still sound on top if turned up");
     attachButton (pitchPage, rbSyncToggle, rbSync, "SYNC: lock the repeats to the host tempo - while the song plays, the STEPS follow the bar grid");
     // MANGLE
     hvAngerKnob .attach (state, hvAnger,  "ANGER: sour detuned voices against the harmonies and trails - beating, dissonant clusters");
@@ -137,7 +139,7 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     fuzzScoopKnob.attach (state, fuzzScoop, "SCOOP: mid cut depth - flat mids at 0, deep jumbo-fuzz scoop at max");
     fuzzGlareKnob.attach (state, fuzzGlare, "GLARE: gated octave-up that rips through on hard picking");
     fuzzGateKnob .attach (state, fuzzGate,  "GATE: starve the fuzz - sputtering, gated velcro decay");
-    fuzzBlendKnob.attach (state, fuzzBlend, "BLEND: clean signal under the fuzz (pick attack and low end)");
+    fuzzBlendKnob.attach (state, fuzzBlend, "CLEAN: clean signal added under the full fuzz (pick attack and low end)");
     fuzzSagKnob  .attach (state, fuzzSag,   "SAG: how much the fuzz breathes - the supply sags on the pick (compressed, darker) and the note blooms back as it recovers");
     for (auto* c : std::initializer_list<juce::Component*> { &fuzzVoiceSelector, &fuzzKnob, &fuzzToneKnob, &fuzzScoopKnob,
                                                              &fuzzGlareKnob, &fuzzGateKnob, &fuzzSagKnob, &fuzzBlendKnob })
@@ -300,6 +302,7 @@ void MainPanel::resized()
         snapToggle.setBounds ((int) voiceSec.getX() + 120, y2 + 22, 60, 24);
 
         rbSyncToggle.setBounds ((int) trailSec.getRight() - 12 - 60, (int) trailSec.getY() + 36, 60, 22);   // header row
+        trDryToggle .setBounds ((int) trailSec.getRight() - 12 - 126, (int) trailSec.getY() + 36, 60, 22);
         kw = 64;
         row (trailSec, y1, { &magicKnob, &rbTimeKnob, &toneKnob, &gateKnob }, 4);
         kw = 72;
@@ -314,9 +317,10 @@ void MainPanel::resized()
     // SHIFT: live pitch display on the left, nine knobs, STACK / SNAP / RAW in the title row
     {
         pitchScope.setBounds ((int) shiftArea.getX() + 16, (int) shiftArea.getY() + 44, 250, 132);
-        stackToggle .setBounds (pillFor (shiftArea, 2).translated (26, 0));
-        shSnapToggle.setBounds (pillFor (shiftArea, 1).translated (26, 0));
-        shRawToggle .setBounds (pillFor (shiftArea, 0).translated (26, 0));
+        shiftPower  .setBounds (powerFor (shiftArea));
+        stackToggle .setBounds (pillFor (shiftArea, 2));
+        shSnapToggle.setBounds (pillFor (shiftArea, 1));
+        shRawToggle .setBounds (pillFor (shiftArea, 0));
         const int x0 = (int) shiftArea.getX() + 282, x1 = (int) shiftArea.getRight() - 10, kw = 72;
         const std::initializer_list<Knob*> knobs { &shiftAKnob, &shiftBKnob, &riseKnob, &fallKnob, &blendKnob,
                                                    &panicKnob, &chaosKnob, &speedKnob, &shDetuneKnob };
@@ -502,7 +506,7 @@ void MainPanel::paintBackdrop (juce::Graphics& g)
         drawSectionTitle (g, titleRow (shiftArea), "SHIFT", lastSectionStates[0]);
         g.setFont (font (12.5f, true));
         g.setColour (Colours::textFaint);
-        g.drawText ("footswitch shifter  -  sounds while SHIFT A / B is held, no on / off", titleRow (shiftArea).withTrimmedLeft (86.0f),
+        g.drawText ("pitch shifter  -  on = SHIFT A all the time, footswitches engage it while held", titleRow (shiftArea).withTrimmedLeft (86.0f),
                     juce::Justification::centredLeft, false);
     }
 }
@@ -520,7 +524,7 @@ void MainPanel::tick()
     const bool venom = paramOn (ParamIDs::magicHold);
     oct1Switch.setLitExternally (venom && paramOn (ParamIDs::linkOct1));
     oct2Switch.setLitExternally (venom && paramOn (ParamIDs::linkOct2));
-    pitchScope.push (meters.pitchSemitones.load(), noiseOn);
+    pitchScope.push (meters.pitchSemitones.load(), noiseOn, meters.stackOn.load(), meters.stackSemitones.load());
     // Footswitch captions follow the SHIFT intervals
     const int a = juce::roundToInt (state.getRawParameterValue (ParamIDs::shiftA)->load());
     const int b = juce::roundToInt (state.getRawParameterValue (ParamIDs::shiftB)->load());
@@ -570,7 +574,7 @@ void MainPanel::tick()
                         &hvAngerKnob, &hvFrenzyKnob, &hvBuzzKnob, &rbDetuneKnob, &rbMixKnob, &rbRawToggle }, ! states[1]);
     // STEPS / TIME / TONE / GATE only matter once there are repeats: TRAILS up (or VENOM held)
     const bool trailsAudible = states[1] && (state.getRawParameterValue (ParamIDs::rbMagic)->load() > 0.5f || venom);
-    setSectionDimmed ({ &rbSyncToggle, &rbTimeKnob, &rbDivKnob, &toneKnob, &gateKnob, &stepGrid }, ! trailsAudible);
+    setSectionDimmed ({ &rbSyncToggle, &trDryToggle, &rbTimeKnob, &rbDivKnob, &toneKnob, &gateKnob, &stepGrid }, ! trailsAudible);
     stepGrid.refresh (trailsAudible ? meters.trailStep.load() : -1);
     setSectionDimmed ({ &deepToggle, &swarmDepthKnob, &swarmRateKnob, &swarmMixKnob }, ! states[2]);
     setSectionDimmed ({ &fuzzVoiceSelector, &fuzzKnob, &fuzzToneKnob, &fuzzScoopKnob,

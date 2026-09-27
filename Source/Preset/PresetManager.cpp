@@ -50,7 +50,7 @@ void PresetManager::initialiseFactoryPresets()
     using namespace ParamIDs;
 
     // Presets store the sound; the footswitches (SHIFT A / B, VENOM) are played live.
-    // Internal IDs: rb* = HIVE, stingMix = SHIFT BLEND, fuzz* = SMOKE, flow* = WINGS, panic = ANGER,
+    // Internal IDs: rb* = HIVE, stingMix = SHIFT MIX, fuzz* = SMOKE, flow* = WINGS, panic = ANGER,
     // chaos = FRENZY, speed = BUZZ, rbPrimary = DRONE, rbSecondary = QUEEN, rbMagic = TRAILS.
     // Wings division indices: 3 = 1/8, 4 = 1/16, 5 = 1/32
     const auto trailFill = hivePatternLegacy;   // a ready-made TRAILS step pattern (HiveBlock::Fill), expanded below
@@ -66,7 +66,7 @@ void PresetManager::initialiseFactoryPresets()
         { "Init", basics, "Everything off: the plug-in is transparent. Start here.", {} },
         { "Clean Shift", basics, "Pure octave shifter on the clean modern engine (RAW off). Hold SHIFT A (+1 oct) / SHIFT B (+2 oct) for a clean, instant jump.",
           { { rise, 0 }, { fall, 0 }, { rbRaw, 0 } } },
-        { "Shift Doubler", basics, "SHIFT BLEND at 50%: hold a footswitch and the octave is added on top of your dry note instead of replacing it.",
+        { "Shift Doubler", basics, "SHIFT MIX at 50%: hold a footswitch and the octave is added on top of your dry note (both at full level) instead of replacing it.",
           { { rise, 0 }, { fall, 0 }, { stingMix, 50 } } },
         { "Slow Rise", basics, "RISE and FALL: hold a footswitch and the pitch sweeps up over ~1 s; release and it slides back down over ~1.5 s.",
           { { rise, 950 }, { fall, 1500 } } },
@@ -81,7 +81,7 @@ void PresetManager::initialiseFactoryPresets()
         { "Noise - In-Key Chaos", recipes, "FRENZY with SNAP: the pitch jumps between 4ths, 5ths and octaves instead of random pitches - the chaos stays musical. Hold SHIFT A.",
           { { rise, 10 }, { chaos, 70 }, { panic, 15 }, { speed, 15 }, { shSnap, 1 },
             { fuzzOn, 1 }, { fuzzVoice, 2 }, { fuzz, 75 }, { fuzzScoop, 30 } } },
-        { "Slam - Semitone Clash", recipes, "Slam-style dissonance: a constant voice one semitone above, both at full level (MIX 50%), tight and clean, into a DOWN fuzz. SHIFT A / B add -1 / -2 oct layers (BLEND 50%).",
+        { "Slam - Semitone Clash", recipes, "Slam-style dissonance: a constant voice one semitone above, both at full level (MIX 50%), tight and clean, into a DOWN fuzz. SHIFT A / B add -1 / -2 oct layers (SHIFT MIX 50%).",
           { { rbOn, 1 }, { rbRaw, 0 }, { rbPitch, 1 }, { rbPrimary, 100 }, { rbTracking, 100 }, { rbMix, 50 },
             { shiftA, -12 }, { shiftB, -24 }, { stingMix, 50 }, { rise, 0 }, { fall, 0 },
             { fuzzOn, 1 }, { slotSmoke, 35 }, { fuzzVoice, 0 }, { fuzz, 80 }, { fuzzTone, 45 }, { fuzzScoop, 25 }, { fuzzGate, 10 } } },
@@ -95,13 +95,13 @@ void PresetManager::initialiseFactoryPresets()
           { { rbOn, 1 }, { rbRaw, 0 }, { rbPitch, -12 }, { rbPrimary, 80 }, { rbSecondary, 45 }, { rbTracking, 100 }, { rbMix, 50 },
             { fuzzOn, 1 }, { slotSmoke, 35 }, { fuzzVoice, 0 }, { fuzz, 75 }, { fuzzScoop, 30 } } },
         { "Glitch Steps", recipes, "STEPS 'Glitch': 16 repeats, each doing something else - up, backwards, random, silent - chopped short by GATE and locked to 1/16.",
-          { { rbOn, 1 }, { rbPitch, 12 }, { rbPrimary, 55 }, { rbTracking, 90 }, { rbMagic, 70 }, { trailFill, 9 }, { trGate, 55 },
+          { { rbOn, 1 }, { rbPitch, 12 }, { rbPrimary, 55 }, { rbTracking, 90 }, { rbMagic, 70 }, { trailFill, 9 }, { trChop, 47 },
             { rbSync, 1 }, { rbDiv, 4 }, { rbTone, 60 }, { rbMix, 50 } } },
         { "Stutter Echo", recipes, "STEPS 'Stutter': short chopped echoes with gaps (GATE 45%), a fifth up now and then - rhythmic noise instead of a wash.",
-          { { rbOn, 1 }, { rbPitch, 7 }, { rbPrimary, 60 }, { rbTracking, 90 }, { rbMagic, 65 }, { trailFill, 6 }, { trGate, 45 },
+          { { rbOn, 1 }, { rbPitch, 7 }, { rbPrimary, 60 }, { rbTracking, 90 }, { rbMagic, 65 }, { trailFill, 6 }, { trChop, 58 },
             { rbSync, 1 }, { rbDiv, 3 }, { rbTone, 55 } } },
         { "Gallop Octaves", recipes, "STEPS 'Gallop' (x - x x): octave repeats in a gallop rhythm at 1/16 - for tremolo-picked riffs.",
-          { { rbOn, 1 }, { rbPitch, 12 }, { rbPrimary, 55 }, { rbTracking, 85 }, { rbMagic, 60 }, { trailFill, 7 }, { trGate, 70 },
+          { { rbOn, 1 }, { rbPitch, 12 }, { rbPrimary, 55 }, { rbTracking, 85 }, { rbMagic, 60 }, { trailFill, 7 }, { trChop, 32 },
             { rbSync, 1 }, { rbDiv, 4 }, { rbTone, 60 } } },
         { "Offbeat Fifths", recipes, "STEPS 'Offbeat': only every second repeat sounds - fifths answering on the offbeat, 1/8 synced.",
           { { rbOn, 1 }, { rbPitch, 7 }, { rbPrimary, 60 }, { rbTracking, 90 }, { rbMagic, 70 }, { trailFill, 8 },
@@ -148,6 +148,10 @@ void PresetManager::initialiseFactoryPresets()
           { { rbOn, 1 }, { rbPitch, 7 }, { rbPrimary, 50 }, { rbSecondary, 20 }, { rbTracking, 90 }, { rbMagic, 70 }, { trailFill, 4 }, { rbTime, 260 }, { rbTone, 45 } } },
         { "Angry Voices", hiveCat, "MANGLE on the voices too: ANGER and FRENZY sour and scatter the harmony and its trails - one character for the whole block.",
           { { rbOn, 1 }, { rbPitch, 5 }, { rbPrimary, 65 }, { rbSecondary, 25 }, { rbTracking, 70 }, { rbMagic, 40 }, { panic, 45 }, { chaos, 25 } } },
+        { "Pitch Delay", hiveCat, "HIVE as a delay: DRY feeds the repeats from your note, every repeat climbs a fifth (all UP) - a Rainbow-Machine-style pitch delay. DRONE off.",
+          { { rbOn, 1 }, { trDry, 1 }, { rbPrimary, 0 }, { rbPitch, 7 }, { rbTracking, 100 }, { rbMagic, 60 }, { rbTime, 320 }, { rbTone, 55 }, { rbMix, 50 } } },
+        { "Dotted Echo", hiveCat, "A plain dotted-1/8 delay out of HIVE: DRY + all-HOLD steps (FILL 'Echo'), synced. RAW gives the repeats tape-like wobble.",
+          { { rbOn, 1 }, { trDry, 1 }, { rbPrimary, 0 }, { rbTracking, 100 }, { rbMagic, 55 }, { trailFill, 5 }, { rbSync, 1 }, { rbDiv, 9 }, { rbTone, 45 }, { rbMix, 45 } } },
         { "Venom Overload", hiveCat, "Long octave TRAILS. Hold the VENOM footswitch: it takes off into self-oscillating squalls and drags SHIFT A in (LINK).",
           { { rbOn, 1 }, { rbPitch, 12 }, { rbPrimary, 50 }, { rbTracking, 60 }, { rbMagic, 92 }, { rbTone, 60 }, { linkOct1, 1 } } },
 
@@ -157,7 +161,7 @@ void PresetManager::initialiseFactoryPresets()
             { swarmOn, 1 }, { swarmDeep, 1 }, { swarmDepth, 75 }, { swarmRate, 0.35f }, { swarmMix, 55 } } },
         { "Swollen Smoke", texture, "Jumbo fuzz: MID voice, huge sustain and a deep SCOOP - the wall-of-fuzz starting point.",
           { { fuzzOn, 1 }, { fuzzVoice, 1 }, { fuzz, 90 }, { fuzzTone, 45 }, { fuzzScoop, 75 }, { fuzzSag, 55 } } },
-        { "Doom Cathedral", texture, "DOWN voice: crushing low-mids and the full bottom end, flat mids, a little clean BLEND and a lot of SAG - every note sags and blooms.",
+        { "Doom Cathedral", texture, "DOWN voice: crushing low-mids and the full bottom end, flat mids, a little CLEAN under it and a lot of SAG - every note sags and blooms.",
           { { fuzzOn, 1 }, { fuzzVoice, 0 }, { fuzz, 85 }, { fuzzTone, 35 }, { fuzzScoop, 15 }, { fuzzBlend, 20 }, { fuzzSag, 80 } } },
         { "Glare Scream", texture, "UP voice with GLARE: tight, screaming upper mids and a gated octave-up that rips on hard picking.",
           { { fuzzOn, 1 }, { fuzzVoice, 2 }, { fuzz, 75 }, { fuzzTone, 60 }, { fuzzScoop, 30 }, { fuzzGlare, 70 }, { fuzzSag, 15 } } },
@@ -455,6 +459,14 @@ void PresetManager::migrateLegacyValues (ValueMap& values)
         values[Chain::laneIds[Chain::shift]] = get (Chain::laneIds[Chain::pitch], 0.0f);
     }
     values.erase (hiveFollowLegacy);
+
+    // GATE turned the right way round: 0 = full repeats, more = shorter chops
+    if (auto it = values.find (trGateLegacy); it != values.end())
+    {
+        if (! has (trChop))
+            values[trChop] = juce::jlimit (0.0f, 100.0f, (100.0f - it->second) / 0.95f);
+        values.erase (it);
+    }
     values.erase (noiseDownLegacy);
     values.erase (stingRawLegacy);
     values.erase (stingDetuneLegacy);

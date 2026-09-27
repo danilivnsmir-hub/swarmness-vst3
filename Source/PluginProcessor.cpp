@@ -31,7 +31,7 @@ SwarmnessAudioProcessor::SwarmnessAudioProcessor()
     p.oct1 = get (id::oct1);             p.oct2 = get (id::oct2);               p.shiftA = get (id::shiftA);  p.shiftB = get (id::shiftB);
     p.shStack = get (id::shStack);       p.shSnap = get (id::shSnap);           p.shRaw = get (id::shRaw);    p.shDetune = get (id::shDetune);
     p.hvAnger = get (id::hvAnger);       p.hvFrenzy = get (id::hvFrenzy);       p.hvBuzz = get (id::hvBuzz);
-    p.trSteps = get (id::trSteps);       p.trGate = get (id::trGate);
+    p.trSteps = get (id::trSteps);       p.trChop = get (id::trChop);         p.trDry = get (id::trDry);             p.shOn = get (id::shOn);
     for (int k = 0; k < 16; ++k)
     {
         p.trLevels[(size_t) k] = get (id::trLevels[k]);
@@ -336,7 +336,7 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     // ---- OUTPUT gain + bypass crossfade
     outputGainSmoothed.setTargetValue (juce::Decibels::decibelsToGain (p.output->load()));
     // (the NOISE return glide after releasing a footswitch is allowed to finish, too)
-    bypassSmoothed.setTargetValue (on (p.bypass) && ! anySwitchHeld && ! shift.isEngaged() ? 1.0f : 0.0f);
+    bypassSmoothed.setTargetValue (on (p.bypass) && ! anySwitchHeld && ! (shift.isEngaged() && ! on (p.shOn)) ? 1.0f : 0.0f);
 
     for (int i = 0; i < numSamples; ++i)
     {
@@ -454,14 +454,14 @@ void SwarmnessAudioProcessor::processSmoke (float* const* audio, int numChannels
 void SwarmnessAudioProcessor::processShift (const BlockContext& ctx, float* const* audio, int numChannels, int numSamples) noexcept
 {
     ShiftBlock::Settings s;
-    s.shiftA = ctx.oct1Held;
+    s.shiftA = ctx.oct1Held || on (p.shOn);   // power button = SHIFT A latched
     s.shiftB = ctx.oct2Held;
     s.stack = on (p.shStack);
     s.shiftASemis = std::round (p.shiftA->load());
     s.shiftBSemis = std::round (p.shiftB->load());
     s.riseMs = p.rise->load();
     s.fallMs = p.fall->load();
-    s.blend = pct (p.stingMix);
+    s.mix = pct (p.stingMix);
     s.anger = pct (p.panic);
     s.frenzy = pct (p.chaos);
     s.buzz = pct (p.speed);
@@ -473,6 +473,8 @@ void SwarmnessAudioProcessor::processShift (const BlockContext& ctx, float* cons
     shift.process (audio, numChannels, numSamples);
     meters.pitchSemitones.store (shift.getSemitones(), std::memory_order_relaxed);
     meters.noiseEngaged.store (shift.isEngaged(), std::memory_order_relaxed);
+    meters.stackSemitones.store (shift.getStackSemitones(), std::memory_order_relaxed);
+    meters.stackOn.store (shift.isStacked(), std::memory_order_relaxed);
 }
 
 void SwarmnessAudioProcessor::processHive (const BlockContext& ctx, float* const* audio, int numChannels, int numSamples) noexcept
@@ -496,7 +498,8 @@ void SwarmnessAudioProcessor::processHive (const BlockContext& ctx, float* const
         s.steps.level[k] = pct (p.trLevels[k]);
         s.steps.move[k] = (int) p.trMoves[k]->load();
     }
-    s.gate = pct (p.trGate);
+    s.gate = 1.0f - 0.95f * pct (p.trChop);
+    s.fromDry = on (p.trDry);
     // SYNC while the host plays: the steps follow the song grid instead of restarting on every note
     s.hostStep = on (p.rbSync) && ctx.ppq.has_value() ? *ctx.ppq / divBeats : -1.0;
 

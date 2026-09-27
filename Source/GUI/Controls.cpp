@@ -1,5 +1,6 @@
 #include "Controls.h"
 #include "../Parameters.h"
+#include <limits>
 
 using namespace Theme;
 
@@ -567,9 +568,9 @@ void LevelMeter::paint (juce::Graphics& g)
 }
 
 //==============================================================================
-PitchScope::PitchScope() : history (180, 0.0f) {}
+PitchScope::PitchScope() : history (180, 0.0f), stackHistory (180, std::numeric_limits<float>::quiet_NaN()) {}
 
-void PitchScope::push (float semitones, bool isActive)
+void PitchScope::push (float semitones, bool isActive, bool stackOn, float stackSemitones)
 {
     if (! primed)
     {
@@ -577,23 +578,13 @@ void PitchScope::push (float semitones, bool isActive)
         primed = true;
     }
     history[(size_t) writeIndex] = semitones;
+    stackHistory[(size_t) writeIndex] = stackOn ? stackSemitones : std::numeric_limits<float>::quiet_NaN();
     writeIndex = (writeIndex + 1) % (int) history.size();
     active = isActive;
     current = semitones;
+    stackNow = stackOn;
+    currentStack = stackSemitones;
     repaint();
-}
-
-void PitchScope::setVoiceMarkers (bool visible, float droneSemis, float queenSemis, float queenLevel)
-{
-    if (visible != markersVisible || std::abs (droneSemis - droneMarker) > 0.01f || std::abs (queenSemis - queenMarker) > 0.01f
-        || std::abs (queenLevel - queenAmount) > 0.01f)
-    {
-        markersVisible = visible;
-        droneMarker = droneSemis;
-        queenMarker = queenSemis;
-        queenAmount = queenLevel;
-        repaint();
-    }
 }
 
 void PitchScope::paint (juce::Graphics& g)
@@ -626,29 +617,6 @@ void PitchScope::paint (juce::Graphics& g)
                     juce::Justification::centredLeft, false);
     }
 
-    // HIVE voices: dashed markers where DRONE / QUEEN sound
-    if (markersVisible)
-    {
-        auto marker = [&] (float st, const char* name, float alpha)
-        {
-            const float my = yFor (st);
-            juce::Path line;
-            line.startNewSubPath (plot.getX(), my);
-            line.lineTo (plot.getRight(), my);
-            juce::Path dashed;
-            const float dashes[] { 4.0f, 4.0f };
-            juce::PathStrokeType (1.0f).createDashedStroke (dashed, line, dashes, 2);
-            g.setColour (Colours::accentBright.withAlpha (0.55f * alpha));
-            g.fillPath (dashed);
-            g.setFont (font (10.5f, true));
-            g.setColour (Colours::accentBright.withAlpha (0.8f * alpha));
-            g.drawText (name, juce::Rectangle<float> (plot.getRight() - 64.0f, my - 13.0f, 60.0f, 12.0f), juce::Justification::centredRight, false);
-        };
-        marker (droneMarker, "DRONE", 1.0f);
-        if (queenAmount > 0.001f)
-            marker (queenMarker, "QUEEN", 0.4f + 0.6f * queenAmount);
-    }
-
     // Trace
     juce::Path trace;
     const int n = (int) history.size();
@@ -668,6 +636,34 @@ void PitchScope::paint (juce::Graphics& g)
     else
         g.setColour (col);
     g.strokePath (trace, juce::PathStrokeType (1.8f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+    // STACK voice: a second trace while it sounds
+    {
+        juce::Path stack;
+        bool drawing = false;
+        for (int i = 0; i < n; ++i)
+        {
+            const float v = stackHistory[(size_t) ((writeIndex + i) % n)];
+            const float x = plot.getX() + plot.getWidth() * (float) i / (float) (n - 1);
+            if (std::isnan (v)) { drawing = false; continue; }
+            if (! drawing) { stack.startNewSubPath (x, yFor (v)); drawing = true; }
+            else           stack.lineTo (x, yFor (v));
+        }
+        if (! stack.isEmpty())
+        {
+            g.setColour (Colours::venom.withAlpha (0.25f));
+            g.strokePath (stack, juce::PathStrokeType (6.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            g.setColour (Colours::venom);
+            g.strokePath (stack, juce::PathStrokeType (1.8f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        }
+        if (stackNow)
+        {
+            g.fillEllipse (juce::Rectangle<float> (7.0f, 7.0f).withCentre ({ plot.getRight(), yFor (currentStack) }));
+            g.setFont (font (13.0f, true));
+            g.drawText ("+ " + juce::String (currentStack > 0.05f ? "+" : "") + juce::String (currentStack, 1) + " st",
+                        r.reduced (8.0f, 4.0f).removeFromTop (16.0f).withTrimmedLeft (70.0f), juce::Justification::topLeft, false);
+        }
+    }
 
     // Current value
     const float y = yFor (current);
@@ -922,18 +918,18 @@ void InfoOverlay::paint (juce::Graphics& g)
     struct Item { const char* title; const char* body; };
     static const Item items[] =
     {
-        { "SHIFT",    "Footswitch shifter, no on / off: it sounds while SHIFT A / B is held (any interval, -24..+24 st). RISE / FALL glide, BLEND = replace or double, "
+        { "SHIFT",    "Pitch shifter: on = SHIFT A all the time; the footswitches engage it while held (any interval, -24..+24 st). RISE / FALL glide, MIX = replace or double, "
                       "STACK = A + B together play both intervals. ANGER / FRENZY / BUZZ = The Noise's Panic / Chaos / Speed." },
         { "HIVE",     "Harmonies of whatever reaches it (after SHIFT: of the shifted note). DRONE at PITCH and QUEEN (its octave), TRACKING tight..laggy. "
                       "VENOM switches it on while held." },
         { "TRAILS",   "Repeats of the DRONE, shaped by STEPS like a pattern tremolo: each bar = one repeat (LEVEL, 0 = silent) and its MOVE "
-                      "(= hold, up / down by PITCH, ? random, < backwards). GATE chops every step. FILL = ready-made patterns. TIME / SYNC = step length. "
+                      "(= hold, up / down by PITCH, ? random, < backwards). GATE chops every step (0 = full repeats). DRY = repeats of your note (a delay). FILL = ready-made patterns. TIME / SYNC = step length. "
                       "The VENOM footswitch = self-oscillation; LINK drags SHIFT A / B in." },
         { "MANGLE",   "HIVE's own: ANGER = sour detuned voices, FRENZY = random pitch jumps, BUZZ = all-pass + ring-mod AM, "
                       "RAW = cheap-pedal-DSP character, DETUNE = fine offset / width, MIX = dry vs voices (100% = voices only)." },
         { "SWARM",    "Stereo chorus with bucket-brigade colour. DEEP = 8 voices with feedback. MIX 50% = dry and chorus both full, 100% = vibrato." },
         { "SMOKE",    "Jumbo fuzz. VOICE: DOWN doom / MID / UP scream. SCOOP = mid cut, GLARE = gated octave-up, GATE = starved sputter, SAG = breathing "
-                      "(the pick sags, the note blooms), BLEND = clean under the fuzz." },
+                      "(the pick sags, the note blooms), CLEAN = clean signal under the fuzz." },
         { "WINGS",    "Rhythmic gate: HARD = stutter, off = tremolo. SYNC locks to the host tempo (DIV)." },
         { "CHAIN",    "The strip under the header is the signal chain. Drag a block to reorder it (fuzz before or after the pitch, reverb into the fuzz...), "
                       "click it to open its page, click its LED to switch it on / off, right-click for MIDI learn. Drag it UP / DOWN for parallel paths A / B (an empty path = dry), "

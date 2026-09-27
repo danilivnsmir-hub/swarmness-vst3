@@ -1319,6 +1319,43 @@ namespace
             check (par.first > par.second + 10.0, juce::String::formatted ("SHIFT || HIVE: DRONE on the played note (329.6 Hz %+.1f dB vs 659 Hz %+.1f dB)", par.first, par.second));
         }
         {
+            // SHIFT power button: SHIFT A all the time (no footswitch), and the plug-in's ON still bypasses it
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            setParam (p, ParamIDs::shRaw, 0.0f);
+            setParam (p, ParamIDs::rise, 0.0f);
+            setParam (p, ParamIDs::shOn, 1.0f);
+            auto input = makeSine (sr, 48000 * 2, 220.0);
+            double purity = 0.0;
+            const double f = dominantFrequency (render (p, input, sr, 256), sr, 48000, purity);
+            check (std::abs (1200.0 * std::log2 (f / 440.0)) < 5.0, juce::String::formatted ("SHIFT on, no footswitch: +1 oct all the time (%.2f Hz)", f));
+            setParam (p, ParamIDs::bypass, 1.0f);
+            const double fb = dominantFrequency (render (p, input, sr, 256), sr, 48000, purity);
+            check (std::abs (1200.0 * std::log2 (fb / 220.0)) < 5.0, juce::String::formatted ("plug-in bypassed: SHIFT on is bypassed too (%.2f Hz)", fb));
+        }
+        {
+            // HIVE as a delay: DRY feeds the repeats from the note itself (DRONE at 0), HOLD steps = plain echoes
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            setParam (p, ParamIDs::rbRaw, 0.0f);
+            setParam (p, ParamIDs::rbOn, 1.0f);
+            setParam (p, ParamIDs::rbPrimary, 0.0f);
+            setParam (p, ParamIDs::rbTracking, 100.0f);
+            setParam (p, ParamIDs::rbMagic, 70.0f);
+            setParam (p, ParamIDs::rbTone, 100.0f);
+            setParam (p, ParamIDs::rbTime, 250.0f);
+            setParam (p, ParamIDs::trDry, 1.0f);
+            PresetManager::ValueMap values;
+            PresetManager::writeTrailFill (values, HiveBlock::fillEcho);
+            for (const auto& [id, v] : values)
+                setParam (p, id.toRawUTF8(), v);
+            auto out = render (p, pluck (sr, (int) (sr * 1.5)), sr, 128);
+            const double echo = toneDb (out, sr, 220.0, (int) (0.37 * sr), 4096), gap = toneDb (out, sr, 220.0, (int) (0.26 * sr), 2048);
+            const double note = toneDb (out, sr, 220.0, 4800, 4096);
+            check (echo > note - 12.0 && echo > gap + 10.0,
+                   juce::String::formatted ("DRY: an echo of the played note at TIME (%.1f dB vs the note, %.1f dB quieter just before it)", echo - note, echo - gap));
+        }
+        {
             // STACK: A + B held = both intervals; off = B wins
             auto stacked = [&] (bool stack)
             {
@@ -1352,7 +1389,7 @@ namespace
                 setParam (p, ParamIDs::rbMagic, 80.0f);
                 setParam (p, ParamIDs::rbTone, 100.0f);
                 setParam (p, ParamIDs::rbTime, 250.0f);
-                setParam (p, ParamIDs::trGate, gate);
+                setParam (p, ParamIDs::trChop, (100.0f - gate) / 0.95f);
                 PresetManager::ValueMap values;
                 PresetManager::writeTrailFill (values, fill);
                 for (const auto& [id, v] : values)
@@ -1422,6 +1459,9 @@ namespace
             addLegacy ("stingRaw", 0.0);
             addLegacy ("stingDetune", -20.0);
             addLegacy ("hivePattern", 2.0);   // beta.20-22 SCATTER
+            addLegacy ("trGate", 43.0);       // beta.23-25 GATE: 43% of each step sounds
+            if (auto* e = xml->getChildByAttribute ("id", ParamIDs::trChop))
+                xml->removeChildElement (e, true);
             for (auto* id : { ParamIDs::trMoves[0], ParamIDs::trMoves[5] })
                 if (auto* e = xml->getChildByAttribute ("id", id))
                     xml->removeChildElement (e, true);
@@ -1437,6 +1477,7 @@ namespace
             check (juce::roundToInt (v (ParamIDs::trMoves[0])) == HiveBlock::random && juce::roundToInt (v (ParamIDs::trMoves[5])) == HiveBlock::random
                    && juce::roundToInt (v (ParamIDs::trSteps)) == 8,
                    "old session: PATTERN SCATTER -> 8 RANDOM steps");
+            check (std::abs (v (ParamIDs::trChop) - 60.0f) < 0.5f, juce::String::formatted ("old session: GATE 43%% open -> GATE %.0f%% chop", v (ParamIDs::trChop)));
 
             auto file = juce::File::createTempFile (".swpreset");
             file.replaceWithText (R"({"name":"Legacy Dive","plugin":"Swarmness","parameters":{"noiseDown":1,"rise":400}})");

@@ -264,18 +264,15 @@ class PitchScope : public juce::Component,
 public:
     PitchScope();
 
-    void push (float semitones, bool active);
-    /** Dashed markers for the HIVE voices (semitones relative to the played note). */
-    void setVoiceMarkers (bool visible, float droneSemis, float queenSemis, float queenLevel);
+    /** One frame: the main voice, and the STACK voice while it sounds. */
+    void push (float semitones, bool active, bool stackOn = false, float stackSemitones = 0.0f);
     void paint (juce::Graphics&) override;
 
 private:
-    bool markersVisible = false;
-    float droneMarker = 0.0f, queenMarker = 0.0f, queenAmount = 0.0f;
-    std::vector<float> history;
+    std::vector<float> history, stackHistory;   // stack: NaN = silent
     int writeIndex = 0;
-    bool active = true, primed = false;
-    float current = 0.0f;
+    bool active = true, primed = false, stackNow = false;
+    float current = 0.0f, currentStack = 0.0f;
 };
 
 //==============================================================================

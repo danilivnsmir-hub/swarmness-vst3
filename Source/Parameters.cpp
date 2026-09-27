@@ -88,7 +88,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     hive->addChild (intervalParam (shiftB, "Shift B Interval", 24));
     hive->addChild (glideTime (rise, "Rise"));
     hive->addChild (glideTime (fall, "Fall"));
-    hive->addChild (percent (stingMix, "Shift Blend", 100.0f));
+    hive->addChild (toggle (shOn, "Shift On", false));
+    hive->addChild (percent (stingMix, "Shift Mix", 100.0f));
     hive->addChild (toggle (shStack, "Shift Stack A+B", false));
     hive->addChild (percent (panic, "Shift Anger", 0.0f));
     hive->addChild (percent (chaos, "Shift Frenzy", 0.0f));
@@ -126,7 +127,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     hive->addChild (std::make_unique<juce::AudioParameterChoice> (pid (rbDiv), "Hive Division", ParamChoices::divisions, 3));
     hive->addChild (percent (rbTone, "Hive Tone", 60.0f));
     hive->addChild (std::make_unique<juce::AudioParameterInt> (pid (trSteps), "Trails Steps", 1, 16, 8));
-    hive->addChild (percent (trGate, "Trails Gate", 100.0f));
+    hive->addChild (percent (trChop, "Trails Gate", 0.0f));
+    hive->addChild (toggle (trDry, "Trails From Dry", false));
     for (int k = 0; k < 16; ++k)
     {
         hive->addChild (std::make_unique<juce::AudioParameterFloat> (

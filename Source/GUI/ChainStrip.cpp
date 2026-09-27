@@ -38,6 +38,7 @@ const char* ChainStrip::powerParamFor (int block)
         case Chain::comb:  return ParamIDs::geqOn;
         case Chain::carve: return ParamIDs::peqOn;
         case Chain::crypt: return ParamIDs::revOn;
+        case Chain::shift: return ParamIDs::shOn;
         default:           return nullptr;
     }
 }
@@ -507,7 +508,7 @@ juce::String ChainStrip::getTooltip()
         "COMB: 10-band graphic EQ",
         "CARVE: parametric EQ with low / high cut",
         "CRYPT: reverb (algorithmic or your impulse response)",
-        "SHIFT: the footswitch pitch shifter - it sounds only while SHIFT A / B is held, like a momentary pedal (no on / off)" };
+        "SHIFT: pitch shifter. LED = on (SHIFT A all the time); the SHIFT A / B footswitches engage it while held" };
     juce::String tip (what[hover]);
     tip << ". Click to open; drag sideways to move, up / down for parallel paths";
     if (powerParamFor (hover) != nullptr)

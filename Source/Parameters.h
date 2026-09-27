@@ -22,7 +22,8 @@ namespace ParamIDs
     inline constexpr const char* shiftB      = "shiftB";       // SHIFT B interval, semitones
     inline constexpr const char* rise        = "rise";         // glide into the interval (footswitch down)
     inline constexpr const char* fall        = "fall";         // glide back home (footswitch released)
-    inline constexpr const char* stingMix    = "stingMix";     // SHIFT BLEND: dry / shifted while a footswitch is down
+    inline constexpr const char* shOn        = "shOn";         // SHIFT A engaged permanently (power button)
+    inline constexpr const char* stingMix    = "stingMix";     // SHIFT MIX: dry / shifted while engaged
     inline constexpr const char* shStack     = "shStack";      // A + B held: both intervals sound (off = B wins)
     inline constexpr const char* panic       = "panic";        // SHIFT ANGER
     inline constexpr const char* chaos       = "chaos";        // SHIFT FRENZY
@@ -42,7 +43,8 @@ namespace ParamIDs
     // TRAILS
     inline constexpr const char* rbMagic     = "rbMagic";      // TRAILS: regeneration
     inline constexpr const char* trSteps     = "trSteps";      // TRAILS step pattern length (1..16)
-    inline constexpr const char* trGate      = "trGate";       // how much of every step sounds
+    inline constexpr const char* trChop      = "trChop";       // GATE: chops every step (0 = full repeats)
+    inline constexpr const char* trDry       = "trDry";        // the repeats start from the input (a delay)
     inline constexpr const char* trLevels[]  { "trL1", "trL2", "trL3", "trL4", "trL5", "trL6", "trL7", "trL8",
                                                "trL9", "trL10", "trL11", "trL12", "trL13", "trL14", "trL15", "trL16" };
     inline constexpr const char* trMoves[]   { "trM1", "trM2", "trM3", "trM4", "trM5", "trM6", "trM7", "trM8",
@@ -70,6 +72,8 @@ namespace ParamIDs
     inline constexpr const char* hivePatternLegacy = "hivePattern";
     // Beta.20-24: FOLLOW (the chain order decides now: HIVE after SHIFT follows the shifted note)
     inline constexpr const char* hiveFollowLegacy  = "hiveFollow";
+    // Beta.23-25: GATE as the part of each step that sounds (100 = open); now trChop (0 = open)
+    inline constexpr const char* trGateLegacy      = "trGate";
 
     // SWARM (chorus)
     inline constexpr const char* swarmOn     = "swarmOn";
@@ -222,7 +226,7 @@ namespace Chain
     inline constexpr int legacyPostSmokeSlot = 35;   // old "SMOKE POST" = after SWARM, before WINGS
 
     inline constexpr const char* names[numBlocks]     { "HIVE", "SMOKE", "SWARM", "WINGS", "COMB", "CARVE", "CRYPT", "SHIFT" };
-    inline constexpr const char* subtitles[numBlocks] { "HARMONIES", "FUZZ", "CHORUS", "TREMOLO", "GRAPHIC EQ", "PARAM EQ", "REVERB", "FOOTSWITCH" };
+    inline constexpr const char* subtitles[numBlocks] { "HARMONIES", "FUZZ", "CHORUS", "TREMOLO", "GRAPHIC EQ", "PARAM EQ", "REVERB", "PITCH SHIFT" };
 
     using Order = std::array<int, numBlocks>;
 

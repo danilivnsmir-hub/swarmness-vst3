@@ -20,7 +20,8 @@
  *            UP/DOWN the repeat moves by +PITCH / -PITCH (all UP = the classic ascending ladder)
  *            RANDOM  a random chord tone of PITCH or an octave (glitch arpeggios)
  *            REVERSE the repeat plays backwards
- *          GATE shortens every step (100% = full repeat, low = stuttering chops). TIME = step /
+ *          GATE chops every step (0 = full repeats, high = short stuttering chops). DRY: the
+ *          repeats start from the input instead of the DRONE - a plain or pitch-shifting delay. TIME = step /
  *          repeat spacing, TONE = brightness; VENOM drives the loop into self-oscillation (and
  *          switches HIVE on while held).
  *  MANGLE  on the voices and trails: ANGER (sour detuned voices), FRENZY (random pitch jumps),
@@ -90,6 +91,7 @@ public:
         float trails = 0.0f, repeatSeconds = 0.18f, tone = 0.6f;
         StepPattern steps;
         float gate = 1.0f;          // how much of every step sounds (1 = the whole repeat)
+        bool fromDry = false;       // the repeats start from the input instead of the DRONE (a pitch delay)
         double hostStep = -1.0;     // SYNC: the host position in steps (< 0 = restart the pattern on every note)
         bool venom = false;
 
@@ -472,13 +474,15 @@ private:
 
                 // Repeats: placed per step (UP left, DOWN right - a ping-pong; RANDOM jumps around)
                 const float tPan = numChannels > 1 ? trailPan[(size_t) ch] : 1.0f;
-                const float voices = voiceSubsonic[(size_t) ch].process ((dlp * dPan + tlp * tPan * stepGain) * dl + qlp * ql * qPan);
+                const float trailLevel = s.fromDry ? 1.0f : dl;
+                const float voices = voiceSubsonic[(size_t) ch].process (dlp * dPan * dl + tlp * tPan * stepGain * trailLevel + qlp * ql * qPan);
                 auto& z = toneState[(size_t) ch];
                 z = voices + toneCoeff * (z - voices);
 
                 // Loop: DRONE + its trails, TONE-filtered and band-limited (spiral ceiling).
                 // The unshifted resonance only exists while VENOM is held.
-                const float fbIn = dlp + tlp + res * (voiceIn.getSample (ch, i) + (trailsRunning ? trailIn.getSample (ch, i) : 0.0f));
+                const float fbIn = (s.fromDry ? voiceIn.getSample (ch, i) : dlp) + tlp
+                                 + res * (voiceIn.getSample (ch, i) + (trailsRunning ? trailIn.getSample (ch, i) : 0.0f));
                 auto& lt = loopTone[(size_t) ch];
                 lt = fbIn + toneCoeff * (lt - fbIn);
                 const float banded = loopHp[(size_t) ch].process (loopLp[(size_t) ch].process (lt));
