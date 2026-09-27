@@ -183,7 +183,7 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     fxPage.addAndMakeVisible (ampCab);
 
     // OUTPUT
-    inputKnob .attach (state, input,  "INPUT sensitivity: how hard the effects are hit (SMOKE, tracking). Aim for peaks in the green zone of the IN meter; the output level is compensated");
+    inputKnob .attach (state, input,  "INPUT: input gain - how hard everything is hit (SMOKE, AMP, tracking) and louder. Aim for peaks in the green zone of the IN meter");
     addAndMakeVisible (inputKnob);
     inMeter.setTargetZone (-18.0f, -6.0f);
     inMeter.setTooltip ("Input level after INPUT - aim for peaks in the green zone");

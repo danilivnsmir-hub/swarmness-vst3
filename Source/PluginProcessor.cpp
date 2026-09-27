@@ -278,7 +278,7 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
                     transport.ppq = *q;
         }
 
-    // ---- INPUT sensitivity (undone at the output, so it only changes how hard the effects are hit)
+    // ---- INPUT gain (how hard everything after it is hit)
     inputGainSmoothed.setTargetValue (juce::Decibels::decibelsToGain (p.input->load()));
     for (int i = 0; i < numSamples; ++i)
     {
@@ -390,8 +390,7 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
 
     for (int i = 0; i < numSamples; ++i)
     {
-        // Output gain, with the INPUT sensitivity undone
-        const float g = outputGainSmoothed.getNextValue() / inputGainTrack[(size_t) i];
+        const float g = outputGainSmoothed.getNextValue();
         const float b = bypassSmoothed.getNextValue();
         for (int ch = 0; ch < numChannels; ++ch)
         {

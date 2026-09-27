@@ -445,10 +445,16 @@ private:
 
         std::array<float, kLines> lengths {}, gLow {}, gHigh {};
         std::array<int, kLines> apDelay {};
+        float sizeGain = 1.0f;
         for (int i = 0; i < numSamples; ++i)
         {
             // line lengths glide with SIZE; decay gains per line and band from RT60
             const float scale = sizeSmooth.process (targetScale);
+            if ((i & 15) == 0)
+            {
+                // longer lines = fewer echoes per second: keep the tail's energy, so a bigger room is not a quieter one
+                sizeGain = std::pow (scale / juce::jmax (0.01f, cfg.scale), 0.8f);
+            }
             if ((i & 15) == 0)
                 for (int j = 0; j < kLines; ++j)
                 {
@@ -513,8 +519,8 @@ private:
                 lines[(size_t) j].push (v + ((j & 1) == 0 ? l : r) * ((j & 2) != 0 ? -kInject : kInject));
             }
 
-            wl[i] = kOutScale * outL + cfg.early * erL;
-            wr[i] = kOutScale * outR + cfg.early * erR;
+            wl[i] = kOutScale * sizeGain * outL + cfg.early * erL;
+            wr[i] = kOutScale * sizeGain * outR + cfg.early * erR;
         }
 
         // keep the LFO phasors on the unit circle

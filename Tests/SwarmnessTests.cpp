@@ -609,7 +609,7 @@ namespace
 
     void testInputSensitivity()
     {
-        std::printf ("\nINPUT: changes how hard the effects are hit, transparent otherwise\n");
+        std::printf ("\nINPUT: a plain input gain, how hard the effects are hit\n");
         const double sr = 48000.0;
         auto input = makeGuitar (sr, 48000);
         {
@@ -617,8 +617,10 @@ namespace
             resetToInit (p);
             setParam (p, ParamIDs::input, 12.0f);
             auto out = render (p, input, sr, 256);
-            const double db = nullDb (out, input, p.getLatencySamples(), 4096, input.getNumSamples());
-            check (db < -100.0, juce::String::formatted ("INPUT +12 dB, nothing engaged: residual %.1f dB", db));
+            juce::AudioBuffer<float> ref (input);
+            ref.applyGain (juce::Decibels::decibelsToGain (12.0f));
+            const double db = nullDb (out, ref, p.getLatencySamples(), 4096, input.getNumSamples());
+            check (db < -100.0, juce::String::formatted ("INPUT +12 dB, nothing engaged: plain +12 dB gain (residual %.1f dB)", db));
         }
         double rms[2] {};
         for (int k = 0; k < 2; ++k)
@@ -631,7 +633,10 @@ namespace
             auto out = render (p, input, sr, 256);
             rms[k] = out.getRMSLevel (0, 12000, 24000);
         }
-        check (rms[0] > rms[1] * 1.5, "SMOKE at low INPUT cleans up relative to high INPUT (output compensated)");
+        // A plain input gain: louder in -> louder out, but SMOKE compresses the 30 dB step heavily
+        const double stepDb = juce::Decibels::gainToDecibels (rms[1] / juce::jmax (1.0e-9, rms[0]));
+        check (stepDb > 1.0 && stepDb < 20.0,
+               juce::String::formatted ("INPUT -18 -> +12 dB into SMOKE: output +%.1f dB (plain gain, fuzz compresses)", stepDb));
     }
 
     void testFuzzIdleNoise()
@@ -2490,6 +2495,100 @@ int main (int argc, char** argv)
                     (isHarm ? harm : other) += (double) buf[(size_t) k] * buf[(size_t) k];
                 }
                 std::printf ("   %+6.1f dB\n", 10.0 * std::log10 (other / harm));
+            }
+        return 0;
+    }
+
+    if (argc >= 2 && juce::String (argv[1]) == "--knob-audit")
+    {
+        // every continuous parameter at min / mid / max with its block on: output level and brightness (diagnostic)
+        const double sr = 48000.0;
+        auto guitar = makeGuitar (sr, 48000);
+        auto powerFor = [] (const juce::String& id) -> const char*
+        {
+            using namespace ParamIDs;
+            if (id.startsWith ("fuzz")) return fuzzOn;
+            if (id.startsWith ("swarm")) return swarmOn;
+            if (id.startsWith ("flow")) return flowOn;
+            if (id.startsWith ("geq")) return geqOn;
+            if (id.startsWith ("peq")) return peqOn;
+            if (id.startsWith ("rev")) return revOn;
+            if (id.startsWith ("amp")) return ampOn;
+            if (id.startsWith ("cab")) return cabOn;
+            if (id.startsWith ("rb") || id.startsWith ("tr") || id.startsWith ("hv")) return rbOn;
+            if (id.startsWith ("sh") || id == stingMix || id == panic || id == chaos || id == speed || id == shiftA || id == shiftB || id == rise || id == fall) return shOn;
+            return nullptr;
+        };
+        // pink noise in bursts (so gates, trackers and tails all get something), brightness = highs - lows
+        juce::AudioBuffer<float> pink (2, 48000);
+        {
+            juce::Random rng (5);
+            float b0 = 0, b1 = 0, b2 = 0;
+            for (int i = 0; i < pink.getNumSamples(); ++i)
+            {
+                const float w = rng.nextFloat() * 2.0f - 1.0f;
+                b0 = 0.99765f * b0 + w * 0.0990460f; b1 = 0.96300f * b1 + w * 0.2965164f; b2 = 0.57000f * b2 + w * 1.0526913f;
+                const float env = (i % 12000) < 9000 ? 1.0f : 0.0f;
+                const float v = 0.08f * env * (b0 + b1 + b2 + w * 0.1848f) + guitar.getSample (0, i);
+                pink.setSample (0, i, v); pink.setSample (1, i, v);
+            }
+        }
+        guitar = pink;
+        auto band = [&] (const juce::AudioBuffer<float>& b, double lo, double hi)
+        {
+            double e = 0;
+            for (double f = lo; f < hi; f *= 1.19)
+                e += std::pow (10.0, toneDb (b, sr, f, 9600, 32768) / 10.0);
+            return 10.0 * std::log10 (e + 1e-30);
+        };
+        auto centroid = [&] (const juce::AudioBuffer<float>& b) { return band (b, 2000, 8000) - band (b, 100, 400); };
+        SwarmnessAudioProcessor probe;
+        for (auto* param : probe.getParameters())
+        {
+            auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (param);
+            if (ranged == nullptr || dynamic_cast<juce::AudioParameterBool*> (param) != nullptr || dynamic_cast<juce::AudioParameterChoice*> (param) != nullptr)
+                continue;
+            const auto id = ranged->paramID;
+            if (id.startsWith ("chain") || id.startsWith ("lane") || id.startsWith ("trL") || id == "scene") continue;
+            std::printf ("%-14s", id.toRawUTF8());
+            for (float norm : { 0.0f, 0.5f, 1.0f })
+            {
+                SwarmnessAudioProcessor p;
+                resetToInit (p);
+                if (auto* pw = powerFor (id)) setParam (p, pw, 1.0f);
+                if (id.startsWith ("rev") && id != "revMix") setParam (p, ParamIDs::revMix, 100.0f);
+                p.getAPVTS().getParameter (id)->setValueNotifyingHost (norm);
+                auto out = render (p, guitar, sr, 256);
+                std::printf ("  [%s] %6.1f dB %+6.1f", p.getAPVTS().getParameter (id)->getCurrentValueAsText().substring (0, 9).paddedRight (' ', 9).toRawUTF8(),
+                             juce::Decibels::gainToDecibels (out.getRMSLevel (0, 9600, 38400)), centroid (out));
+            }
+            std::printf ("\n");
+        }
+        return 0;
+    }
+
+    if (argc >= 2 && juce::String (argv[1]) == "--rev-size")
+    {
+        // CRYPT: wet level and "spaciousness" vs SIZE (diagnostic)
+        const double sr = 48000.0;
+        for (int type : { 0, 1, 2, 3 })
+            for (float size : { 0.0f, 25.0f, 50.0f, 75.0f, 100.0f })
+            {
+                SwarmnessAudioProcessor p;
+                resetToInit (p);
+                setParam (p, ParamIDs::revOn, 1.0f);
+                setParam (p, ParamIDs::revType, (float) type);
+                setParam (p, ParamIDs::revMix, 100.0f);
+                setParam (p, ParamIDs::revSize, size);
+                setParam (p, ParamIDs::revDecay, 2.5f);
+                juce::AudioBuffer<float> in (2, 48000 * 3);
+                in.clear();
+                for (int i = 0; i < 480; ++i) { in.setSample (0, i, 0.5f * std::sin (i * 0.3f)); in.setSample (1, i, 0.5f * std::sin (i * 0.3f)); }
+                auto out = render (p, in, sr, 256);
+                std::printf ("type %d size %3.0f: 0-100 ms %6.1f dB, 100-500 ms %6.1f dB, 0.5-1.5 s %6.1f dB\n", type, size,
+                             juce::Decibels::gainToDecibels (out.getRMSLevel (0, 0, 4800)),
+                             juce::Decibels::gainToDecibels (out.getRMSLevel (0, 4800, 19200)),
+                             juce::Decibels::gainToDecibels (out.getRMSLevel (0, 24000, 48000)));
             }
         return 0;
     }
