@@ -2105,6 +2105,31 @@ namespace
                 const double f = dominantFrequency (out, 44100.0, 22050, purity);
                 check (std::abs (f - 440.0) < 2.0, juce::String::formatted ("NAM at 44.1 kHz: 440 Hz in -> %.1f Hz out", f));
             }
+            // NAM's own knobs: 5 = neutral, OUTPUT is a clean gain, INPUT drives it, the amp's knobs don't touch it
+            {
+                auto run = [&] (std::function<void (AmpBlock::Settings&)> f)
+                {
+                    AmpBlock a;
+                    a.prepare (48000.0, 256);
+                    std::string e;
+                    a.setNamModel (NamModel::load (wavenet.loadFileAsString().toStdString(), e));
+                    AmpBlock::Settings s;
+                    s.on = true;
+                    s.channel = AmpBlock::nam;
+                    f (s);
+                    auto out = renderAmp (s, makeGuitar (48000.0, 48000), &a);
+                    return juce::Decibels::gainToDecibels (out.getRMSLevel (0, 9600, 24000));
+                };
+                const double ref = run ([] (AmpBlock::Settings&) {});
+                const double ampKnobs = run ([] (AmpBlock::Settings& s) { s.gain = 0.0f; s.bass = 0.0f; s.treble = 1.0f; s.master = 0.0f; });
+                const double outUp = run ([] (AmpBlock::Settings& s) { s.namOutput = 0.5f + 6.0f / 36.0f; });
+                const double inDown = run ([] (AmpBlock::Settings& s) { s.namInput = 0.0f; });
+                const double bassDown = run ([] (AmpBlock::Settings& s) { s.namBass = 0.0f; });
+                check (std::abs (ampKnobs - ref) < 0.01, juce::String::formatted ("NAM ignores the amp models' knobs (%.2f dB)", ampKnobs - ref));
+                check (std::abs (outUp - ref - 6.0) < 0.1, juce::String::formatted ("NAM OUTPUT +6 dB: %+.2f dB", outUp - ref));
+                check (inDown < ref - 3.0, juce::String::formatted ("NAM INPUT at 0: %+.1f dB", inDown - ref));
+                check (bassDown < ref - 0.5, juce::String::formatted ("NAM BASS at 0: %+.1f dB", bassDown - ref));
+            }
             // through the processor: file, description, session round trip
             {
                 SwarmnessAudioProcessor p;

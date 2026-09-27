@@ -209,6 +209,8 @@ private:
     SegmentedChoice channelSelector, cabSelector;
     Knob gainKnob { "GAIN" }, bassKnob { "BASS" }, midKnob { "MID" }, trebleKnob { "TREBLE" };
     Knob presenceKnob { "PRESENCE" }, depthKnob { "DEPTH" }, masterKnob { "MASTER" }, gateKnob { "GATE" }, levelKnob { "LEVEL", true };
+    Knob namInputKnob { "INPUT" }, namBassKnob { "BASS" }, namMidKnob { "MID" }, namTrebleKnob { "TREBLE" };
+    Knob namPresenceKnob { "PRESENCE" }, namDepthKnob { "DEPTH" }, namOutputKnob { "OUTPUT" };
     CharacterSlider characterSlider;
     juce::TextButton loadNamButton { "LOAD .NAM" }, toneButton { "TONE3000" }, clearNamButton { "CLEAR" };
     Knob micKnob { "MIC" }, distKnob { "DISTANCE" }, lowCutKnob { "LOW CUT" }, highCutKnob { "HIGH CUT" }, cabLevelKnob { "LEVEL", true };

@@ -977,10 +977,10 @@ AmpCabSection::AmpCabSection (SwarmnessAudioProcessor& p)
     addAndMakeVisible (channelSelector);
     addAndMakeVisible (cabSelector);
 
-    gainKnob    .attach (state, ampGain,     "GAIN: preamp drive (NAM: input level into the capture, 5 = its own level)");
-    bassKnob    .attach (state, ampBass,     "BASS: the amp's passive tone stack (NAM: post EQ, 5 = flat)");
-    midKnob     .attach (state, ampMid,      "MID: the tone stack's mid control - the scoop lives here (NAM: post EQ, 5 = flat)");
-    trebleKnob  .attach (state, ampTreble,   "TREBLE (NAM: post EQ, 5 = flat)");
+    gainKnob    .attach (state, ampGain,     "GAIN: preamp drive");
+    bassKnob    .attach (state, ampBass,     "BASS: the amp's passive tone stack");
+    midKnob     .attach (state, ampMid,      "MID: the tone stack's mid control - the scoop lives here");
+    trebleKnob  .attach (state, ampTreble,   "TREBLE: the tone stack's treble control");
     presenceKnob.attach (state, ampPresence, "PRESENCE: power-amp feedback - more bite and air up top");
     depthKnob   .attach (state, ampDepth,    "DEPTH: power-amp resonance - the low-end thump of a closed cabinet");
     masterKnob  .attach (state, ampMaster,   "MASTER: how hard the power amp is pushed - sag, compression and power-tube grind as it goes up");
@@ -988,6 +988,17 @@ AmpCabSection::AmpCabSection (SwarmnessAudioProcessor& p)
     levelKnob   .attach (state, ampLevel,    "LEVEL: AMP output level");
     for (auto* k : { &gainKnob, &bassKnob, &midKnob, &trebleKnob, &presenceKnob, &depthKnob, &masterKnob, &gateKnob, &levelKnob })
         addAndMakeVisible (k);
+
+    // NAM mode: its own knobs, 5 = neutral (the capture's own level, flat EQ)
+    namInputKnob   .attach (state, namInput,    "INPUT: level into the capture, 5 = its own level (+-18 dB) - lower cleans it up, higher drives it harder");
+    namBassKnob    .attach (state, namBass,     "BASS: post EQ low shelf, 5 = flat (+-12 dB)");
+    namMidKnob     .attach (state, namMid,      "MID: post EQ at 650 Hz, 5 = flat (+-12 dB)");
+    namTrebleKnob  .attach (state, namTreble,   "TREBLE: post EQ high shelf, 5 = flat (+-12 dB)");
+    namPresenceKnob.attach (state, namPresence, "PRESENCE: post EQ air above 5 kHz, 5 = flat (+-7 dB)");
+    namDepthKnob   .attach (state, namDepth,    "DEPTH: post EQ low thump at 85 Hz, 5 = flat (+-7 dB)");
+    namOutputKnob  .attach (state, namOutput,   "OUTPUT: level after the capture, 5 = unity (+-18 dB)");
+    for (auto* k : { &namInputKnob, &namBassKnob, &namMidKnob, &namTrebleKnob, &namPresenceKnob, &namDepthKnob, &namOutputKnob })
+        addChildComponent (k);
 
     characterSlider.getChannel = [this] { return juce::jlimit (0, 2, (int) state.getRawParameterValue (ParamIDs::ampChannel)->load()); };
     characterSlider.setTooltip ("CHARACTER: morphs the whole amp circuit between the channel's two reference amps - the middle is an amp of its own. "
@@ -1050,9 +1061,13 @@ void AmpCabSection::resized()
     channelSelector.setBounds ((int) ampArea.getRight() - 52 - 300, 10, 300, 24);
     {
         const std::initializer_list<Knob*> row { &gainKnob, &bassKnob, &midKnob, &trebleKnob, &presenceKnob, &depthKnob, &masterKnob };
+        const std::initializer_list<Knob*> namRow { &namInputKnob, &namBassKnob, &namMidKnob, &namTrebleKnob, &namPresenceKnob, &namDepthKnob, &namOutputKnob };
         const float step = (ampArea.getWidth() - 20.0f) / (float) row.size();
         int i = 0;
         for (auto* k : row)
+            k->setBounds ((int) (10.0f + step * ((float) i++ + 0.5f)) - 36, 42, 72, 102);
+        i = 0;
+        for (auto* k : namRow)
             k->setBounds ((int) (10.0f + step * ((float) i++ + 0.5f)) - 36, 42, 72, 102);
     }
     morphArea = { 16.0f, 150.0f, 490.0f, h - 160.0f };
@@ -1113,7 +1128,7 @@ void AmpCabSection::paint (juce::Graphics& g)
         g.setFont (font (12.5f));
         g.setColour (message.isNotEmpty() ? Colours::ledRed : (toneStatus.isNotEmpty() ? Colours::accent : Colours::textFaint));
         g.drawFittedText (message.isNotEmpty() ? message : toneStatus.isNotEmpty() ? toneStatus
-                                               : juce::String ("Drop a .nam here or find one on TONE3000. GAIN drives it, BASS..DEPTH = post EQ."),
+                                               : juce::String ("Drop a .nam here or find one on TONE3000. All knobs at 5 = the capture as it is."),
                           t.removeFromTop (18.0f).toNearestInt(), juce::Justification::topLeft, 1, 0.85f);
     }
 
@@ -1192,7 +1207,10 @@ void AmpCabSection::tick()
         namNext.setVisible (namMode && namDescription.isNotEmpty());
         irPrev.setVisible (cabIrMode && cabIrDescription.isNotEmpty());
         irNext.setVisible (cabIrMode && cabIrDescription.isNotEmpty());
-        masterKnob.setAlpha (namMode ? 0.35f : 1.0f);
+        for (auto* k : { &gainKnob, &bassKnob, &midKnob, &trebleKnob, &presenceKnob, &depthKnob, &masterKnob })
+            k->setVisible (! namMode);
+        for (auto* k : { &namInputKnob, &namBassKnob, &namMidKnob, &namTrebleKnob, &namPresenceKnob, &namDepthKnob, &namOutputKnob })
+            k->setVisible (namMode);
         if (channelChanged)
             characterSlider.repaint();
         for (auto* k : { &micKnob, &distKnob })

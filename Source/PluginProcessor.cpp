@@ -69,6 +69,8 @@ SwarmnessAudioProcessor::SwarmnessAudioProcessor()
     p.ampOn = get (id::ampOn);           p.ampChannel = get (id::ampChannel);   p.ampChar = get (id::ampChar);       p.ampGain = get (id::ampGain);
     p.ampBass = get (id::ampBass);       p.ampMid = get (id::ampMid);           p.ampTreble = get (id::ampTreble);   p.ampPresence = get (id::ampPresence);
     p.ampDepth = get (id::ampDepth);     p.ampMaster = get (id::ampMaster);     p.ampGate = get (id::ampGate);       p.ampLevel = get (id::ampLevel);
+    p.namInput = get (id::namInput);     p.namBass = get (id::namBass);         p.namMid = get (id::namMid);         p.namTreble = get (id::namTreble);
+    p.namPresence = get (id::namPresence); p.namDepth = get (id::namDepth);     p.namOutput = get (id::namOutput);
     p.cabOn = get (id::cabOn);           p.cabType = get (id::cabType);         p.cabMic = get (id::cabMic);         p.cabDist = get (id::cabDist);
     p.cabLowCut = get (id::cabLowCut);   p.cabHighCut = get (id::cabHighCut);   p.cabLevel = get (id::cabLevel);
     for (int b = 0; b < Chain::numBlocks; ++b)
@@ -496,6 +498,13 @@ void SwarmnessAudioProcessor::processChainBlock (int block, const BlockContext& 
             s.master = p.ampMaster->load() * 0.1f;
             s.gate = pct (p.ampGate);
             s.levelDb = p.ampLevel->load();
+            s.namInput = p.namInput->load() * 0.1f;
+            s.namBass = p.namBass->load() * 0.1f;
+            s.namMid = p.namMid->load() * 0.1f;
+            s.namTreble = p.namTreble->load() * 0.1f;
+            s.namPresence = p.namPresence->load() * 0.1f;
+            s.namDepth = p.namDepth->load() * 0.1f;
+            s.namOutput = p.namOutput->load() * 0.1f;
             amp.setParams (s);
             amp.process (audio, numChannels, numSamples);
             break;

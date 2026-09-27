@@ -20,7 +20,7 @@
  *    CLEAN   CHROME (solid-state jazz clean)       <-> BLACKFACE (American clean / breakup)
  *    CRUNCH  BRIT   (British crunch)               <-> CITRUS    (thick British fuzz-crunch)
  *    LEAD    STEEL  (tight American high gain)     <-> SLUDGE    (loose modern high gain)
- * NAM runs a loaded .nam capture instead (GAIN = input drive, the EQ knobs are a post EQ).
+ * NAM runs a loaded .nam capture instead, with its own knobs (INPUT, post EQ, OUTPUT; 5 = neutral).
  *
  * gate -> [8x] input (volts) -> preamp stages / GAIN pot / tone stack -> MASTER -> power amp
  * with feedback, sag and the speaker load -> [1x] -> level
@@ -42,6 +42,9 @@ public:
         float presence = 0.5f, depth = 0.5f, master = 0.5f;
         float gate = 0.0f;                    // 0 = off
         float levelDb = 0.0f;
+        // NAM mode's own knobs, 0..1 (knob 0..10), 0.5 = neutral
+        float namInput = 0.5f, namBass = 0.5f, namMid = 0.5f, namTreble = 0.5f;
+        float namPresence = 0.5f, namDepth = 0.5f, namOutput = 0.5f;
     };
 
     /** Model names: reference A, the in-between amp, reference B. */
@@ -691,6 +694,9 @@ private:
         }
     }
 
+    /** A NAM knob (0..1) in dB: 0 at noon, +-range at the ends. */
+    static float namKnobDb (float knob, float range) noexcept { return (knob - 0.5f) * 2.0f * range; }
+
     void processNam (float* const* audio, int numCh, int numSamples) noexcept
     {
         if (active == nullptr)
@@ -700,8 +706,9 @@ private:
             return;
         }
 
-        // GAIN: input drive (noon = the capture's own level), BASS..DEPTH: post EQ, 5 = flat
-        const float inGain = juce::Decibels::decibelsToGain (-20.0f + 40.0f * settings.gain);
+        // its own knobs, 5 = neutral: INPUT +-18 dB into the capture, BASS..DEPTH post EQ, OUTPUT +-18 dB
+        const float inGain = juce::Decibels::decibelsToGain (namKnobDb (settings.namInput, 18.0f));
+        const float outGain = namGain * juce::Decibels::decibelsToGain (namKnobDb (settings.namOutput, 18.0f));
         juce::dsp::AudioBlock<float> block (audio, (size_t) numCh, (size_t) numSamples);
         juce::dsp::AudioBlock<float> up;
         float* os[2] { audio[0], numCh > 1 ? audio[1] : nullptr };
@@ -726,7 +733,7 @@ private:
 
         const int qSize = (int) outQueue.size();
         for (int k = 0; k < nModel; ++k)
-            upRs.push (modelOut[(size_t) k] * namGain, [&] (float v)
+            upRs.push (modelOut[(size_t) k] * outGain, [&] (float v)
             {
                 if (qCount < qSize)
                 {
@@ -751,12 +758,11 @@ private:
             namOversampler->processSamplesDown (block);
 
         // post EQ at the host rate
-        auto dbFor = [] (float knob) { return (knob - 0.5f) * 24.0f; };
-        namEq[0].setShelf (false, 110.0, dbFor (settings.bass), fs);
-        namEq[1].setPeak (650.0, 0.8, dbFor (settings.mid), fs);
-        namEq[2].setShelf (true, 2800.0, dbFor (settings.treble), fs);
-        namEq[3].setShelf (true, 5500.0, (settings.presence - 0.5f) * 14.0f, fs);
-        namEq[4].setPeak (85.0, 0.9, (settings.depth - 0.5f) * 14.0f, fs);
+        namEq[0].setShelf (false, 110.0, namKnobDb (settings.namBass, 12.0f), fs);
+        namEq[1].setPeak (650.0, 0.8, namKnobDb (settings.namMid, 12.0f), fs);
+        namEq[2].setShelf (true, 2800.0, namKnobDb (settings.namTreble, 12.0f), fs);
+        namEq[3].setShelf (true, 5500.0, namKnobDb (settings.namPresence, 7.0f), fs);
+        namEq[4].setPeak (85.0, 0.9, namKnobDb (settings.namDepth, 7.0f), fs);
         for (auto& e : namEq)
             for (int c = 0; c < numCh; ++c)
                 for (int i = 0; i < numSamples; ++i)

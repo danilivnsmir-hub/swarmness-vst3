@@ -275,6 +275,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     amp->addChild (knob10 (ampMaster, "Amp Master", 5.0f));
     amp->addChild (percent (ampGate, "Amp Gate", 0.0f));
     amp->addChild (levelParam (ampLevel, "Amp Level"));
+    amp->addChild (knob10 (namInput, "NAM Input", 5.0f));
+    amp->addChild (knob10 (namBass, "NAM Bass", 5.0f));
+    amp->addChild (knob10 (namMid, "NAM Mid", 5.0f));
+    amp->addChild (knob10 (namTreble, "NAM Treble", 5.0f));
+    amp->addChild (knob10 (namPresence, "NAM Presence", 5.0f));
+    amp->addChild (knob10 (namDepth, "NAM Depth", 5.0f));
+    amp->addChild (knob10 (namOutput, "NAM Output", 5.0f));
 
     // ------------------------------------------------------------------ CAB
     auto cab = std::make_unique<Group> ("cab", "Cab", "|");

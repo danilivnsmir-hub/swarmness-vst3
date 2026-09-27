@@ -225,6 +225,8 @@ private:
         std::atomic<float>* ampOn {};      std::atomic<float>* ampChannel {};  std::atomic<float>* ampChar {};     std::atomic<float>* ampGain {};
         std::atomic<float>* ampBass {};    std::atomic<float>* ampMid {};      std::atomic<float>* ampTreble {};   std::atomic<float>* ampPresence {};
         std::atomic<float>* ampDepth {};   std::atomic<float>* ampMaster {};   std::atomic<float>* ampGate {};     std::atomic<float>* ampLevel {};
+        std::atomic<float>* namInput {};   std::atomic<float>* namBass {};     std::atomic<float>* namMid {};      std::atomic<float>* namTreble {};
+        std::atomic<float>* namPresence {}; std::atomic<float>* namDepth {};   std::atomic<float>* namOutput {};
         std::atomic<float>* cabOn {};      std::atomic<float>* cabType {};     std::atomic<float>* cabMic {};      std::atomic<float>* cabDist {};
         std::atomic<float>* cabLowCut {};  std::atomic<float>* cabHighCut {};  std::atomic<float>* cabLevel {};
         std::array<std::atomic<float>*, Chain::numBlocks> chainSlots {}, chainLanes {};

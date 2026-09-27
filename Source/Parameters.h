@@ -153,6 +153,14 @@ namespace ParamIDs
     inline constexpr const char* ampMaster   = "ampMaster";
     inline constexpr const char* ampGate     = "ampGate";
     inline constexpr const char* ampLevel    = "ampLevel";
+    // NAM mode has its own knobs (5 = neutral: the capture's own level, flat EQ)
+    inline constexpr const char* namInput    = "namInput";
+    inline constexpr const char* namBass     = "namBass";
+    inline constexpr const char* namMid      = "namMid";
+    inline constexpr const char* namTreble   = "namTreble";
+    inline constexpr const char* namPresence = "namPresence";
+    inline constexpr const char* namDepth    = "namDepth";
+    inline constexpr const char* namOutput   = "namOutput";
 
     // CAB (modelled cabinets or a loaded IR)
     inline constexpr const char* cabOn       = "cabOn";

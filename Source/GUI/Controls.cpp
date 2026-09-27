@@ -931,7 +931,7 @@ void InfoOverlay::paint (juce::Graphics& g)
         { "SMOKE",    "Jumbo fuzz. VOICE: DOWN doom / MID / UP scream. SCOOP = mid cut, GLARE = gated octave-up, GATE = starved sputter, SAG = breathing "
                       "(the pick sags, the note blooms), CLEAN = clean signal under the fuzz." },
         { "AMP",      "CLEAN / CRUNCH / LEAD amp models; CHARACTER morphs each between two reference amps (the middle is an amp of its own). "
-                      "NAM = a Neural Amp Modeler capture - LOAD .NAM or drop one, find thousands on TONE3000. GATE = noise gate in front." },
+                      "NAM = a Neural Amp Modeler capture with its own INPUT / EQ / OUTPUT knobs (all at 5 = the capture as it is) - LOAD .NAM or drop one, find thousands on TONE3000. GATE = noise gate in front." },
         { "CAB",      "Speaker cabinet: four modelled cabinets (MIC = cap..edge, DISTANCE = grille..room) or your own IR (LOAD IR or drop a WAV)." },
         { "CHAIN",    "The strip under the header is the signal chain. Drag a block to reorder it (fuzz before or after the pitch, reverb into the fuzz...), "
                       "click it to open its page, click its LED to switch it on / off, right-click for MIDI learn. Drag it UP / DOWN for parallel paths A / B (an empty path = dry), "
