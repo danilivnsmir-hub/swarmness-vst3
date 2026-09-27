@@ -922,25 +922,29 @@ void InfoOverlay::paint (juce::Graphics& g)
     struct Item { const char* title; const char* body; };
     static const Item items[] =
     {
-        { "HIVE",     "Destructive pitch-delay in four sections. SHIFT: hold SHIFT A / B (any interval, -24..+24 st) - RISE / FALL glide, BLEND = replace or double. "
-                      "VOICES: DRONE at PITCH and QUEEN (its octave), TRACKING tight..laggy, FOLLOW = harmonise the shifted note." },
+        { "SHIFT",    "Footswitch shifter, no on / off: it sounds while SHIFT A / B is held (any interval, -24..+24 st). RISE / FALL glide, BLEND = replace or double, "
+                      "STACK = A + B together play both intervals. ANGER / FRENZY / BUZZ = The Noise's Panic / Chaos / Speed." },
+        { "HIVE",     "Harmonies of whatever reaches it (after SHIFT: of the shifted note). DRONE at PITCH and QUEEN (its octave), TRACKING tight..laggy. "
+                      "VENOM switches it on while held." },
         { "TRAILS",   "Repeats of the DRONE, shaped by STEPS like a pattern tremolo: each bar = one repeat (LEVEL, 0 = silent) and its MOVE "
                       "(= hold, up / down by PITCH, ? random, < backwards). GATE chops every step. FILL = ready-made patterns. TIME / SYNC = step length. "
                       "The VENOM footswitch = self-oscillation; LINK drags SHIFT A / B in." },
-        { "MANGLE",   "Acts on everything HIVE adds: ANGER = sour detuned voices, FRENZY = random pitch jumps, BUZZ = all-pass + ring-mod AM, "
+        { "MANGLE",   "HIVE's own: ANGER = sour detuned voices, FRENZY = random pitch jumps, BUZZ = all-pass + ring-mod AM, "
                       "RAW = cheap-pedal-DSP character, DETUNE = fine offset / width, MIX = dry vs voices (100% = voices only)." },
         { "SWARM",    "Stereo chorus with bucket-brigade colour. DEEP = 8 voices with feedback. MIX 50% = dry and chorus both full, 100% = vibrato." },
         { "SMOKE",    "Jumbo fuzz. VOICE: DOWN doom / MID / UP scream. SCOOP = mid cut, GLARE = gated octave-up, GATE = starved sputter, SAG = breathing "
                       "(the pick sags, the note blooms), BLEND = clean under the fuzz." },
         { "WINGS",    "Rhythmic gate: HARD = stutter, off = tremolo. SYNC locks to the host tempo (DIV)." },
         { "CHAIN",    "The strip under the header is the signal chain. Drag a block to reorder it (fuzz before or after the pitch, reverb into the fuzz...), "
-                      "click it to open its page, click its LED to switch it on / off. Drag it UP / DOWN for parallel paths A / B (an empty path = dry), "
+                      "click it to open its page, click its LED to switch it on / off, right-click for MIDI learn. Drag it UP / DOWN for parallel paths A / B (an empty path = dry), "
                       "the knob at the merge balances A and B. Order and paths are saved with presets." },
         { "EQ",       "COMB = 10-band graphic EQ (+-12 dB) with LEVEL. CARVE = parametric: 24 dB/oct LOW / HIGH CUT, shelves and 3 bells - drag the nodes, "
                       "wheel = Q, double-click = reset; the output spectrum runs behind the curve." },
         { "CRYPT",    "Reverb: ROOM / PLATE / HALL / ABYSS or your own IR (LOAD IR or drop a file). DUCK dips the tail while you play, "
                       "LOW CUT keeps it out of the low end. Switching it off lets the tail ring out." },
-        { "SWITCHES", "MOMENTARY = active while held, LATCH = click on / off. Footswitches work even while bypassed. Right-click a footswitch for MIDI learn." },
+        { "SWITCHES", "MOMENTARY = active while held, LATCH = click on / off. Footswitches work even while bypassed." },
+        { "MIDI",     "Right-click ANY control for MIDI learn: switches toggle on each press, selectors step, knobs follow the CC. "
+                      "One pedal can drive several controls (e.g. ON and WINGS)." },
         { "LEVELS",   "INPUT sets how hard the effects are hit (aim for the green zone of the IN meter); it is compensated at the output. "
                       "VOLUME = output level." },
         { "PRESETS",  "FACTORY / USER tabs pick the bank that the list and the < > arrows browse. SAVE stores your sound in USER "
@@ -949,7 +953,7 @@ void InfoOverlay::paint (juce::Graphics& g)
 
     for (const auto& item : items)
     {
-        auto row = r.removeFromTop (juce::jmin (43.0f, r.getHeight()));
+        auto row = r.removeFromTop (juce::jmin (42.0f, r.getHeight()));
         g.setFont (displayFont (19.0f));
         g.setColour (Colours::accentBright);
         g.drawText (item.title, row.removeFromLeft (120.0f), juce::Justification::topLeft, false);

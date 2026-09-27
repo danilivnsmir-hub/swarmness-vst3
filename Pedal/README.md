@@ -3,7 +3,7 @@
 Педаль SWARMNESS — «деструктивный питч-дилей»:
 
 ```
-IN → INPUT → HIVE (SHIFT на футсвичах + VOICES + TRAILS с шагами STEPS + MANGLE) → SWARM (хорус) → VOLUME → OUT
+IN → INPUT → SHIFT (футсвичи) → HIVE (VOICES + TRAILS с шагами STEPS) → SWARM (хорус) → VOLUME → OUT
 ```
 
 ## Что уже готово
@@ -12,7 +12,7 @@ IN → INPUT → HIVE (SHIFT на футсвичах + VOICES + TRAILS с шаг
 |---|---|
 | `Source/Engine/SwarmnessPedalEngine.h` | движок педали, чистый C++17 без JUCE: `prepare()` → `setParams()` → `process()`; в реальном времени не выделяет память и не блокируется |
 | `Source/DSP/Platform.h` | слой `sw::`: в плагине это JUCE, на педали (`-DSWARM_NO_JUCE`) — свои реализации с тем же поведением |
-| `Source/DSP/HiveBlock.h` | блок HIVE — **один и тот же код** в плагине и в педали |
+| `Source/DSP/ShiftBlock.h`, `Source/DSP/HiveBlock.h` | блоки SHIFT и HIVE — **один и тот же код** в плагине и в педали |
 | `Pedal/bench/` | бенчмарк без JUCE (Linux / macOS / Raspberry Pi) |
 | `Pedal/daisy/bench/` | прошивка-бенчмарк для **Daisy Seed**: гитара → движок → выход + реальная загрузка CPU в USB-консоль |
 
