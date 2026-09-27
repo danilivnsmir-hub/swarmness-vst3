@@ -283,6 +283,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     amp->addChild (knob10 (namDepth, "NAM Depth", 5.0f));
     amp->addChild (knob10 (namOutput, "NAM Output", 5.0f));
 
+    // ------------------------------------------------------------------ WASP
+    auto drv = std::make_unique<Group> ("wasp", "Wasp", "|");
+    drv->addChild (toggle (drvOn, "Wasp On", false));
+    drv->addChild (knob10 (drvVolume, "Wasp Volume", 5.0f));
+    drv->addChild (knob10 (drvDrive, "Wasp Drive", 3.0f));
+    drv->addChild (knob10 (drvBright, "Wasp Bright", 5.0f));
+    drv->addChild (knob10 (drvAttack, "Wasp Attack", 5.0f));
+    drv->addChild (percent (drvGate, "Wasp Gate", 0.0f));
+
     // ------------------------------------------------------------------ CAB
     auto cab = std::make_unique<Group> ("cab", "Cab", "|");
     cab->addChild (toggle (cabOn, "Cab On", false));
@@ -336,6 +345,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     out->addChild (toggle (bypass, "Bypass", false));
 
     layout.add (std::move (hive), std::move (swarm), std::move (fz), std::move (flow),
-                std::move (comb), std::move (carve), std::move (crypt), std::move (amp), std::move (cab), std::move (chain), std::move (out));
+                std::move (comb), std::move (carve), std::move (crypt), std::move (amp), std::move (cab), std::move (drv), std::move (chain), std::move (out));
     return layout;
 }

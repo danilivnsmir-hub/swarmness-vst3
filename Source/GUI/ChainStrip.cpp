@@ -41,6 +41,7 @@ const char* ChainStrip::powerParamFor (int block)
         case Chain::shift: return ParamIDs::shOn;
         case Chain::amp:   return ParamIDs::ampOn;
         case Chain::cab:   return ParamIDs::cabOn;
+        case Chain::drive: return ParamIDs::drvOn;
         default:           return nullptr;
     }
 }

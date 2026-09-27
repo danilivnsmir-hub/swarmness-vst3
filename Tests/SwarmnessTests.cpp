@@ -1138,11 +1138,11 @@ namespace
             for (int b = 0; b < Chain::numBlocks; ++b)
                 slots[(size_t) b] = (float) Chain::defaultSlots[b];
             const auto def = Chain::orderFromSlots (slots);
-            check (def[0] == Chain::smoke && def[1] == Chain::shift && def[2] == Chain::pitch && def[3] == Chain::amp
-                   && def[4] == Chain::cab && def[5] == Chain::swarm && def[9] == Chain::crypt, "default order: SMOKE, SHIFT, HIVE, AMP, CAB, SWARM, ..., CRYPT");
+            check (def[0] == Chain::smoke && def[1] == Chain::shift && def[2] == Chain::pitch && def[3] == Chain::drive && def[4] == Chain::amp
+                   && def[5] == Chain::cab && def[6] == Chain::swarm && def[10] == Chain::crypt, "default order: SMOKE, SHIFT, HIVE, WASP, AMP, CAB, SWARM, ..., CRYPT");
             slots.fill (0.0f);   // all tied -> default order
             check (Chain::orderFromSlots (slots) == def, "tied slots fall back to the default order");
-            Chain::Order custom { Chain::crypt, Chain::comb, Chain::cab, Chain::pitch, Chain::shift, Chain::wings, Chain::smoke, Chain::amp, Chain::carve, Chain::swarm };
+            Chain::Order custom { Chain::crypt, Chain::comb, Chain::cab, Chain::pitch, Chain::shift, Chain::wings, Chain::smoke, Chain::amp, Chain::carve, Chain::swarm, Chain::drive };
             check (Chain::orderFromSlots (Chain::slotsForOrder (custom)) == custom, "slots <-> order round trip");
         }
 
@@ -1243,23 +1243,23 @@ namespace
     {
         std::printf ("\nParallel paths (split -> A || B -> merge)\n");
         {
-            Chain::Layout l { { Chain::smoke, Chain::shift, Chain::pitch, Chain::swarm, Chain::crypt, Chain::wings, Chain::comb, Chain::carve, Chain::amp, Chain::cab }, {} };
+            Chain::Layout l { { Chain::smoke, Chain::shift, Chain::pitch, Chain::swarm, Chain::crypt, Chain::wings, Chain::comb, Chain::carve, Chain::drive, Chain::amp, Chain::cab }, {} };
             l.lanes[Chain::swarm] = Chain::pathA;
             l.lanes[Chain::crypt] = Chain::pathB;
             const auto plan = Chain::planFor (l);
             const auto& split = plan.stages[3];
-            check (plan.numStages == 9 && plan.numSplits == 1 && split.parallel && split.numA == 1 && split.numB == 1
+            check (plan.numStages == 10 && plan.numSplits == 1 && split.parallel && split.numA == 1 && split.numB == 1
                    && split.a[0] == Chain::swarm && split.b[0] == Chain::crypt && plan.stages[4].block == Chain::wings,
                    "plan: SMOKE, SHIFT, HIVE -> [SWARM || CRYPT] -> WINGS, COMB, CARVE");
 
-            // two splits with series blocks between: [SMOKE, SHIFT || HIVE] -> AMP -> CAB -> SWARM -> [WINGS || COMB] -> CARVE -> CRYPT
+            // two splits with series blocks between: [SMOKE, SHIFT || HIVE] -> WASP -> AMP -> CAB -> SWARM -> [WINGS || COMB] -> CARVE -> CRYPT
             Chain::Layout two { Chain::defaultOrder(), {} };
             two.lanes[Chain::smoke] = Chain::pathA;  two.lanes[Chain::shift] = Chain::pathA;  two.lanes[Chain::pitch] = Chain::pathB;
             two.lanes[Chain::wings] = Chain::pathA;  two.lanes[Chain::comb]  = Chain::pathB;
             const auto p2 = Chain::planFor (two);
-            check (p2.numSplits == 2 && p2.numStages == 7 && p2.stages[0].parallel && p2.stages[0].split == 0
-                   && p2.stages[1].block == Chain::amp && p2.stages[3].block == Chain::swarm && p2.stages[4].parallel && p2.stages[4].split == 1
-                   && p2.stages[4].a[0] == Chain::wings && p2.stages[4].b[0] == Chain::comb,
+            check (p2.numSplits == 2 && p2.numStages == 8 && p2.stages[0].parallel && p2.stages[0].split == 0
+                   && p2.stages[1].block == Chain::drive && p2.stages[2].block == Chain::amp && p2.stages[4].block == Chain::swarm
+                   && p2.stages[5].parallel && p2.stages[5].split == 1 && p2.stages[5].a[0] == Chain::wings && p2.stages[5].b[0] == Chain::comb,
                    "two splits separated by a series block, each with its own MIX");
         }
 
@@ -2299,6 +2299,141 @@ namespace
             PresetManager::ValueMap v { { Chain::slotIds[Chain::pitch], 50.0f } };
             PresetManager::migrateLegacyValues (v);
             check (v[Chain::slotIds[Chain::amp]] == 53.0f && v[Chain::slotIds[Chain::cab]] == 56.0f, "older presets: AMP and CAB follow HIVE");
+            check (v[Chain::slotIds[Chain::drive]] == 53.0f, "older presets: WASP sits right in front of the AMP");
+            PresetManager::ValueMap w { { Chain::slotIds[Chain::amp], 80.0f }, { Chain::laneIds[Chain::amp], 2.0f } };
+            PresetManager::migrateLegacyValues (w);
+            check (w[Chain::slotIds[Chain::drive]] == 80.0f && w[Chain::laneIds[Chain::drive]] == 2.0f, "v3.1 betas: WASP joins the AMP's slot and lane");
+            std::array<float, Chain::numBlocks> slots {};
+            for (int b = 0; b < Chain::numBlocks; ++b)
+                slots[(size_t) b] = (float) Chain::defaultSlots[b];
+            slots[Chain::amp] = slots[Chain::drive] = 80.0f;
+            const auto order = Chain::orderFromSlots (slots);
+            const auto at = [&] (int b) { return std::find (order.begin(), order.end(), b) - order.begin(); };
+            check (at (Chain::drive) + 1 == at (Chain::amp), "same slot: WASP sorts right before the AMP");
+        }
+    }
+
+    juce::AudioBuffer<float> renderWasp (const DriveBlock::Settings& s, const juce::AudioBuffer<float>& input, double sr = 48000.0)
+    {
+        DriveBlock d;
+        d.prepare (sr, 256);
+        d.setParams (s);
+        d.reset();
+        juce::AudioBuffer<float> out (input);
+        for (int start = 0; start < out.getNumSamples(); start += 256)
+        {
+            const int n = juce::jmin (256, out.getNumSamples() - start);
+            float* ptr[2] { out.getWritePointer (0, start), out.getWritePointer (1, start) };
+            d.process (ptr, 2, n);
+        }
+        return out;
+    }
+
+    void testWasp()
+    {
+        std::printf ("\nWASP: overdrive (TS-style clipper, ATTACK, BRIGHT, GATE)\n");
+        const double sr = 48000.0;
+        auto guitar = makeGuitar (sr, 48000);
+        {
+            DriveBlock::Settings s;
+            auto out = renderWasp (s, guitar);
+            check (nullDb (out, guitar, 0, 0, guitar.getNumSamples()) < -200.0, "off: bit-transparent");
+        }
+        DriveBlock::Settings s;
+        s.on = true;
+        const double inDb = juce::Decibels::gainToDecibels (guitar.getRMSLevel (0, 9600, 38400));
+        for (float drive : { 0.0f, 0.3f, 0.6f, 1.0f })
+        {
+            auto t = s; t.drive = drive;
+            auto out = renderWasp (t, guitar);
+            const double db = juce::Decibels::gainToDecibels (out.getRMSLevel (0, 9600, 38400)) - inDb;
+            check (allFinite (out) && std::abs (db) < 6.0, juce::String::formatted ("DRIVE %.0f, VOLUME 5: %+.1f dB vs the input", drive * 10.0f, db));
+        }
+        auto third = [&] (DriveBlock::Settings t, double hz, float amp)
+        {
+            auto out = renderWasp (t, makeSine (sr, 24000, hz, amp));
+            return toneDb (out, sr, hz * 3.0, 12000, 9600) - toneDb (out, sr, hz, 12000, 9600);
+        };
+        {
+            auto lo = s, hi = s; lo.drive = 0.0f; hi.drive = 1.0f;
+            const double a = third (lo, 220.0, 0.1f), b = third (hi, 220.0, 0.1f);
+            check (b > a + 15.0 && b > -20.0, juce::String::formatted ("3rd harmonic: DRIVE 0 %.1f dB, DRIVE 10 %.1f dB", a, b));
+        }
+        auto toneAt = [&] (DriveBlock::Settings t, double hz)
+        {
+            auto out = renderWasp (t, makeSine (sr, 24000, hz, 0.01f));
+            return toneDb (out, sr, hz, 12000, 9600);
+        };
+        {
+            auto loose = s, tight = s; loose.attack = 0.0f; tight.attack = 1.0f;
+            const double l = toneAt (loose, 80.0) - toneAt (loose, 1000.0), t = toneAt (tight, 80.0) - toneAt (tight, 1000.0);
+            check (t < l - 15.0, juce::String::formatted ("ATTACK tightens the lows: 80 Hz vs 1 kHz %.1f dB -> %.1f dB", l, t));
+            const double model = DriveBlock::responseDb (tight, 80.0) - DriveBlock::responseDb (tight, 1000.0);
+            check (std::abs (model - t) < 1.5, juce::String::formatted ("the editor's response matches the audio (%.1f vs %.1f dB)", model, t));
+        }
+        {
+            auto dark = s, bright = s; dark.bright = 0.0f; bright.bright = 1.0f;
+            const double d = toneAt (dark, 4000.0) - toneAt (dark, 500.0), b = toneAt (bright, 4000.0) - toneAt (bright, 500.0);
+            check (b > d + 12.0, juce::String::formatted ("BRIGHT: 4 kHz vs 500 Hz %.1f dB -> %.1f dB", d, b));
+        }
+        {
+            auto quiet = s, loud = s; quiet.volume = 0.25f; loud.volume = 0.75f;
+            const double q = toneAt (quiet, 1000.0), l = toneAt (loud, 1000.0);
+            check (std::abs ((l - q) - (DriveBlock::volumeDb (0.75f) - DriveBlock::volumeDb (0.25f))) < 0.5,
+                   juce::String::formatted ("VOLUME 2.5 -> 7.5: %+.1f dB", l - q));
+        }
+        {
+            // GATE: the hiss after a note is gone, the note itself is not
+            juce::AudioBuffer<float> in (2, 48000);
+            juce::Random rng (3);
+            for (int i = 0; i < in.getNumSamples(); ++i)
+            {
+                const float note = i < 12000 ? 0.3f * std::sin (2.0f * juce::MathConstants<float>::pi * 110.0f * (float) i / 48000.0f) : 0.0f;
+                const float v = note + 0.0006f * (rng.nextFloat() * 2.0f - 1.0f);
+                in.setSample (0, i, v); in.setSample (1, i, v);
+            }
+            auto open = s, gated = s; open.drive = 0.8f; gated.drive = 0.8f; gated.gate = 0.5f;
+            auto a = renderWasp (open, in), b = renderWasp (gated, in);
+            const double tailOpen = juce::Decibels::gainToDecibels (a.getRMSLevel (0, 30000, 16000) + 1.0e-9f);
+            const double tailGated = juce::Decibels::gainToDecibels (b.getRMSLevel (0, 30000, 16000) + 1.0e-9f);
+            const double noteDiff = juce::Decibels::gainToDecibels (b.getRMSLevel (0, 2000, 8000) / a.getRMSLevel (0, 2000, 8000));
+            check (tailGated < tailOpen - 30.0 && std::abs (noteDiff) < 0.5,
+                   juce::String::formatted ("GATE: hiss %.1f -> %.1f dB, the note %+.2f dB", tailOpen, tailGated, noteDiff));
+        }
+        for (double rate : { 44100.0, 96000.0, 192000.0 })
+        {
+            auto t = s; t.drive = 1.0f; t.volume = 1.0f; t.bright = 1.0f;
+            auto hot = makeGuitar (rate, (int) rate);
+            hot.applyGain (4.0f);
+            auto out = renderWasp (t, hot, rate);
+            check (allFinite (out) && out.getMagnitude (0, out.getNumSamples()) < 12.0f,
+                   juce::String::formatted ("%.1f kHz, everything up, hot input: bounded (peak %.2f)", rate / 1000.0, out.getMagnitude (0, out.getNumSamples())));
+        }
+        {
+            // through the processor: WASP in front of the AMP
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            setParam (p, ParamIDs::drvOn, 1.0f);
+            setParam (p, ParamIDs::drvDrive, 6.0f);
+            setParam (p, ParamIDs::ampOn, 1.0f);
+            auto out = render (p, guitar, sr, 256);
+            check (allFinite (out) && out.getRMSLevel (0, 9600, 38400) > 0.001f, "processor: WASP -> AMP plays");
+        }
+        {
+            DriveBlock d;
+            d.prepare (48000.0, 256);
+            DriveBlock::Settings t = s; t.drive = 0.7f;
+            d.setParams (t);
+            auto buf = makeGuitar (48000.0, 256 * 400);
+            const auto t0 = juce::Time::getHighResolutionTicks();
+            for (int start = 0; start < buf.getNumSamples(); start += 256)
+            {
+                float* ptr[2] { buf.getWritePointer (0, start), buf.getWritePointer (1, start) };
+                d.process (ptr, 2, 256);
+            }
+            const double secs = juce::Time::highResolutionTicksToSeconds (juce::Time::getHighResolutionTicks() - t0);
+            const double load = 100.0 * secs / (buf.getNumSamples() / 48000.0);
+            check (load < 5.0, juce::String::formatted ("WASP stereo at 48 kHz: %.1f%% of one core", load));
         }
     }
 
@@ -2808,6 +2943,7 @@ int main (int argc, char** argv)
         if (which == "reverb")  { testReverb(); testBadImpulseResponses(); }
         if (which == "amp")     testAmp();
         if (which == "cab")     testCab();
+        if (which == "wasp")    testWasp();
         std::printf ("\n%s (%d failure%s)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures, failures == 1 ? "" : "s");
         return failures == 0 ? 0 : 1;
     }
@@ -2850,6 +2986,7 @@ int main (int argc, char** argv)
     testBadImpulseResponses();
     testAmp();
     testCab();
+    testWasp();
     testPerformance();
 
     std::printf ("\n%s (%d failure%s)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures, failures == 1 ? "" : "s");

@@ -1298,3 +1298,136 @@ void AmpCabSection::choose (bool nam)
                               else     safe->loadCabIr (fc.getResult());
                           });
 }
+
+//==============================================================================
+WaspSection::WaspSection (juce::AudioProcessorValueTreeState& s) : state (s)
+{
+    using namespace ParamIDs;
+    setBufferedToImage (true);
+    addAndMakeVisible (power);
+    power.setTooltip ("WASP on / off");
+    MidiLearnable::tag (power, drvOn);
+    powerAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (state, drvOn, power);
+
+    volumeKnob.attach (state, drvVolume, "VOLUME: output level - 5 is about unity at a medium DRIVE; crank it to slam the amp's input");
+    driveKnob .attach (state, drvDrive,  "DRIVE: from a clean boost to a thick, compressed overdrive (two silicon diodes in the op-amp feedback)");
+    brightKnob.attach (state, drvBright, "BRIGHT: output voicing - darker and smoother down, more bite and pick attack up");
+    attackKnob.attach (state, drvAttack, "ATTACK: tightens the low end in front of the clipping - up for chugs that stay tight on a high-gain amp, down for a full-range boost");
+    gateKnob  .attach (state, drvGate,   "GATE: noise gate keyed from your guitar (0 = off) - silences the hiss of the drive and the amp behind it");
+    for (auto* k : { &volumeKnob, &driveKnob, &brightKnob, &attackKnob, &gateKnob })
+        addAndMakeVisible (k);
+}
+
+DriveBlock::Settings WaspSection::current() const
+{
+    auto get = [this] (const char* id) { return state.getRawParameterValue (id)->load(); };
+    DriveBlock::Settings s;
+    s.on = get (ParamIDs::drvOn) > 0.5f;
+    s.volume = get (ParamIDs::drvVolume) * 0.1f;
+    s.drive = get (ParamIDs::drvDrive) * 0.1f;
+    s.bright = get (ParamIDs::drvBright) * 0.1f;
+    s.attack = get (ParamIDs::drvAttack) * 0.1f;
+    s.gate = get (ParamIDs::drvGate) * 0.01f;
+    return s;
+}
+
+void WaspSection::resized()
+{
+    panelArea = getLocalBounds().toFloat();
+    power.setBounds ((int) panelArea.getRight() - 40, 8, 26, 26);
+    const float knobsW = 470.0f;
+    {
+        const std::initializer_list<Knob*> row { &driveKnob, &volumeKnob, &brightKnob, &attackKnob, &gateKnob };
+        const float step = (knobsW - 20.0f) / (float) row.size();
+        int i = 0;
+        for (auto* k : row)
+            k->setBounds ((int) (10.0f + step * ((float) i++ + 0.5f)) - 36, 58, 72, 104);
+    }
+    auto displays = juce::Rectangle<float> (knobsW + 10.0f, 44.0f, panelArea.getWidth() - knobsW - 26.0f, panelArea.getHeight() - 56.0f);
+    clipArea = displays.removeFromRight (displays.getHeight() * 1.25f);
+    displays.removeFromRight (12.0f);
+    responseArea = displays;
+}
+
+void WaspSection::paint (juce::Graphics& g)
+{
+    const auto s = current();
+    drawPanel (g, panelArea);
+    drawPanelTitle (g, panelArea, "WASP", "tight overdrive  -  in front of the AMP it tightens and pushes it, on its own it is a TS-style drive", s.on);
+
+    const auto curveColour = Colours::accent.withAlpha (s.on ? 0.95f : 0.4f);
+    for (auto a : { responseArea, clipArea })
+    {
+        g.setColour (Colours::inset);
+        g.fillRoundedRectangle (a, 5.0f);
+        g.setColour (Colours::panelBorder);
+        g.drawRoundedRectangle (a, 5.0f, 1.0f);
+    }
+    g.setFont (font (11.5f, true));
+    g.setColour (Colours::textFaint);
+
+    // frequency response (small signal), 30 Hz .. 12 kHz, -30 .. +30 dB
+    {
+        const auto a = responseArea.reduced (6.0f, 8.0f);
+        auto xFor = [a] (double hz) { return a.getX() + a.getWidth() * (float) (std::log (hz / 30.0) / std::log (12000.0 / 30.0)); };
+        auto yFor = [a] (float db) { return a.getY() + a.getHeight() * (30.0f - juce::jlimit (-30.0f, 30.0f, db)) / 60.0f; };
+        g.setColour (Colours::panelBorder.withAlpha (0.6f));
+        for (double hz : { 100.0, 1000.0, 10000.0 })
+            g.fillRect (juce::Rectangle<float> (xFor (hz), a.getY(), 1.0f, a.getHeight()));
+        g.fillRect (juce::Rectangle<float> (a.getX(), yFor (0.0f), a.getWidth(), 1.0f));
+        juce::Path p;
+        for (int i = 0; i <= 90; ++i)
+        {
+            const double hz = 30.0 * std::pow (12000.0 / 30.0, i / 90.0);
+            const float x = xFor (hz), y = yFor (DriveBlock::responseDb (s, hz) + DriveBlock::volumeDb (s.volume));
+            if (i == 0) p.startNewSubPath (x, y); else p.lineTo (x, y);
+        }
+        g.setColour (curveColour);
+        g.strokePath (p, juce::PathStrokeType (1.8f));
+        g.setColour (Colours::textFaint);
+        g.drawText ("100", juce::Rectangle<float> (xFor (100.0) + 3.0f, a.getBottom() - 14.0f, 30.0f, 14.0f), juce::Justification::centredLeft, false);
+        g.drawText ("1k", juce::Rectangle<float> (xFor (1000.0) + 3.0f, a.getBottom() - 14.0f, 30.0f, 14.0f), juce::Justification::centredLeft, false);
+        g.drawText ("10k", juce::Rectangle<float> (xFor (10000.0) + 3.0f, a.getBottom() - 14.0f, 30.0f, 14.0f), juce::Justification::centredLeft, false);
+        g.drawText ("RESPONSE", a.withHeight (14.0f), juce::Justification::topLeft, false);
+    }
+
+    // clipping curve: output vs input volts (+-1.5 V in), the dry line for reference
+    {
+        const auto a = clipArea.reduced (8.0f, 8.0f);
+        const float range = 1.5f, outRange = 3.2f;
+        auto xFor = [a, range] (float v) { return a.getCentreX() + a.getWidth() * 0.5f * v / range; };
+        auto yFor = [a, outRange] (float v) { return a.getCentreY() - a.getHeight() * 0.5f * juce::jlimit (-outRange, outRange, v) / outRange; };
+        g.setColour (Colours::panelBorder.withAlpha (0.6f));
+        g.fillRect (juce::Rectangle<float> (a.getCentreX(), a.getY(), 1.0f, a.getHeight()));
+        g.fillRect (juce::Rectangle<float> (a.getX(), a.getCentreY(), a.getWidth(), 1.0f));
+        juce::Path dry, p;
+        dry.startNewSubPath (xFor (-range), yFor (-range));
+        dry.lineTo (xFor (range), yFor (range));
+        g.strokePath (dry, juce::PathStrokeType (1.0f));
+        for (int i = 0; i <= 80; ++i)
+        {
+            const float v = -range + 2.0f * range * (float) i / 80.0f;
+            const float x = xFor (v), y = yFor (DriveBlock::transferVolts (s.drive, v));
+            if (i == 0) p.startNewSubPath (x, y); else p.lineTo (x, y);
+        }
+        g.setColour (curveColour);
+        g.strokePath (p, juce::PathStrokeType (1.8f));
+        g.setColour (Colours::textFaint);
+        g.drawText ("CLIPPING", a.withHeight (14.0f), juce::Justification::topLeft, false);
+    }
+}
+
+void WaspSection::tick()
+{
+    const auto s = current();
+    if (! shownValid || s.on != shown.on || s.volume != shown.volume || s.drive != shown.drive || s.bright != shown.bright
+        || s.attack != shown.attack)
+    {
+        shown = s;
+        shownValid = true;
+        for (auto* k : { &volumeKnob, &driveKnob, &brightKnob, &attackKnob, &gateKnob })
+            k->setAlpha (s.on ? 1.0f : 0.38f);
+        repaint();
+    }
+}
+

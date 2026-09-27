@@ -25,7 +25,7 @@ public:
     void resized() override;
     void tick();   // called by the editor's timer
 
-    enum Page { fxPageIndex = 0, eqPageIndex, spacePageIndex, pitchPageIndex, numPages };
+    enum Page { fxPageIndex = 0, eqPageIndex, spacePageIndex, pitchPageIndex, rigPageIndex, numPages };
     void showPage (int page);
     static int pageForBlock (int block);
 
@@ -65,10 +65,11 @@ private:
 
     // Chain + pages (the FX page holds the original sections; EQ and CRYPT have their own components)
     ChainStrip chainStrip;
-    juce::Component fxPage, pitchPage;   // FX = SMOKE / SWARM / WINGS, PITCH = HIVE + SHIFT
+    juce::Component fxPage, pitchPage, rigPage;   // FX = SMOKE / SWARM / WINGS, PITCH = HIVE + SHIFT, RIG = WASP + AMP + CAB
     EqPage eqPage;
     ReverbPage reverbPage;
-    AmpCabSection ampCab;   // on the FX page, under SMOKE / SWARM / WINGS
+    WaspSection wasp;       // RIG page: the overdrive on top,
+    AmpCabSection ampCab;   // AMP + CAB under it
     int currentPage = fxPageIndex;
 
     // Header

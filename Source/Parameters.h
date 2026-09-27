@@ -162,6 +162,14 @@ namespace ParamIDs
     inline constexpr const char* namDepth    = "namDepth";
     inline constexpr const char* namOutput   = "namOutput";
 
+    // WASP (tight overdrive / boost, usually in front of the AMP)
+    inline constexpr const char* drvOn       = "drvOn";
+    inline constexpr const char* drvVolume   = "drvVolume";
+    inline constexpr const char* drvDrive    = "drvDrive";
+    inline constexpr const char* drvBright   = "drvBright";
+    inline constexpr const char* drvAttack   = "drvAttack";
+    inline constexpr const char* drvGate     = "drvGate";
+
     // CAB (modelled cabinets or a loaded IR)
     inline constexpr const char* cabOn       = "cabOn";
     inline constexpr const char* cabType     = "cabType";
@@ -255,19 +263,20 @@ namespace Chain
 {
     // (pitch = HIVE; SHIFT was split off in beta.25 and sits right before HIVE by default)
     // (AMP and CAB came in v3.1, between HIVE and SWARM - where an amp sits on a pedalboard)
-    enum Block : int { pitch = 0, smoke, swarm, wings, comb, carve, crypt, shift, amp, cab, numBlocks };
+    // (WASP, the overdrive, came in v3.1 too, right in front of the AMP)
+    enum Block : int { pitch = 0, smoke, swarm, wings, comb, carve, crypt, shift, amp, cab, drive, numBlocks };
 
     inline constexpr const char* slotIds[numBlocks] { "chainPitch", "chainSmoke", "chainSwarm", "chainWings",
                                                       "chainComb", "chainCarve", "chainCrypt", "chainShift",
-                                                      "chainAmp", "chainCab" };
-    // SMOKE, SHIFT, HIVE, AMP, CAB, SWARM, WINGS, COMB, CARVE, CRYPT
-    inline constexpr int defaultSlots[numBlocks] { 20, 10, 30, 40, 50, 60, 70, 15, 23, 26 };
+                                                      "chainAmp", "chainCab", "chainDrive" };
+    // SMOKE, SHIFT, HIVE, WASP, AMP, CAB, SWARM, WINGS, COMB, CARVE, CRYPT
+    inline constexpr int defaultSlots[numBlocks] { 20, 10, 30, 40, 50, 60, 70, 15, 23, 26, 22 };
     inline constexpr int slotMax = 99;
     inline constexpr int legacyPostSmokeSlot = 35;   // old "SMOKE POST" = after SWARM, before WINGS
 
-    inline constexpr const char* names[numBlocks]     { "HIVE", "SMOKE", "SWARM", "WINGS", "COMB", "CARVE", "CRYPT", "SHIFT", "AMP", "CAB" };
+    inline constexpr const char* names[numBlocks]     { "HIVE", "SMOKE", "SWARM", "WINGS", "COMB", "CARVE", "CRYPT", "SHIFT", "AMP", "CAB", "WASP" };
     inline constexpr const char* subtitles[numBlocks] { "HARMONIES", "FUZZ", "CHORUS", "TREMOLO", "GRAPHIC EQ", "PARAM EQ", "REVERB", "PITCH SHIFT",
-                                                        "AMPLIFIER", "CABINET" };
+                                                        "AMPLIFIER", "CABINET", "OVERDRIVE" };
 
     using Order = std::array<int, numBlocks>;
 
@@ -289,7 +298,7 @@ namespace Chain
     enum Lane : int { series = 0, pathA, pathB };
     inline constexpr const char* laneIds[numBlocks] { "lanePitch", "laneSmoke", "laneSwarm", "laneWings",
                                                       "laneComb", "laneCarve", "laneCrypt", "laneShift",
-                                                      "laneAmp", "laneCab" };
+                                                      "laneAmp", "laneCab", "laneDrive" };
     /** A / B balance of each split, numbered left to right (a fifth split shares the fourth's mix). */
     inline constexpr int maxSplits = 4;
     inline constexpr const char* parallelMixIds[maxSplits] { "chainParMix", "chainParMix2", "chainParMix3", "chainParMix4" };

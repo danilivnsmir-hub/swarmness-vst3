@@ -512,6 +512,13 @@ void PresetManager::migrateLegacyValues (ValueMap& values)
         values[Chain::slotIds[Chain::cab]] = juce::jmin ((float) Chain::slotMax, hiveSlot + 6.0f);
     }
 
+    // v3.1: WASP (overdrive) joins right in front of the AMP (same slot: WASP sorts first), same lane
+    if (! has (Chain::slotIds[Chain::drive]) && has (Chain::slotIds[Chain::amp]))
+    {
+        values[Chain::slotIds[Chain::drive]] = get (Chain::slotIds[Chain::amp], (float) Chain::defaultSlots[Chain::amp]);
+        values[Chain::laneIds[Chain::drive]] = get (Chain::laneIds[Chain::amp], 0.0f);
+    }
+
     // Beta.25-27: HIVE's ANGER / FRENZY / BUZZ -> the single MANGLE knob
     if (has (hvAngerLegacy) || has (hvFrenzyLegacy) || has (hvBuzzLegacy))
     {

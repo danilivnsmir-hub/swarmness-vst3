@@ -19,6 +19,7 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
       chainStrip (p.getAPVTS()),
       eqPage (p),
       reverbPage (p),
+      wasp (p.getAPVTS()),
       ampCab (p),
       presetBar (p.getPresetManager()),
       switchModeSelector (param (state, ParamIDs::switchMode), { "MOMENTARY", "LATCH" }),
@@ -43,6 +44,8 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     // Pages
     fxPage.setInterceptsMouseClicks (false, true);
     addAndMakeVisible (fxPage);
+    rigPage.setInterceptsMouseClicks (false, true);
+    addChildComponent (rigPage);
     addChildComponent (eqPage);
     addChildComponent (reverbPage);
 
@@ -180,7 +183,8 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     fxPage.addAndMakeVisible (flowAmountKnob);
     fxPage.addAndMakeVisible (flowSpeedKnob);
     fxPage.addChildComponent (flowDivKnob);
-    fxPage.addAndMakeVisible (ampCab);
+    rigPage.addAndMakeVisible (wasp);
+    rigPage.addAndMakeVisible (ampCab);
 
     // OUTPUT
     inputKnob .attach (state, input,  "INPUT: input gain - how hard everything is hit (SMOKE, AMP, tracking) and louder. Aim for peaks in the green zone of the IN meter");
@@ -229,6 +233,9 @@ int MainPanel::pageForBlock (int block)
         case Chain::crypt: return spacePageIndex;
         case Chain::shift:
         case Chain::pitch: return pitchPageIndex;
+        case Chain::drive:
+        case Chain::amp:
+        case Chain::cab:   return rigPageIndex;
         default:           return fxPageIndex;
     }
 }
@@ -251,6 +258,7 @@ void MainPanel::showPage (int page)
     processor.setUiPage (currentPage);
     fxPage.setVisible (! mini && currentPage == fxPageIndex);
     pitchPage.setVisible (! mini && currentPage == pitchPageIndex);
+    rigPage.setVisible (! mini && currentPage == rigPageIndex);
     eqPage.setVisible (! mini && currentPage == eqPageIndex);
     reverbPage.setVisible (! mini && currentPage == spacePageIndex);
     miniButton.setToggleState (mini, juce::dontSendNotification);
@@ -298,11 +306,12 @@ void MainPanel::resized()
 
     fxPage.setBounds (getLocalBounds());
     pitchPage.setBounds (getLocalBounds());
+    rigPage.setBounds (getLocalBounds());
 
-    // FX page: SMOKE, SWARM, WINGS side by side (room below for more blocks)
-    fuzzArea   = { 16.0f,  144.0f, 540.0f, 200.0f };
-    swarmArea  = { 568.0f, 144.0f, 246.0f, 200.0f };
-    flowArea   = { 826.0f, 144.0f, (float) baseWidth - 16.0f - 826.0f, 200.0f };
+    // FX page: SMOKE across the top, SWARM and WINGS under it
+    fuzzArea   = { 16.0f,  144.0f, (float) baseWidth - 32.0f, 226.0f };
+    swarmArea  = { 16.0f,  382.0f, 528.0f, 226.0f };
+    flowArea   = { 556.0f, 382.0f, (float) baseWidth - 16.0f - 556.0f, 226.0f };
     // PITCH page: HIVE on top, SHIFT below
     hiveArea   = { 16.0f, 144.0f, (float) baseWidth - 32.0f, 262.0f };
     shiftArea  = { 16.0f, 418.0f, (float) baseWidth - 32.0f, 190.0f };
@@ -381,12 +390,12 @@ void MainPanel::resized()
 
     auto threeKnobs = [] (juce::Rectangle<float> a, std::initializer_list<Knob*> knobs)
     {
-        const int kw = knobs.size() > 6 ? 64 : (knobs.size() > 3 ? 70 : 72), y = (int) a.getY() + 58;
+        const int kw = 88, kh = 124, y = (int) a.getY() + 40 + ((int) a.getHeight() - 40 - kh) / 2;
         const int gap = ((int) a.getWidth() - kw * (int) knobs.size()) / ((int) knobs.size() + 1);
         int x = (int) a.getX() + gap;
         for (auto* k : knobs)
         {
-            k->setBounds (x, y, kw, 104);
+            k->setBounds (x, y, kw, kh);
             x += kw + gap;
         }
     };
@@ -408,7 +417,8 @@ void MainPanel::resized()
     threeKnobs (flowArea, { &flowAmountKnob, &flowSpeedKnob });
     flowDivKnob.setBounds (flowSpeedKnob.getBounds());
 
-    // AMP + CAB under the row
+    // RIG page: WASP on top, AMP + CAB under it
+    wasp.setBounds (16, 144, baseWidth - 32, 200);
     ampCab.setBounds (16, 356, baseWidth - 32, 252);
 
 
@@ -600,8 +610,11 @@ void MainPanel::tick()
     chainStrip.refresh();
     eqPage.tick();
     reverbPage.tick();
-    if (fxPage.isVisible())
+    if (rigPage.isVisible())
+    {
+        wasp.tick();
         ampCab.tick();
+    }
 
     // MIDI learn: the control waiting for a message pulses
     const auto learning = processor.getMidiLearnParam();

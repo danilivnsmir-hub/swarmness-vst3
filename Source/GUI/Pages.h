@@ -230,3 +230,31 @@ private:
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AmpCabSection)
 };
+
+//==============================================================================
+/**
+ * WASP (overdrive): VOLUME / DRIVE / BRIGHT / ATTACK / GATE, with the pedal's frequency response
+ * and its clipping curve drawn live.
+ */
+class WaspSection : public juce::Component
+{
+public:
+    explicit WaspSection (juce::AudioProcessorValueTreeState&);
+
+    void paint (juce::Graphics&) override;
+    void resized() override;
+    void tick();
+
+private:
+    DriveBlock::Settings current() const;
+
+    juce::AudioProcessorValueTreeState& state;
+    juce::Rectangle<float> panelArea, responseArea, clipArea;
+    PowerButton power;
+    Knob volumeKnob { "VOLUME" }, driveKnob { "DRIVE" }, brightKnob { "BRIGHT" }, attackKnob { "ATTACK" }, gateKnob { "GATE" };
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> powerAttachment;
+    DriveBlock::Settings shown;
+    bool shownValid = false;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WaspSection)
+};

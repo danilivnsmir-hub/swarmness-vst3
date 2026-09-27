@@ -11,6 +11,7 @@
 #include "DSP/ReverbStage.h"
 #include "DSP/AmpBlock.h"
 #include "DSP/CabBlock.h"
+#include "DSP/DriveBlock.h"
 #include "DSP/SpectrumTap.h"
 #include "Preset/PresetManager.h"
 #include "Amp/Tone3000.h"
@@ -227,6 +228,8 @@ private:
         std::atomic<float>* ampDepth {};   std::atomic<float>* ampMaster {};   std::atomic<float>* ampGate {};     std::atomic<float>* ampLevel {};
         std::atomic<float>* namInput {};   std::atomic<float>* namBass {};     std::atomic<float>* namMid {};      std::atomic<float>* namTreble {};
         std::atomic<float>* namPresence {}; std::atomic<float>* namDepth {};   std::atomic<float>* namOutput {};
+        std::atomic<float>* drvOn {};      std::atomic<float>* drvVolume {};   std::atomic<float>* drvDrive {};    std::atomic<float>* drvBright {};
+        std::atomic<float>* drvAttack {};  std::atomic<float>* drvGate {};
         std::atomic<float>* cabOn {};      std::atomic<float>* cabType {};     std::atomic<float>* cabMic {};      std::atomic<float>* cabDist {};
         std::atomic<float>* cabLowCut {};  std::atomic<float>* cabHighCut {};  std::atomic<float>* cabLevel {};
         std::array<std::atomic<float>*, Chain::numBlocks> chainSlots {}, chainLanes {};
@@ -260,6 +263,7 @@ private:
     ReverbStage        crypt;
     AmpBlock           amp;
     CabBlock           cab;
+    DriveBlock         wasp;
 
     Chain::Layout activeLayout { Chain::defaultOrder(), {} };
     juce::SmoothedValue<float> chainFade;   // dips the chain output while the order / routing changes

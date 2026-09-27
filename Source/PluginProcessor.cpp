@@ -71,6 +71,8 @@ SwarmnessAudioProcessor::SwarmnessAudioProcessor()
     p.ampDepth = get (id::ampDepth);     p.ampMaster = get (id::ampMaster);     p.ampGate = get (id::ampGate);       p.ampLevel = get (id::ampLevel);
     p.namInput = get (id::namInput);     p.namBass = get (id::namBass);         p.namMid = get (id::namMid);         p.namTreble = get (id::namTreble);
     p.namPresence = get (id::namPresence); p.namDepth = get (id::namDepth);     p.namOutput = get (id::namOutput);
+    p.drvOn = get (id::drvOn);           p.drvVolume = get (id::drvVolume);     p.drvDrive = get (id::drvDrive);     p.drvBright = get (id::drvBright);
+    p.drvAttack = get (id::drvAttack);   p.drvGate = get (id::drvGate);
     p.cabOn = get (id::cabOn);           p.cabType = get (id::cabType);         p.cabMic = get (id::cabMic);         p.cabDist = get (id::cabDist);
     p.cabLowCut = get (id::cabLowCut);   p.cabHighCut = get (id::cabHighCut);   p.cabLevel = get (id::cabLevel);
     for (int b = 0; b < Chain::numBlocks; ++b)
@@ -168,6 +170,7 @@ void SwarmnessAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBl
     crypt.prepare (sampleRate, maxBlockSize);
     amp.prepare (sampleRate, maxBlockSize);
     cab.prepare (sampleRate, maxBlockSize);
+    wasp.prepare (sampleRate, maxBlockSize);
     updateCabModel (true);
 
     // Only SMOKE (oversampling) adds latency, and it is there wherever SMOKE sits in the chain.
@@ -216,6 +219,7 @@ void SwarmnessAudioProcessor::releaseResources()
     crypt.reset();
     amp.reset();
     cab.reset();
+    wasp.reset();
     dryDelay.reset();
 }
 
@@ -507,6 +511,20 @@ void SwarmnessAudioProcessor::processChainBlock (int block, const BlockContext& 
             s.namOutput = p.namOutput->load() * 0.1f;
             amp.setParams (s);
             amp.process (audio, numChannels, numSamples);
+            break;
+        }
+
+        case Chain::drive:
+        {
+            DriveBlock::Settings s;
+            s.on = on (p.drvOn);
+            s.volume = p.drvVolume->load() * 0.1f;
+            s.drive = p.drvDrive->load() * 0.1f;
+            s.bright = p.drvBright->load() * 0.1f;
+            s.attack = p.drvAttack->load() * 0.1f;
+            s.gate = pct (p.drvGate);
+            wasp.setParams (s);
+            wasp.process (audio, numChannels, numSamples);
             break;
         }
 

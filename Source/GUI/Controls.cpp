@@ -930,6 +930,8 @@ void InfoOverlay::paint (juce::Graphics& g)
         { "SWARM",    "Stereo chorus with bucket-brigade colour (DEEP = 8 voices with feedback). WINGS = rhythmic gate: HARD = stutter, off = tremolo, SYNC = host tempo." },
         { "SMOKE",    "Jumbo fuzz. VOICE: DOWN doom / MID / UP scream. SCOOP = mid cut, GLARE = gated octave-up, GATE = starved sputter, SAG = breathing "
                       "(the pick sags, the note blooms), CLEAN = clean signal under the fuzz." },
+        { "WASP",     "Tight overdrive in front of the AMP (a TS-style clipper): DRIVE = clean boost .. thick overdrive, ATTACK = how tight the low end is "
+                      "before the clipping, BRIGHT = voicing, VOLUME (5 = about unity), GATE = noise gate keyed from the guitar." },
         { "AMP",      "CLEAN / CRUNCH / LEAD amp models; CHARACTER morphs each between two reference amps (the middle is an amp of its own). "
                       "NAM = a Neural Amp Modeler capture with its own INPUT / EQ / OUTPUT knobs (all at 5 = the capture as it is) - LOAD .NAM or drop one, find thousands on TONE3000. GATE = noise gate in front." },
         { "CAB",      "Speaker cabinet: four modelled cabinets (MIC = cap..edge, DISTANCE = grille..room) or your own IR (LOAD IR or drop a WAV)." },
