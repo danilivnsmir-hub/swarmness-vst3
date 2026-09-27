@@ -16,13 +16,25 @@
 
 namespace
 {
-    // The architectures register themselves from static initialisers. Referencing each one keeps a
-    // linker that works from a static library from dropping those object files.
+    // The architectures register themselves from static initialisers in their own object files.
+    // A linker working from a static library only pulls in object files something refers to (and
+    // dead-strips unused data), so load() refers to each one through volatile reads.
     using CreateConfig = std::unique_ptr<nam::ModelConfig> (*) (const nlohmann::json&, double);
-    [[maybe_unused]] volatile CreateConfig keepArchitectures[] {
+    CreateConfig const architectures[] {
         &nam::container::create_config, &nam::convnet::create_config, &nam::linear::create_config,
         &nam::lstm::create_config, &nam::sequential::create_config, &nam::wavenet::create_config
     };
+
+    bool architecturesLinked() noexcept
+    {
+        bool all = true;
+        for (auto f : architectures)
+        {
+            volatile CreateConfig p = f;
+            all = all && p != nullptr;
+        }
+        return all;
+    }
 }
 
 struct NamModel::Impl
@@ -37,6 +49,11 @@ NamModel::~NamModel() = default;
 
 std::unique_ptr<NamModel> NamModel::load (const std::string& jsonText, std::string& error)
 {
+    if (! architecturesLinked())
+    {
+        error = "NAM architectures missing";
+        return nullptr;
+    }
     try
     {
         const auto j = nlohmann::json::parse (jsonText);
