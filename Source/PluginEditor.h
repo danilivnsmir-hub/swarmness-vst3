@@ -65,8 +65,8 @@ private:
     PillToggle snapToggle { "SNAP" }, followToggle { "FOLLOW" };
     Knob pitchKnob { "PITCH", true }, primaryKnob { "DRONE" }, secondaryKnob { "QUEEN" }, trackingKnob { "TRACKING" };
     PillToggle rbSyncToggle { "SYNC" };
-    Knob magicKnob { "TRAILS" }, rbTimeKnob { "TIME" }, rbDivKnob { "DIV" }, toneKnob { "TONE" };
-    SegmentedChoice patternSelector;
+    Knob magicKnob { "TRAILS" }, rbTimeKnob { "TIME" }, rbDivKnob { "DIV" }, toneKnob { "TONE" }, gateKnob { "GATE" };
+    StepGrid stepGrid;
     PillToggle rbRawToggle { "RAW" };
     Knob panicKnob { "ANGER" }, chaosKnob { "FRENZY" }, speedKnob { "BUZZ" }, rbDetuneKnob { "DETUNE", true }, rbMixKnob { "MIX" };
 

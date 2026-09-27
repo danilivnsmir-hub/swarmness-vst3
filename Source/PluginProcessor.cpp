@@ -28,7 +28,13 @@ SwarmnessAudioProcessor::SwarmnessAudioProcessor()
     };
 
     namespace id = ParamIDs;
-    p.oct1 = get (id::oct1);             p.oct2 = get (id::oct2);               p.shiftA = get (id::shiftA);  p.shiftB = get (id::shiftB);  p.hiveFollow = get (id::hiveFollow);  p.hivePattern = get (id::hivePattern);
+    p.oct1 = get (id::oct1);             p.oct2 = get (id::oct2);               p.shiftA = get (id::shiftA);  p.shiftB = get (id::shiftB);  p.hiveFollow = get (id::hiveFollow);
+    p.trSteps = get (id::trSteps);       p.trGate = get (id::trGate);
+    for (int k = 0; k < 16; ++k)
+    {
+        p.trLevels[(size_t) k] = get (id::trLevels[k]);
+        p.trMoves[(size_t) k] = get (id::trMoves[k]);
+    }
     p.rise = get (id::rise);             p.panic = get (id::panic);             p.chaos = get (id::chaos);
     p.speed = get (id::speed);           p.fall = get (id::fall);               p.stingMix = get (id::stingMix);
     p.rbDetune = get (id::rbDetune);     p.rbRaw = get (id::rbRaw);
@@ -458,10 +464,18 @@ void SwarmnessAudioProcessor::processPitch (const BlockContext& ctx, float* cons
     s.tracking = pct (p.rbTracking);
 
     s.trails = pct (p.rbMagic);
-    s.pattern = (int) p.hivePattern->load();
     s.tone = pct (p.rbTone);
-    s.repeatSeconds = on (p.rbSync) ? (float) (ParamChoices::divisionInBeats ((int) p.rbDiv->load()) * 60.0 / ctx.bpm)
-                                    : p.rbTime->load() * 0.001f;
+    const double divBeats = ParamChoices::divisionInBeats ((int) p.rbDiv->load());
+    s.repeatSeconds = on (p.rbSync) ? (float) (divBeats * 60.0 / ctx.bpm) : p.rbTime->load() * 0.001f;
+    s.steps.numSteps = (int) std::lround (p.trSteps->load());
+    for (size_t k = 0; k < (size_t) HiveBlock::kMaxSteps; ++k)
+    {
+        s.steps.level[k] = pct (p.trLevels[k]);
+        s.steps.move[k] = (int) p.trMoves[k]->load();
+    }
+    s.gate = pct (p.trGate);
+    // SYNC while the host plays: the steps follow the song grid instead of restarting on every note
+    s.hostStep = on (p.rbSync) && ctx.ppq.has_value() ? *ctx.ppq / divBeats : -1.0;
 
     s.anger = pct (p.panic);
     s.frenzy = pct (p.chaos);
@@ -474,6 +488,7 @@ void SwarmnessAudioProcessor::processPitch (const BlockContext& ctx, float* cons
     hive.process (audio, numChannels, numSamples);
     meters.pitchSemitones.store (hive.getShiftSemitones(), std::memory_order_relaxed);
     meters.noiseEngaged.store (hive.isShiftEngaged(), std::memory_order_relaxed);
+    meters.trailStep.store (hive.getCurrentStep(), std::memory_order_relaxed);
 }
 
 void SwarmnessAudioProcessor::processWings (const BlockContext& ctx, float* const* audio, int numChannels, int numSamples) noexcept

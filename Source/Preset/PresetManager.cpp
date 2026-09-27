@@ -1,5 +1,6 @@
 #include "PresetManager.h"
 #include "../Parameters.h"
+#include "../DSP/HiveBlock.h"
 
 const juce::String PresetManager::extension = ".swpreset";
 
@@ -33,6 +34,8 @@ void PresetManager::initialiseFactoryPresets()
     // Internal IDs: rb* = HIVE, stingMix = SHIFT BLEND, fuzz* = SMOKE, flow* = WINGS, panic = ANGER,
     // chaos = FRENZY, speed = BUZZ, rbPrimary = DRONE, rbSecondary = QUEEN, rbMagic = TRAILS.
     // Wings division indices: 3 = 1/8, 4 = 1/16, 5 = 1/32
+    const auto trailFill = hivePatternLegacy;   // a ready-made TRAILS step pattern (HiveBlock::Fill), expanded below
+    const juce::String recipes ("Recipes - The Noise, Slam, glitch");
     const juce::String basics ("Basics"), stingCat ("Shift - hold SHIFT A / B"), hiveCat ("Hive Voices & Trails"),
                        texture ("Smoke, Swarm & Wings"), attack ("Swarm Attack"), space ("Chain, EQ & Crypt");
     // Chain slots (lower = earlier). Defaults: SMOKE 10, PITCH 20, SWARM 30, WINGS 40, COMB 50, CARVE 60, CRYPT 70.
@@ -48,6 +51,42 @@ void PresetManager::initialiseFactoryPresets()
           { { rise, 0 }, { fall, 0 }, { stingMix, 50 } } },
         { "Slow Rise", basics, "RISE and FALL: hold a footswitch and the pitch sweeps up over ~1 s; release and it slides back down over ~1.5 s.",
           { { rise, 950 }, { fall, 1500 } } },
+
+        // ---------------------------------------------------------------- recipes
+        { "Noise - Octave Panic", recipes, "The Noise (Tallon / Alpha Wolf) approach: SMOKE into a Whammy-style shift. Hold SHIFT A (+1 oct) or SHIFT B (+2 oct); ANGER = Panic, FRENZY = Chaos, BUZZ = Speed, RISE = Rise.",
+          { { rise, 25 }, { fall, 40 }, { panic, 55 }, { chaos, 20 }, { speed, 35 },
+            { fuzzOn, 1 }, { fuzzVoice, 2 }, { fuzz, 80 }, { fuzzTone, 55 }, { fuzzScoop, 35 }, { fuzzSag, 30 } } },
+        { "Noise - Whammy Sweep", recipes, "Slow RISE, fast FALL: hold SHIFT B and the note screams up two octaves; BUZZ adds the ring-mod / flanger grind. Tap the switch in rhythm for sirens.",
+          { { rise, 220 }, { fall, 70 }, { panic, 30 }, { chaos, 8 }, { speed, 60 },
+            { fuzzOn, 1 }, { fuzzVoice, 1 }, { fuzz, 85 }, { fuzzTone, 50 }, { fuzzScoop, 45 } } },
+        { "Noise - In-Key Chaos", recipes, "FRENZY with SNAP: the pitch jumps between 4ths, 5ths and octaves instead of random pitches - the chaos stays musical. Hold SHIFT A.",
+          { { rise, 10 }, { chaos, 70 }, { panic, 15 }, { speed, 15 }, { rbSnap, 1 },
+            { fuzzOn, 1 }, { fuzzVoice, 2 }, { fuzz, 75 }, { fuzzScoop, 30 } } },
+        { "Slam - Semitone Clash", recipes, "Slam-style dissonance: a constant voice one semitone above, both at full level (MIX 50%), tight and clean, into a DOWN fuzz. SHIFT A / B add -1 / -2 oct layers (BLEND 50%).",
+          { { rbOn, 1 }, { rbRaw, 0 }, { rbPitch, 1 }, { rbPrimary, 100 }, { rbTracking, 100 }, { rbMix, 50 },
+            { shiftA, -12 }, { shiftB, -24 }, { stingMix, 50 }, { rise, 0 }, { fall, 0 },
+            { fuzzOn, 1 }, { slotSmoke, 35 }, { fuzzVoice, 0 }, { fuzz, 80 }, { fuzzTone, 45 }, { fuzzScoop, 25 }, { fuzzGate, 10 } } },
+        { "Slam - Minor Second Down", recipes, "A semitone BELOW plus its octave under it (QUEEN): heavier, darker clash for slams and breakdowns.",
+          { { rbOn, 1 }, { rbRaw, 0 }, { rbPitch, -1 }, { rbPrimary, 90 }, { rbSecondary, 45 }, { rbTracking, 100 }, { rbMix, 50 },
+            { fuzzOn, 1 }, { slotSmoke, 35 }, { fuzzVoice, 0 }, { fuzz, 85 }, { fuzzTone, 40 }, { fuzzScoop, 20 } } },
+        { "Slam - Tritone Dread", recipes, "Tritone voice with a slightly sour DETUNE and a touch of ANGER - evil, beating dissonance that still tracks tightly.",
+          { { rbOn, 1 }, { rbRaw, 0 }, { rbPitch, 6 }, { rbPrimary, 75 }, { rbTracking, 100 }, { rbMix, 50 }, { rbDetune, 12 }, { panic, 20 },
+            { fuzzOn, 1 }, { slotSmoke, 35 }, { fuzzVoice, 0 }, { fuzz, 80 }, { fuzzScoop, 30 } } },
+        { "Slam - Sub Layer", recipes, "One and two octaves under the guitar as a constant layer (DRONE -12, QUEEN -24). Clean engine, tight tracking.",
+          { { rbOn, 1 }, { rbRaw, 0 }, { rbPitch, -12 }, { rbPrimary, 80 }, { rbSecondary, 45 }, { rbTracking, 100 }, { rbMix, 50 },
+            { fuzzOn, 1 }, { slotSmoke, 35 }, { fuzzVoice, 0 }, { fuzz, 75 }, { fuzzScoop, 30 } } },
+        { "Glitch Steps", recipes, "STEPS 'Glitch': 16 repeats, each doing something else - up, backwards, random, silent - chopped short by GATE and locked to 1/16.",
+          { { rbOn, 1 }, { rbPitch, 12 }, { rbPrimary, 55 }, { rbTracking, 90 }, { rbMagic, 70 }, { trailFill, 9 }, { trGate, 55 },
+            { rbSync, 1 }, { rbDiv, 4 }, { rbTone, 60 }, { rbMix, 50 } } },
+        { "Stutter Echo", recipes, "STEPS 'Stutter': short chopped echoes with gaps (GATE 45%), a fifth up now and then - rhythmic noise instead of a wash.",
+          { { rbOn, 1 }, { rbPitch, 7 }, { rbPrimary, 60 }, { rbTracking, 90 }, { rbMagic, 65 }, { trailFill, 6 }, { trGate, 45 },
+            { rbSync, 1 }, { rbDiv, 3 }, { rbTone, 55 } } },
+        { "Gallop Octaves", recipes, "STEPS 'Gallop' (x - x x): octave repeats in a gallop rhythm at 1/16 - for tremolo-picked riffs.",
+          { { rbOn, 1 }, { rbPitch, 12 }, { rbPrimary, 55 }, { rbTracking, 85 }, { rbMagic, 60 }, { trailFill, 7 }, { trGate, 70 },
+            { rbSync, 1 }, { rbDiv, 4 }, { rbTone, 60 } } },
+        { "Offbeat Fifths", recipes, "STEPS 'Offbeat': only every second repeat sounds - fifths answering on the offbeat, 1/8 synced.",
+          { { rbOn, 1 }, { rbPitch, 7 }, { rbPrimary, 60 }, { rbTracking, 90 }, { rbMagic, 70 }, { trailFill, 8 },
+            { rbSync, 1 }, { rbDiv, 3 }, { rbTone, 55 } } },
 
         // ----------------------------------------------------------------- SHIFT + MANGLE
         { "Killer Bee", stingCat, "The all-rounder: a bit of ANGER, FRENZY and BUZZ plus SMOKE in front. Hold SHIFT B (+2 oct) for the full shriek.",
@@ -79,14 +118,14 @@ void PresetManager::initialiseFactoryPresets()
         { "Drowning Hive", hiveCat, "Atonal down-shift, loose tracking and long TRAILS through the deep SWARM: moaning, gurgling.",
           { { rbOn, 1 }, { rbSnap, 0 }, { rbPitch, -1.7f }, { rbPrimary, 70 }, { rbSecondary, 30 }, { rbTracking, 35 },
             { rbMagic, 85 }, { rbTime, 320 }, { rbTone, 30 }, { swarmOn, 1 }, { swarmDeep, 1 }, { swarmMix, 40 } } },
-        { "Bounce Trill", hiveCat, "PATTERN BOUNCE: the repeats flip between a fifth up and your note - a trill that stays in key and fades out.",
-          { { rbOn, 1 }, { rbPitch, 7 }, { rbPrimary, 60 }, { rbTracking, 85 }, { rbMagic, 70 }, { hivePattern, 1 }, { rbTime, 150 }, { rbTone, 60 } } },
-        { "Scatter Swarm", hiveCat, "PATTERN SCATTER: every repeat jumps to a random chord tone of the fifth, octaves up and down - glitch arpeggios. Add FRENZY for pure chaos.",
-          { { rbOn, 1 }, { rbPitch, 7 }, { rbPrimary, 55 }, { rbTracking, 80 }, { rbMagic, 75 }, { hivePattern, 2 }, { rbSync, 1 }, { rbDiv, 4 }, { rbTone, 60 } } },
-        { "Reverse Hive", hiveCat, "PATTERN REVERSE: an octave voice whose repeats play backwards - ghostly swells that breathe in before every note.",
-          { { rbOn, 1 }, { rbPitch, 12 }, { rbPrimary, 55 }, { rbTracking, 85 }, { rbMagic, 65 }, { hivePattern, 3 }, { rbTime, 380 }, { rbTone, 50 }, { rbMix, 60 } } },
-        { "Bloom", hiveCat, "PATTERN BLOOM: the repeats are diffused and drift apart - a fifth that swells into a cloud instead of a ladder.",
-          { { rbOn, 1 }, { rbPitch, 7 }, { rbPrimary, 50 }, { rbSecondary, 20 }, { rbTracking, 90 }, { rbMagic, 70 }, { hivePattern, 4 }, { rbTime, 260 }, { rbTone, 45 } } },
+        { "Bounce Trill", hiveCat, "STEPS 'Bounce' (DOWN / UP): the repeats flip between a fifth up and your note - a trill that stays in key and fades out.",
+          { { rbOn, 1 }, { rbPitch, 7 }, { rbPrimary, 60 }, { rbTracking, 85 }, { rbMagic, 70 }, { trailFill, 1 }, { rbTime, 150 }, { rbTone, 60 } } },
+        { "Scatter Swarm", hiveCat, "STEPS 'Scatter' (all RANDOM): every repeat jumps to a random chord tone of the fifth, octaves up and down - glitch arpeggios. Add FRENZY for pure chaos.",
+          { { rbOn, 1 }, { rbPitch, 7 }, { rbPrimary, 55 }, { rbTracking, 80 }, { rbMagic, 75 }, { trailFill, 2 }, { rbSync, 1 }, { rbDiv, 4 }, { rbTone, 60 } } },
+        { "Reverse Hive", hiveCat, "STEPS 'Reverse': an octave voice whose repeats play backwards - ghostly swells that breathe in before every note.",
+          { { rbOn, 1 }, { rbPitch, 12 }, { rbPrimary, 55 }, { rbTracking, 85 }, { rbMagic, 65 }, { trailFill, 3 }, { rbTime, 380 }, { rbTone, 50 }, { rbMix, 60 } } },
+        { "Swell Ladder", hiveCat, "STEPS 'Swell': every repeat climbs a fifth AND gets louder - the ladder fades in instead of out.",
+          { { rbOn, 1 }, { rbPitch, 7 }, { rbPrimary, 50 }, { rbSecondary, 20 }, { rbTracking, 90 }, { rbMagic, 70 }, { trailFill, 4 }, { rbTime, 260 }, { rbTone, 45 } } },
         { "Angry Voices", hiveCat, "MANGLE on the voices too: ANGER and FRENZY sour and scatter the harmony and its trails - one character for the whole block.",
           { { rbOn, 1 }, { rbPitch, 5 }, { rbPrimary, 65 }, { rbSecondary, 25 }, { rbTracking, 70 }, { rbMagic, 40 }, { panic, 45 }, { chaos, 25 } } },
         { "Venom Overload", hiveCat, "Long octave TRAILS. Hold the VENOM footswitch: it takes off into self-oscillating squalls and drags SHIFT A in (LINK).",
@@ -160,6 +199,10 @@ void PresetManager::initialiseFactoryPresets()
           { { fuzzOn, 1 }, { fuzzVoice, 2 }, { fuzz, 70 }, { fuzzScoop, 45 }, { fuzzGate, 15 },
             { revOn, 1 }, { revType, 0 }, { revDecay, 1.1f }, { revMix, 35 }, { revDuck, 80 }, { revLowCut, 250 } } },
     };
+
+    // expand the step-pattern shortcuts
+    for (auto& fp : factoryPresets)
+        migrateLegacyValues (fp.values);
 }
 
 juce::StringArray PresetManager::getFactoryPresetNames() const
@@ -345,6 +388,17 @@ bool PresetManager::fromJson (const juce::var& json, juce::String& name, ValueMa
     return true;
 }
 
+void PresetManager::writeTrailFill (ValueMap& values, int fill)
+{
+    const auto pattern = HiveBlock::makeFill (fill);
+    values[ParamIDs::trSteps] = (float) pattern.numSteps;
+    for (size_t k = 0; k < (size_t) HiveBlock::kMaxSteps; ++k)
+    {
+        values[ParamIDs::trLevels[k]] = 100.0f * pattern.level[k];
+        values[ParamIDs::trMoves[k]] = (float) pattern.move[k];
+    }
+}
+
 void PresetManager::migrateLegacyValues (ValueMap& values)
 {
     using namespace ParamIDs;
@@ -368,6 +422,15 @@ void PresetManager::migrateLegacyValues (ValueMap& values)
     values.erase (noiseDownLegacy);
     values.erase (stingRawLegacy);
     values.erase (stingDetuneLegacy);
+
+    // Beta.20-22: one PATTERN choice -> the same pattern as TRAILS steps
+    if (auto it = values.find (hivePatternLegacy); it != values.end())
+    {
+        const int fill = juce::jlimit (0, (int) HiveBlock::numFills - 1, juce::roundToInt (it->second));
+        values.erase (it);
+        if (! has (trMoves[0]))
+            writeTrailFill (values, fill);
+    }
 
     // Before the reorderable chain, SMOKE had a PRE / POST switch.
     if (auto it = values.find (ParamIDs::fuzzPostLegacy); it != values.end())

@@ -53,6 +53,9 @@ public:
     /** Brings values saved by older versions up to date (also used for restored sessions). */
     static void migrateLegacyValues (ValueMap& values);
 
+    /** Writes one of the ready-made TRAILS step patterns (HiveBlock::Fill) into a value map. */
+    static void writeTrailFill (ValueMap& values, int fill);
+
     /** Non-parameter data stored with user presets (the CRYPT impulse response path). */
     std::function<void (juce::DynamicObject&)> onSaveExtras;
     std::function<void (const juce::var&)> onLoadExtras;

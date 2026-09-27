@@ -33,7 +33,12 @@ namespace ParamIDs
     inline constexpr const char* hiveFollow  = "hiveFollow";   // voices harmonise the shifted note
     // TRAILS
     inline constexpr const char* rbMagic     = "rbMagic";      // TRAILS: regeneration
-    inline constexpr const char* hivePattern = "hivePattern";  // LADDER / BOUNCE / SCATTER / REVERSE / BLOOM
+    inline constexpr const char* trSteps     = "trSteps";      // TRAILS step pattern length (1..16)
+    inline constexpr const char* trGate      = "trGate";       // how much of every step sounds
+    inline constexpr const char* trLevels[]  { "trL1", "trL2", "trL3", "trL4", "trL5", "trL6", "trL7", "trL8",
+                                               "trL9", "trL10", "trL11", "trL12", "trL13", "trL14", "trL15", "trL16" };
+    inline constexpr const char* trMoves[]   { "trM1", "trM2", "trM3", "trM4", "trM5", "trM6", "trM7", "trM8",
+                                               "trM9", "trM10", "trM11", "trM12", "trM13", "trM14", "trM15", "trM16" };
     inline constexpr const char* rbTime      = "rbTime";       // time between repeats (free)
     inline constexpr const char* rbSync      = "rbSync";       // repeats locked to the host tempo
     inline constexpr const char* rbDiv       = "rbDiv";        // repeat time (tempo division)
@@ -53,6 +58,8 @@ namespace ParamIDs
     inline constexpr const char* noiseDownLegacy   = "noiseDown";
     inline constexpr const char* stingRawLegacy    = "stingRaw";
     inline constexpr const char* stingDetuneLegacy = "stingDetune";
+    // Beta.20-22: one PATTERN choice instead of the step pattern (values = HiveBlock fills 0..4)
+    inline constexpr const char* hivePatternLegacy = "hivePattern";
 
     // SWARM (chorus)
     inline constexpr const char* swarmOn     = "swarmOn";
@@ -137,7 +144,10 @@ namespace ParamChoices
     inline const juce::StringArray switchModes { "Momentary", "Latch" };
     inline const juce::StringArray fuzzVoices  { "Down", "Mid", "Up" };
     inline const juce::StringArray reverbTypes { "Room", "Plate", "Hall", "Abyss", "IR" };
-    inline const juce::StringArray hivePatterns { "Ladder", "Bounce", "Scatter", "Reverse", "Bloom" };
+    inline const juce::StringArray stepMoves { "Hold", "Up", "Down", "Random", "Reverse" };
+    /** Ready-made TRAILS step patterns, in HiveBlock::Fill order. */
+    inline const juce::StringArray trailFills { "Ladder", "Bounce", "Scatter", "Reverse", "Swell",
+                                                "Echo", "Stutter", "Gallop", "Offbeat", "Glitch" };
 
     /** "+7 5th", "-1 oct", "+2 oct", "+19 5th+oct" ... */
     inline juce::String intervalName (int st)

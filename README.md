@@ -63,14 +63,12 @@ VST3 / AU / Standalone · Windows, macOS (Universal: Apple Silicon + Intel), Lin
 - **FOLLOW** — голоса строятся от сдвинутой SHIFT ноты, а не от сыгранной (по умолчанию выключено, чтобы интервалы не складывались).
 
 *TRAILS* — повторы DRONE в петле со сдвигом:
-- **TRAILS** — количество повторов (затухают сами), **TIME** — шаг (с **SYNC** — доля такта DAW), **TONE** — яркость;
-- **PATTERN** — как меняется интервал от повтора к повтору:
-  - **LADDER** — каждый повтор ещё на PITCH выше / ниже (спираль, как у Rainbow Machine);
-  - **BOUNCE** — повторы чередуются: нота ↔ голос (трель, остаётся в тональности);
-  - **SCATTER** — каждый повтор прыгает на случайную ступень аккорда PITCH и октавы (глитч-арпеджио);
-  - **REVERSE** — повторы задом наперёд (и тоже сдвигаются на PITCH);
-  - **BLOOM** — повторы размываются и расходятся: не ступеньки, а нарастающее облако.
-- Футсвич **VENOM** раскачивает петлю до самовозбуждения — в каждом паттерне по-своему.
+- **TRAILS** — сколько длятся повторы (затухают сами), **TIME** — расстояние между повторами = длина шага (с **SYNC** — доля такта DAW), **TONE** — яркость, **GATE** — какая часть каждого шага звучит (100% — весь повтор, мало — короткие рубленые «чопы»);
+- **STEPS** — сетка повторов, как у pattern tremolo, только шаги — это повторы: столбик 1 = первый повтор после ноты, 2 = второй и т.д. (сетка перезапускается с каждой сыгранной нотой; с SYNC при игре DAW идёт по сетке такта):
+  - высота столбика — громкость повтора (0 = тихий повтор, хвост при этом продолжает жить), рисуется мышью по нескольким шагам, двойной клик — вкл/выкл;
+  - значок под столбиком — что повтор делает с высотой: **=** держит, **▲ / ▼** — на PITCH вверх / вниз, **?** — случайная ступень аккорда или октава, **◀** — задом наперёд (клик — следующий, правый клик — меню);
+  - **STEPS − / +** — длина паттерна (1…16), **FILL** — готовые: Ladder, Bounce, Scatter, Reverse, Swell, Echo, Stutter, Gallop, Offbeat, Glitch.
+- Футсвич **VENOM** раскачивает петлю до самовозбуждения.
 
 *MANGLE* — действует на всё, что добавляет HIVE (сдвиг, голоса и повторы), поэтому характер единый:
 - **ANGER** — «кислые» расстроенные голоса: биения, диссонанс, кластеры;
@@ -125,11 +123,12 @@ VST3 / AU / Standalone · Windows, macOS (Universal: Apple Silicon + Intel), Lin
 
 Пресеты разделены на два банка — вкладки **FACTORY / USER** слева от имени пресета. Выбранный банк определяет, что показывает список и по чему листают стрелки **< >**; при загрузке или сохранении пресета вкладка переключается сама.
 
-**FACTORY** — 43 заводских пресета в шести категориях (подменю); каждый показывает одну возможность, описание всплывает при наведении на имя пресета:
+**FACTORY** — 54 заводских пресета в семи категориях (подменю); каждый показывает одну возможность, описание всплывает при наведении на имя пресета:
 
+- **Recipes — The Noise, Slam, glitch** (с чего начинать): Noise - Octave Panic / Whammy Sweep / In-Key Chaos (подход педали The Noise: фузз → Whammy-сдвиг, ANGER = Panic, FRENZY = Chaos, BUZZ = Speed); Slam - Semitone Clash / Minor Second Down / Tritone Dread / Sub Layer (диссонанс как в Slam Amp: постоянный голос на полутон / тритон / октавы ниже, MIX 50%); Glitch Steps, Stutter Echo, Gallop Octaves, Offbeat Fifths (ритмичные повторы через STEPS и GATE)
 - **Basics:** Init, Clean Shift, Shift Doubler, Slow Rise
 - **Shift:** Killer Bee, Angry Hive, Frenzy, Lazy Buzz, Hornet Buzz, Dive Bomb
-- **Hive Voices & Trails:** Harmony Fifth, Atonal Detune, Tone Clusters, Honey Trails, Honey Ladder, Descending Spiral, Drowning Hive, Bounce Trill, Scatter Swarm, Reverse Hive, Bloom, Angry Voices, Venom Overload
+- **Hive Voices & Trails:** Harmony Fifth, Atonal Detune, Tone Clusters, Honey Trails, Honey Ladder, Descending Spiral, Drowning Hive, Bounce Trill, Scatter Swarm, Reverse Hive, Swell Ladder, Angry Voices, Venom Overload
 - **Smoke, Swarm & Wings:** Swarm Cloud, Seasick Swarm, Swollen Smoke, Doom Cathedral, Glare Scream, Smoked Out, Wing Beat Breakdown, Ghost Swarm
 - **Swarm Attack:** Queen Scream, Broken Radio, Hive Collapse
 - **Chain, EQ & Crypt:** Crypt Doom, Smoke in the Crypt (реверб *в* фузз), Tight Before Smoke (CARVE перед фуззом), Comb Smile, Hive Cathedral, Parallel Smoke (фузз ∥ чистый), Split Swarm (хорус ∥ реверб), Twin Splits (две развилки), Chug Room
@@ -182,7 +181,7 @@ cmake --build build --target Swarmness_VST3 Swarmness_Standalone
 
 ### Тесты
 
-`SwarmnessTests` — офлайн-проверка DSP без DAW: стабильность всех пресетов с нажатыми футсвичами на 44,1/48/96 кГц, байпас и BLEND 0% с точностью до сэмпла (нуль-тест), прозрачность в выключенном состоянии, точность сдвигов SHIFT (октавы, квинта), интервалов и паттернов HIVE, FOLLOW, перенос старых сессий, возврат после отпускания футсвича, работа футсвичей в байпасе и LINK, ограниченное самовозбуждение VENOM, повторы TRAILS по TIME и их затухание, INPUT, уровень фузза во всех VOICE, октава GLARE, устойчивость SWARM, сохранение состояния, нагрузка на CPU.
+`SwarmnessTests` — офлайн-проверка DSP без DAW: стабильность всех пресетов с нажатыми футсвичами на 44,1/48/96 кГц, байпас и BLEND 0% с точностью до сэмпла (нуль-тест), прозрачность в выключенном состоянии, точность сдвигов SHIFT (октавы, квинта), интервалов и шагов STEPS в HIVE, FOLLOW, перенос старых сессий, возврат после отпускания футсвича, работа футсвичей в байпасе и LINK, ограниченное самовозбуждение VENOM, повторы TRAILS по TIME и их затухание, INPUT, уровень фузза во всех VOICE, октава GLARE, устойчивость SWARM, сохранение состояния, нагрузка на CPU.
 
 ```bash
 cmake --build build --target SwarmnessTests

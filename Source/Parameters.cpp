@@ -109,7 +109,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
 
     // TRAILS
     hive->addChild (percent (rbMagic, "Hive Trails", 0.0f));
-    hive->addChild (std::make_unique<juce::AudioParameterChoice> (pid (hivePattern), "Hive Pattern", ParamChoices::hivePatterns, 0));
     hive->addChild (std::make_unique<juce::AudioParameterFloat> (
         pid (rbTime), "Hive Time", skewedRange (40.0f, 1200.0f, 250.0f, 1.0f), 180.0f,
         Attr().withLabel ("ms").withStringFromValueFunction ([] (float v, int)
@@ -119,6 +118,17 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     hive->addChild (toggle (rbSync, "Hive Sync", false));
     hive->addChild (std::make_unique<juce::AudioParameterChoice> (pid (rbDiv), "Hive Division", ParamChoices::divisions, 3));
     hive->addChild (percent (rbTone, "Hive Tone", 60.0f));
+    hive->addChild (std::make_unique<juce::AudioParameterInt> (pid (trSteps), "Trails Steps", 1, 16, 8));
+    hive->addChild (percent (trGate, "Trails Gate", 100.0f));
+    for (int k = 0; k < 16; ++k)
+    {
+        hive->addChild (std::make_unique<juce::AudioParameterFloat> (
+            pid (trLevels[k]), "Trails Step " + juce::String (k + 1) + " Level", percentRange(), 100.0f,
+            Attr().withLabel ("%").withAutomatable (false)));
+        hive->addChild (std::make_unique<juce::AudioParameterChoice> (
+            pid (trMoves[k]), "Trails Step " + juce::String (k + 1) + " Move", ParamChoices::stepMoves, 1,
+            juce::AudioParameterChoiceAttributes().withAutomatable (false)));
+    }
     hive->addChild (toggle (magicHold, "Venom (footswitch)", false));
     hive->addChild (toggle (linkOct1, "Venom Links Shift A", false));
     hive->addChild (toggle (linkOct2, "Venom Links Shift B", false));

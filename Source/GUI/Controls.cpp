@@ -1,4 +1,5 @@
 #include "Controls.h"
+#include "../Parameters.h"
 
 using namespace Theme;
 
@@ -923,8 +924,9 @@ void InfoOverlay::paint (juce::Graphics& g)
     {
         { "HIVE",     "Destructive pitch-delay in four sections. SHIFT: hold SHIFT A / B (any interval, -24..+24 st) - RISE / FALL glide, BLEND = replace or double. "
                       "VOICES: DRONE at PITCH and QUEEN (its octave), TRACKING tight..laggy, FOLLOW = harmonise the shifted note." },
-        { "TRAILS",   "Repeats of the DRONE; PATTERN: LADDER (one more PITCH step each), BOUNCE (voice <-> note trill), SCATTER (random chord tones), "
-                      "REVERSE (backwards), BLOOM (swelling cloud). TIME / SYNC, TONE. The VENOM footswitch = self-oscillation; LINK drags SHIFT A / B in." },
+        { "TRAILS",   "Repeats of the DRONE, shaped by STEPS like a pattern tremolo: each bar = one repeat (LEVEL, 0 = silent) and its MOVE "
+                      "(= hold, up / down by PITCH, ? random, < backwards). GATE chops every step. FILL = ready-made patterns. TIME / SYNC = step length. "
+                      "The VENOM footswitch = self-oscillation; LINK drags SHIFT A / B in." },
         { "MANGLE",   "Acts on everything HIVE adds: ANGER = sour detuned voices, FRENZY = random pitch jumps, BUZZ = all-pass + ring-mod AM, "
                       "RAW = cheap-pedal-DSP character, DETUNE = fine offset / width, MIX = dry vs voices (100% = voices only)." },
         { "SWARM",    "Stereo chorus with bucket-brigade colour. DEEP = 8 voices with feedback. MIX 50% = dry and chorus both full, 100% = vibrato." },
@@ -959,4 +961,289 @@ void InfoOverlay::paint (juce::Graphics& g)
     g.setFont (font (14.0f));
     g.setColour (Colours::textDim);
     g.drawText ("Click anywhere to close", getLocalBounds().toFloat().reduced (60.0f, 48.0f), juce::Justification::bottomRight, false);
+}
+
+//==============================================================================
+StepGrid::StepGrid (juce::AudioProcessorValueTreeState& s) : state (s)
+{
+    setTooltip ("STEPS - a pattern for the repeats (like a pattern tremolo): every bar is one repeat after the note "
+                "(the pattern restarts on each picked note, or follows the song with SYNC). "
+                "Drag the bars = LEVEL of each repeat (0 = silent, the tail keeps running), double-click = on / off. "
+                "Click the symbol below = MOVE: = hold, up / down by PITCH, ? random chord tone, < backwards. "
+                "STEPS -/+ = pattern length, FILL = ready-made patterns.");
+    setRepaintsOnMouseActivity (false);
+}
+
+float StepGrid::level (int step) const { return state.getRawParameterValue (ParamIDs::trLevels[step])->load() * 0.01f; }
+int StepGrid::move (int step) const    { return juce::roundToInt (state.getRawParameterValue (ParamIDs::trMoves[step])->load()); }
+int StepGrid::numSteps() const         { return juce::jlimit (1, kSteps, juce::roundToInt (state.getRawParameterValue (ParamIDs::trSteps)->load())); }
+
+void StepGrid::refresh (int playingStep)
+{
+    bool changed = numSteps() != shownSteps || playingStep != shownPlaying;
+    for (int k = 0; k < kSteps && ! changed; ++k)
+        changed = std::abs (level (k) - shownLevel[(size_t) k]) > 1.0e-4f || move (k) != shownMove[(size_t) k];
+    if (! changed)
+        return;
+    shownSteps = numSteps();
+    shownPlaying = playingStep;
+    for (int k = 0; k < kSteps; ++k)
+    {
+        shownLevel[(size_t) k] = level (k);
+        shownMove[(size_t) k] = move (k);
+    }
+    repaint();
+}
+
+juce::Rectangle<float> StepGrid::headerArea() const { return getLocalBounds().toFloat().withHeight (20.0f); }
+juce::Rectangle<float> StepGrid::movesArea() const  { return getLocalBounds().toFloat().removeFromBottom (18.0f); }
+juce::Rectangle<float> StepGrid::barsArea() const
+{
+    auto r = getLocalBounds().toFloat();
+    r.removeFromTop (23.0f);
+    r.removeFromBottom (19.0f);
+    return r;
+}
+juce::Rectangle<float> StepGrid::minusArea() const { return { 50.0f, 1.0f, 18.0f, 18.0f }; }
+juce::Rectangle<float> StepGrid::plusArea() const  { return { 92.0f, 1.0f, 18.0f, 18.0f }; }
+juce::Rectangle<float> StepGrid::fillArea() const  { return headerArea().removeFromRight (74.0f).reduced (0.0f, 1.0f); }
+
+int StepGrid::stepAt (float x) const
+{
+    const auto b = barsArea();
+    return juce::jlimit (0, kSteps - 1, (int) std::floor ((x - b.getX()) / b.getWidth() * kSteps));
+}
+
+float StepGrid::levelAt (float y) const
+{
+    const auto b = barsArea();
+    const float v = juce::jlimit (0.0f, 1.0f, (b.getBottom() - y) / b.getHeight());
+    return v < 0.04f ? 0.0f : (v > 0.96f ? 1.0f : v);
+}
+
+void StepGrid::setParam (const char* id, float value, bool gesture)
+{
+    if (auto* p = state.getParameter (id))
+    {
+        if (gesture) p->beginChangeGesture();
+        p->setValueNotifyingHost (p->convertTo0to1 (value));
+        if (gesture) p->endChangeGesture();
+    }
+}
+
+void StepGrid::paintLevel (int step, float value)
+{
+    auto* p = state.getParameter (ParamIDs::trLevels[step]);
+    if (p == nullptr)
+        return;
+    if (std::find (painting.begin(), painting.end(), p) == painting.end())
+    {
+        p->beginChangeGesture();
+        painting.push_back (p);
+    }
+    p->setValueNotifyingHost (p->convertTo0to1 (value * 100.0f));
+}
+
+void StepGrid::endPainting()
+{
+    for (auto* p : painting)
+        p->endChangeGesture();
+    painting.clear();
+    lastPaintStep = -1;
+}
+
+void StepGrid::mouseDown (const juce::MouseEvent& e)
+{
+    const auto pos = e.position;
+    if (minusArea().contains (pos) || plusArea().contains (pos))
+    {
+        setParam (ParamIDs::trSteps, (float) juce::jlimit (1, kSteps, numSteps() + (plusArea().contains (pos) ? 1 : -1)));
+        return;
+    }
+    if (fillArea().contains (pos))
+    {
+        showFillMenu();
+        return;
+    }
+    const int step = stepAt (pos.x);
+    if (movesArea().contains (pos))
+    {
+        if (e.mods.isPopupMenu())
+            showMoveMenu (step);
+        else
+            setParam (ParamIDs::trMoves[step], (float) ((move (step) + 1) % ParamChoices::stepMoves.size()));
+        return;
+    }
+    if (barsArea().expanded (0.0f, 3.0f).contains (pos))
+    {
+        if (e.mods.isPopupMenu())
+        {
+            showMoveMenu (step);
+            return;
+        }
+        lastPaintStep = step;
+        lastPaintLevel = levelAt (pos.y);
+        paintLevel (step, lastPaintLevel);
+    }
+}
+
+void StepGrid::mouseDrag (const juce::MouseEvent& e)
+{
+    if (lastPaintStep < 0)
+        return;
+    // paint every step between the last one and here, so fast drags leave no gaps
+    const int step = stepAt (e.position.x);
+    const float value = levelAt (e.position.y);
+    const int from = lastPaintStep, dir = step >= from ? 1 : -1;
+    for (int k = from; ; k += dir)
+    {
+        const float t = step == from ? 1.0f : (float) (k - from) / (float) (step - from);
+        paintLevel (k, lastPaintLevel + t * (value - lastPaintLevel));
+        if (k == step) break;
+    }
+    lastPaintStep = step;
+    lastPaintLevel = value;
+}
+
+void StepGrid::mouseUp (const juce::MouseEvent&) { endPainting(); }
+
+void StepGrid::mouseDoubleClick (const juce::MouseEvent& e)
+{
+    if (! barsArea().contains (e.position))
+        return;
+    const int step = stepAt (e.position.x);
+    setParam (ParamIDs::trLevels[step], level (step) > 0.01f ? 0.0f : 100.0f);
+}
+
+void StepGrid::showMoveMenu (int step)
+{
+    juce::PopupMenu m;
+    m.addSectionHeader ("Step " + juce::String (step + 1));
+    for (int i = 0; i < ParamChoices::stepMoves.size(); ++i)
+        m.addItem (i + 1, ParamChoices::stepMoves[i], true, move (step) == i);
+    m.addSeparator();
+    m.addItem (100, "Set all steps to this move");
+    juce::Component::SafePointer<StepGrid> safe (this);
+    m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this), [safe, step] (int r)
+    {
+        if (safe == nullptr || r <= 0) return;
+        if (r == 100)
+        {
+            const int mv = safe->move (step);
+            for (int k = 0; k < kSteps; ++k)
+                safe->setParam (ParamIDs::trMoves[k], (float) mv);
+            return;
+        }
+        safe->setParam (ParamIDs::trMoves[step], (float) (r - 1));
+    });
+}
+
+void StepGrid::showFillMenu()
+{
+    juce::PopupMenu m;
+    m.addSectionHeader ("Ready-made patterns");
+    for (int i = 0; i < ParamChoices::trailFills.size(); ++i)
+        m.addItem (i + 1, ParamChoices::trailFills[i]);
+    m.addSeparator();
+    m.addItem (200, "All steps on");
+    m.addItem (201, "Every second step");
+    m.addItem (202, "Random levels");
+    juce::Component::SafePointer<StepGrid> safe (this);
+    m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this), [safe] (int r)
+    {
+        if (safe == nullptr || r <= 0) return;
+        if (r <= ParamChoices::trailFills.size())
+        {
+            safe->applyFill (r - 1);
+            return;
+        }
+        juce::Random rnd;
+        for (int k = 0; k < kSteps; ++k)
+        {
+            float v = 100.0f;
+            if (r == 201) v = k % 2 == 0 ? 100.0f : 0.0f;
+            if (r == 202) v = rnd.nextFloat() < 0.25f ? 0.0f : 30.0f + 70.0f * rnd.nextFloat();
+            safe->setParam (ParamIDs::trLevels[k], v);
+        }
+    });
+}
+
+void StepGrid::applyFill (int fill)
+{
+    PresetManager::ValueMap values;
+    PresetManager::writeTrailFill (values, fill);
+    for (const auto& [id, v] : values)
+        setParam (id.toRawUTF8(), v);
+}
+
+void StepGrid::paint (juce::Graphics& g)
+{
+    using namespace Theme;
+    const int n = numSteps();
+
+    // header: STEPS - n +      FILL
+    g.setFont (font (13.0f, true));
+    g.setColour (Colours::textDim);
+    g.drawText ("STEPS", juce::Rectangle<float> (0.0f, 0.0f, 48.0f, 20.0f), juce::Justification::centredLeft, false);
+    for (auto r : { minusArea(), plusArea() })
+    {
+        g.setColour (Colours::inset);
+        g.fillRoundedRectangle (r, 3.0f);
+        g.setColour (Colours::panelBorder);
+        g.drawRoundedRectangle (r, 3.0f, 1.0f);
+    }
+    g.setColour (Colours::text);
+    g.drawText ("-", minusArea(), juce::Justification::centred, false);
+    g.drawText ("+", plusArea(), juce::Justification::centred, false);
+    g.setColour (Colours::accentBright);
+    g.drawText (juce::String (n), juce::Rectangle<float> (68.0f, 0.0f, 24.0f, 20.0f), juce::Justification::centred, false);
+    const auto fr = fillArea();
+    g.setColour (Colours::inset);
+    g.fillRoundedRectangle (fr, 3.0f);
+    g.setColour (Colours::panelBorder);
+    g.drawRoundedRectangle (fr, 3.0f, 1.0f);
+    g.setColour (Colours::text);
+    g.drawText ("FILL  v", fr, juce::Justification::centred, false);
+
+    // bars
+    const auto bars = barsArea();
+    const float w = bars.getWidth() / kSteps;
+    g.setColour (Colours::inset);
+    g.fillRoundedRectangle (bars.expanded (1.0f), 3.0f);
+    for (int k = 0; k < kSteps; ++k)
+    {
+        const bool active = k < n;
+        const auto cell = juce::Rectangle<float> (bars.getX() + k * w, bars.getY(), w, bars.getHeight()).reduced (1.5f, 0.0f);
+        if (k % 4 == 0 && k > 0)
+        {
+            g.setColour (Colours::panelBorder.withAlpha (0.6f));
+            g.fillRect (juce::Rectangle<float> (cell.getX() - 1.5f, bars.getY(), 1.0f, bars.getHeight()));
+        }
+        const float v = level (k);
+        const auto bar = cell.withTop (cell.getBottom() - juce::jmax (2.0f, v * cell.getHeight()));
+        const bool playing = k == shownPlaying;
+        auto colour = active ? (playing ? Colours::accentBright : Colours::accent) : Colours::textFaint;
+        if (v <= 0.0f) colour = colour.withAlpha (0.35f);
+        g.setColour (colour.withAlpha (active ? 0.9f : 0.35f));
+        g.fillRoundedRectangle (bar, 1.5f);
+        if (playing)
+        {
+            g.setColour (Colours::accentBright.withAlpha (0.25f));
+            g.fillRoundedRectangle (cell, 2.0f);
+        }
+
+        // MOVE symbol
+        const auto sym = juce::Rectangle<float> (bars.getX() + k * w, movesArea().getY(), w, movesArea().getHeight()).reduced (3.0f, 4.0f);
+        g.setColour (active ? Colours::text : Colours::textFaint);
+        juce::Path p;
+        const float cx = sym.getCentreX(), cy = sym.getCentreY(), r = juce::jmin (sym.getWidth(), sym.getHeight()) * 0.5f;
+        switch (move (k))
+        {
+            case 0: g.fillRect (juce::Rectangle<float> (cx - r, cy - 1.0f, 2.0f * r, 2.0f)); break;                          // hold
+            case 1: p.addTriangle (cx - r, cy + r * 0.8f, cx + r, cy + r * 0.8f, cx, cy - r); g.fillPath (p); break;           // up
+            case 2: p.addTriangle (cx - r, cy - r * 0.8f, cx + r, cy - r * 0.8f, cx, cy + r); g.fillPath (p); break;           // down
+            case 3: g.setFont (font (13.0f, true)); g.drawText ("?", sym.expanded (3.0f), juce::Justification::centred, false); break;
+            default: p.addTriangle (cx + r * 0.8f, cy - r, cx + r * 0.8f, cy + r, cx - r, cy); g.fillPath (p); break;          // reverse
+        }
+    }
 }

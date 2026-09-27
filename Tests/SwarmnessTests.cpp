@@ -742,6 +742,30 @@ namespace
         }
         check (bloom[1] > bloom[0] + 1.0,
                juce::String::formatted ("body vs attack: %+.1f dB (SAG 0) -> %+.1f dB (SAG 100)", bloom[0], bloom[1]));
+
+        // TOUCH: a light touch comes out quieter than a normal one (the fuzz follows the hands),
+        // and a mono guitar comes out wide (the two channels are slightly different circuits)
+        auto fuzzOut = [&] (float amp)
+        {
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            setParam (p, ParamIDs::fuzzOn, 1.0f);
+            setParam (p, ParamIDs::fuzz, 80.0f);
+            return render (p, makeSine (sr, 48000, 110.0, amp), sr, 256);
+        };
+        const auto hard = fuzzOut (0.15f), soft = fuzzOut (0.015f);
+        const double touchDb = juce::Decibels::gainToDecibels (hard.getRMSLevel (0, 24000, 12000))
+                             - juce::Decibels::gainToDecibels (soft.getRMSLevel (0, 24000, 12000));
+        check (touchDb > 4.0 && touchDb < 12.0, juce::String::formatted ("TOUCH: picking 20 dB softer is %.1f dB quieter (not flattened to one level)", touchDb));
+        double side = 0.0, mid = 0.0;
+        for (int i = 24000; i < 36000; ++i)
+        {
+            const double l = hard.getSample (0, i), r = hard.getSample (1, i);
+            side += (l - r) * (l - r);
+            mid += (l + r) * (l + r);
+        }
+        const double widthDb = 10.0 * std::log10 (side / mid + 1.0e-12);
+        check (widthDb > -40.0 && widthDb < -8.0, juce::String::formatted ("mono in: side %.1f dB below mid (wide, still centred)", -widthDb));
     }
 
     void testDetune()
@@ -1197,7 +1221,7 @@ namespace
 
     void testHiveBlock()
     {
-        std::printf ("\nHIVE: SHIFT intervals, FOLLOW, PATTERNs, migration\n");
+        std::printf ("\nHIVE: SHIFT intervals, FOLLOW, STEPS, migration\n");
         const double sr = 48000.0;
         {
             // SHIFT A as a fifth, SHIFT B wins while both are held
@@ -1238,8 +1262,8 @@ namespace
             check (on.second > on.first + 10.0, juce::String::formatted ("FOLLOW on: DRONE on the shifted note (659 Hz %+.1f dB vs 329.6 Hz %+.1f dB)", on.second, on.first));
         }
         {
-            // PATTERNs: the first repeats of a plucked 220 Hz note, DRONE a fifth up
-            auto repeats = [&] (int pattern)
+            // STEPS: the first repeats of a plucked 220 Hz note, DRONE a fifth up
+            auto repeats = [&] (int fill, float gate = 100.0f)
             {
                 SwarmnessAudioProcessor p;
                 resetToInit (p);
@@ -1252,35 +1276,54 @@ namespace
                 setParam (p, ParamIDs::rbMagic, 80.0f);
                 setParam (p, ParamIDs::rbTone, 100.0f);
                 setParam (p, ParamIDs::rbTime, 250.0f);
-                setParam (p, ParamIDs::hivePattern, (float) pattern);
+                setParam (p, ParamIDs::trGate, gate);
+                PresetManager::ValueMap values;
+                PresetManager::writeTrailFill (values, fill);
+                for (const auto& [id, v] : values)
+                    setParam (p, id.toRawUTF8(), v);
                 return render (p, pluck (sr, (int) (sr * 2.5)), sr, 128);
             };
-            // note at 0.1 s; repeat 1 around 0.35..0.45 s, repeat 2 around 0.6..0.7 s
+            // note at 0.1 s; repeat 1 (step 1) around 0.35..0.45 s, repeat 2 (step 2) around 0.6..0.7 s
             const int r1 = (int) (0.37 * sr), r2 = (int) (0.62 * sr), len = 4096;
-            const auto ladder = repeats (0);
+            const auto ladder = repeats (HiveBlock::fillLadder);
             check (toneDb (ladder, sr, 493.88, r1, len) > toneDb (ladder, sr, 220.0, r1, len) + 6.0,
-                   juce::String::formatted ("LADDER: repeat 1 one more fifth up (494 Hz %+.1f dB vs 220 Hz %+.1f dB)",
+                   juce::String::formatted ("STEPS Ladder (all UP): repeat 1 one more fifth up (494 Hz %+.1f dB vs 220 Hz %+.1f dB)",
                                             toneDb (ladder, sr, 493.88, r1, len), toneDb (ladder, sr, 220.0, r1, len)));
-            const auto bounceOut = repeats (1);
+            const auto bounceOut = repeats (HiveBlock::fillBounce);
             const double b1note = toneDb (bounceOut, sr, 220.0, r1, len), b1up = toneDb (bounceOut, sr, 493.88, r1, len);
             const double b2fifth = toneDb (bounceOut, sr, 329.63, r2, len), b2note = toneDb (bounceOut, sr, 220.0, r2, len);
             check (b1note > b1up + 6.0 && b2fifth > b2note + 3.0,
-                   juce::String::formatted ("BOUNCE: repeat 1 back on the note (220 Hz %+.1f vs 494 Hz %+.1f dB), repeat 2 up again (330 Hz %+.1f vs 220 Hz %+.1f dB)",
+                   juce::String::formatted ("STEPS Bounce (DOWN, UP): repeat 1 back on the note (220 Hz %+.1f vs 494 Hz %+.1f dB), repeat 2 up again (330 Hz %+.1f vs 220 Hz %+.1f dB)",
                                             b1note, b1up, b2fifth, b2note));
             {
                 auto side = [&] (int from) { return 20.0 * std::log10 ((bounceOut.getRMSLevel (0, from, len) + 1e-9) / (bounceOut.getRMSLevel (1, from, len) + 1e-9)); };
                 const double s1 = side (r1), s2 = side (r2);
                 check (s1 * s2 < 0.0 && std::abs (s1 - s2) > 6.0,
-                       juce::String::formatted ("BOUNCE ping-pongs: repeat 1 L/R %+.1f dB, repeat 2 %+.1f dB", s1, s2));
+                       juce::String::formatted ("DOWN / UP steps ping-pong: repeat 1 L/R %+.1f dB, repeat 2 %+.1f dB", s1, s2));
             }
-            for (int pattern = 0; pattern < 5; ++pattern)
             {
-                const auto out = pattern == 0 ? ladder : (pattern == 1 ? bounceOut : repeats (pattern));
-                const float tail = out.getRMSLevel (0, (int) (0.4 * sr), (int) (0.6 * sr));
+                // LEVEL 0 = a silent repeat: Offbeat (0, 1) mutes repeat 1, repeat 2 still sounds (the tail runs on)
+                const auto off = repeats (HiveBlock::fillOffbeat);
+                const double q1 = juce::Decibels::gainToDecibels (off.getRMSLevel (0, r1, len) + 1.0e-9f);
+                const double q2 = juce::Decibels::gainToDecibels (off.getRMSLevel (0, r2, len) + 1.0e-9f);
+                check (q2 > q1 + 15.0, juce::String::formatted ("STEP LEVEL 0: repeat 1 silent (%.1f dB), repeat 2 sounds (%.1f dB)", q1, q2));
+
+                // GATE chops each step: with 30% the second half of every repeat is (almost) silent
+                const auto chopped = repeats (HiveBlock::fillEcho, 30.0f);
+                const auto full = repeats (HiveBlock::fillEcho, 100.0f);
+                const int late = (int) (0.35 * sr + 0.6 * 0.25 * sr);
+                const double cut = juce::Decibels::gainToDecibels (chopped.getRMSLevel (0, late, 2400) + 1.0e-9f)
+                                 - juce::Decibels::gainToDecibels (full.getRMSLevel (0, late, 2400) + 1.0e-9f);
+                check (cut < -15.0, juce::String::formatted ("GATE 30%%: the end of each step is chopped (%.1f dB vs full)", cut));
+            }
+            for (int fill = 0; fill < HiveBlock::numFills; ++fill)
+            {
+                const auto out = fill == 0 ? ladder : (fill == 1 ? bounceOut : repeats (fill));
+                const float tail = out.getRMSLevel (0, (int) (0.35 * sr), (int) (1.0 * sr));
                 const float end  = out.getRMSLevel (0, (int) (2.2 * sr), (int) (0.3 * sr));
-                check (allFinite (out) && out.getMagnitude (0, out.getNumSamples()) < 2.0f && tail > 1.0e-3f && end < tail,
-                       juce::String::formatted ("%s: repeats after the note (RMS %.4f), fading (%.5f later), bounded",
-                                                ParamChoices::hivePatterns[pattern].toRawUTF8(), tail, end));
+                check (allFinite (out) && out.getMagnitude (0, out.getNumSamples()) < 2.0f && tail > 5.0e-4f && end < tail,
+                       juce::String::formatted ("FILL %s: repeats after the note (RMS %.4f), fading (%.5f later), bounded",
+                                                ParamChoices::trailFills[fill].toRawUTF8(), tail, end));
             }
         }
         {
@@ -1301,6 +1344,10 @@ namespace
             addLegacy ("noiseDown", 1.0);
             addLegacy ("stingRaw", 0.0);
             addLegacy ("stingDetune", -20.0);
+            addLegacy ("hivePattern", 2.0);   // beta.20-22 SCATTER
+            for (auto* id : { ParamIDs::trMoves[0], ParamIDs::trMoves[5] })
+                if (auto* e = xml->getChildByAttribute ("id", id))
+                    xml->removeChildElement (e, true);
             juce::MemoryBlock legacy;
             juce::AudioProcessor::copyXmlToBinary (*xml, legacy);
             SwarmnessAudioProcessor b;
@@ -1308,6 +1355,9 @@ namespace
             auto v = [&b] (const char* id) { return b.getAPVTS().getRawParameterValue (id)->load(); };
             check (v (ParamIDs::shiftA) < -11.5f && v (ParamIDs::shiftB) < -23.5f && v (ParamIDs::rbRaw) < 0.5f && std::abs (v (ParamIDs::rbDetune) + 20.0f) < 0.1f,
                    "old session: DIVE -> SHIFT -12 / -24, STING RAW off and DETUNE -20 ct carried over");
+            check (juce::roundToInt (v (ParamIDs::trMoves[0])) == HiveBlock::random && juce::roundToInt (v (ParamIDs::trMoves[5])) == HiveBlock::random
+                   && juce::roundToInt (v (ParamIDs::trSteps)) == 8,
+                   "old session: PATTERN SCATTER -> 8 RANDOM steps");
 
             auto file = juce::File::createTempFile (".swpreset");
             file.replaceWithText (R"({"name":"Legacy Dive","plugin":"Swarmness","parameters":{"noiseDown":1,"rise":400}})");

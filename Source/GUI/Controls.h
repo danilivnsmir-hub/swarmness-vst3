@@ -113,6 +113,60 @@ private:
 
 //==============================================================================
 /**
+ * TRAILS step pattern editor - a pattern tremolo for the repeats.
+ *  - drag up / down over the bars: LEVEL of each repeat (paint across steps), double-click = on / off
+ *  - click the symbol under a bar: its MOVE (hold, up, down, random, reverse); right-click = menu
+ *  - header: STEPS - / + (pattern length) and FILL (ready-made patterns)
+ */
+class StepGrid : public juce::Component,
+                 public juce::SettableTooltipClient
+{
+public:
+    explicit StepGrid (juce::AudioProcessorValueTreeState&);
+
+    /** From the editor timer: repaints when a step value or the playing step changed. */
+    void refresh (int playingStep);
+
+    void paint (juce::Graphics&) override;
+    void mouseDown (const juce::MouseEvent&) override;
+    void mouseDrag (const juce::MouseEvent&) override;
+    void mouseUp (const juce::MouseEvent&) override;
+    void mouseDoubleClick (const juce::MouseEvent&) override;
+
+private:
+    static constexpr int kSteps = 16;
+    juce::Rectangle<float> headerArea() const;
+    juce::Rectangle<float> barsArea() const;
+    juce::Rectangle<float> movesArea() const;
+    juce::Rectangle<float> minusArea() const;
+    juce::Rectangle<float> plusArea() const;
+    juce::Rectangle<float> fillArea() const;
+    int stepAt (float x) const;
+    float levelAt (float y) const;
+
+    float level (int step) const;
+    int move (int step) const;
+    int numSteps() const;
+    void setParam (const char* id, float value, bool gesture = true);
+    void paintLevel (int step, float value);
+    void endPainting();
+    void showMoveMenu (int step);
+    void showFillMenu();
+    void applyFill (int fill);
+
+    juce::AudioProcessorValueTreeState& state;
+    std::array<float, kSteps> shownLevel {};
+    std::array<int, kSteps> shownMove {};
+    int shownSteps = -1, shownPlaying = -2;
+    std::vector<juce::RangedAudioParameter*> painting;   // params inside a gesture while dragging
+    int lastPaintStep = -1;
+    float lastPaintLevel = 0.0f;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (StepGrid)
+};
+
+//==============================================================================
+/**
  * Metal stomp switch bound to a boolean parameter: LED on top, caption below.
  * Momentary switches are "on" only while held (mouse down .. mouse up); latching ones toggle.
  */

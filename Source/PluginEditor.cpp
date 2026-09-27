@@ -21,7 +21,7 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
       reverbPage (p),
       presetBar (p.getPresetManager()),
       switchModeSelector (param (state, ParamIDs::switchMode), { "MOMENTARY", "LATCH" }),
-      patternSelector (param (state, ParamIDs::hivePattern), { "LADDER", "BOUNCE", "SCATTER", "REVERSE", "BLOOM" }),
+      stepGrid (p.getAPVTS()),
       fuzzVoiceSelector (param (state, ParamIDs::fuzzVoice), { "DOWN", "MID", "UP" }),
       oct1Switch   (param (state, ParamIDs::oct1),      "SHIFT A", Colours::accent,  false, [this] { return footswitchesMomentary(); }),
       oct2Switch   (param (state, ParamIDs::oct2),      "SHIFT B", Colours::accent,  false, [this] { return footswitchesMomentary(); }),
@@ -69,19 +69,18 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     attachButton (fxPage, hivePower, rbOn, "HIVE on/off (voices + trails). The SHIFT A / B and VENOM footswitches work even while it is off - like momentary pedals");
     attachButton (fxPage, snapToggle, rbSnap, "SNAP: PITCH in whole semitones, and FRENZY jumps land on 4ths / 5ths / octaves (off = atonal in-between pitches)");
     attachButton (fxPage, followToggle, hiveFollow, "FOLLOW: the voices harmonise the SHIFTed note instead of the note you play");
-    pitchKnob    .attach (state, rbPitch,     "PITCH: DRONE interval, -12..+12 semitones (SNAP = whole semitones). Also the step of the TRAILS");
+    pitchKnob    .attach (state, rbPitch,     "PITCH: DRONE interval, -12..+12 semitones (SNAP = whole semitones). Also how far an UP / DOWN step moves a repeat");
     pitchKnob.setSnap ([this] (double v) { return paramOn (ParamIDs::rbSnap) ? std::round (v) : v; });
     primaryKnob  .attach (state, rbPrimary,   "DRONE: level of the main harmony voice (and its trails)");
     secondaryKnob.attach (state, rbSecondary, "QUEEN: a voice one octave from the DRONE (above for up-shifts, below for down)");
     trackingKnob .attach (state, rbTracking,  "TRACKING: high = tight harmonies, low = lag, long repeating grains and tone clusters");
     // TRAILS
-    magicKnob .attach (state, rbMagic, "TRAILS: repeats of the DRONE, moved by PITCH as the PATTERN says (the VENOM footswitch pushes them into self-oscillation)");
-    rbTimeKnob.attach (state, rbTime,  "TIME: time between the repeats");
-    rbDivKnob .attach (state, rbDiv,   "TIME as a tempo division (SYNC on)");
+    magicKnob .attach (state, rbMagic, "TRAILS: how long the repeats of the DRONE keep going - the STEPS below shape each one (the VENOM footswitch pushes them into self-oscillation)");
+    rbTimeKnob.attach (state, rbTime,  "TIME: time between the repeats = length of one step");
+    rbDivKnob .attach (state, rbDiv,   "TIME as a tempo division (SYNC on) = length of one step");
     toneKnob  .attach (state, rbTone,  "TONE: brightness of the voices and the trails");
-    attachButton (fxPage, rbSyncToggle, rbSync, "SYNC: lock the repeats to the host tempo");
-    patternSelector.setTooltip ("PATTERN (needs TRAILS above 0) - how the repeats move: LADDER = one more PITCH step each time, BOUNCE = flip between the voice and your note, "
-                                "SCATTER = random chord tones, REVERSE = backwards repeats, BLOOM = diffused swelling cloud");
+    gateKnob  .attach (state, trGate,  "GATE: how much of every step sounds - 100% = whole repeats, low = short stuttering chops");
+    attachButton (fxPage, rbSyncToggle, rbSync, "SYNC: lock the repeats to the host tempo - while the song plays, the STEPS follow the bar grid");
     // MANGLE
     panicKnob.attach (state, panic, "ANGER: sour second voices detuned against the shifted note and the harmonies - beating, dissonant clusters");
     chaosKnob.attach (state, chaos, "FRENZY: random pitch jumps of everything HIVE adds - wider and faster as you turn it up");
@@ -93,7 +92,7 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     pitchScope.setTooltip ("Live SHIFT transposition (with FRENZY / ANGER movement)");
     for (auto* c : std::initializer_list<juce::Component*> { &pitchScope, &shiftAKnob, &shiftBKnob, &riseKnob, &fallKnob, &blendKnob,
                                                              &pitchKnob, &primaryKnob, &secondaryKnob, &trackingKnob,
-                                                             &magicKnob, &rbTimeKnob, &toneKnob, &patternSelector,
+                                                             &magicKnob, &rbTimeKnob, &toneKnob, &gateKnob, &stepGrid,
                                                              &panicKnob, &chaosKnob, &speedKnob, &rbDetuneKnob, &rbMixKnob })
         fxPage.addAndMakeVisible (c);
     fxPage.addChildComponent (rbDivKnob);
@@ -296,9 +295,11 @@ void MainPanel::resized()
         followToggle.setBounds ((int) voiceSec.getX() + 160, y2 + 22, 70, 24);
 
         rbSyncToggle.setBounds ((int) trailSec.getRight() - 12 - 60, (int) trailSec.getY() + 36, 60, 22);   // header row
-        row (trailSec, y1, { &magicKnob, &rbTimeKnob, &toneKnob });
+        kw = 58;
+        row (trailSec, y1, { &magicKnob, &rbTimeKnob, &toneKnob, &gateKnob }, 4);
+        kw = 72;
         rbDivKnob.setBounds (rbTimeKnob.getBounds());
-        patternSelector.setBounds ((int) trailSec.getX() + 10, y2 + 32, (int) trailSec.getWidth() - 20, 22);
+        stepGrid.setBounds ((int) trailSec.getX() + 12, y2 - 2, (int) trailSec.getWidth() - 24, (int) hiveArea.getBottom() - 10 - (y2 - 2));
 
         rbRawToggle.setBounds ((int) mangleSec.getRight() - 12 - 60, (int) mangleSec.getY() + 36, 60, 22);
         row (mangleSec, y1, { &panicKnob, &chaosKnob, &speedKnob });
@@ -524,9 +525,10 @@ void MainPanel::tick()
                                        paramOn (ParamIDs::fuzzOn), paramOn (ParamIDs::flowOn) };
 
     setSectionDimmed ({ &snapToggle, &followToggle, &pitchKnob, &primaryKnob, &secondaryKnob, &trackingKnob, &magicKnob }, ! states[1]);
-    // PATTERN / TIME / TONE only matter once there are repeats: TRAILS up (or VENOM held)
+    // STEPS / TIME / TONE / GATE only matter once there are repeats: TRAILS up (or VENOM held)
     const bool trailsAudible = states[1] && (state.getRawParameterValue (ParamIDs::rbMagic)->load() > 0.5f || venom);
-    setSectionDimmed ({ &rbSyncToggle, &rbTimeKnob, &rbDivKnob, &toneKnob, &patternSelector }, ! trailsAudible);
+    setSectionDimmed ({ &rbSyncToggle, &rbTimeKnob, &rbDivKnob, &toneKnob, &gateKnob, &stepGrid }, ! trailsAudible);
+    stepGrid.refresh (trailsAudible ? meters.trailStep.load() : -1);
     setSectionDimmed ({ &deepToggle, &swarmDepthKnob, &swarmRateKnob, &swarmMixKnob }, ! states[2]);
     setSectionDimmed ({ &fuzzVoiceSelector, &fuzzKnob, &fuzzToneKnob, &fuzzScoopKnob,
                         &fuzzGlareKnob, &fuzzGateKnob, &fuzzSagKnob, &fuzzBlendKnob }, ! states[3]);

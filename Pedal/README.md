@@ -3,7 +3,7 @@
 Педаль SWARMNESS — «деструктивный питч-дилей»:
 
 ```
-IN → INPUT → HIVE (SHIFT на футсвичах + VOICES + TRAILS с паттернами + MANGLE) → SWARM (хорус) → VOLUME → OUT
+IN → INPUT → HIVE (SHIFT на футсвичах + VOICES + TRAILS с шагами STEPS + MANGLE) → SWARM (хорус) → VOLUME → OUT
 ```
 
 ## Что уже готово
@@ -64,7 +64,7 @@ IN → INPUT → HIVE (SHIFT на футсвичах + VOICES + TRAILS с пат
 
 Раскладка управления SWARMNESS под Hothouse-подобный корпус (черновик):
 - 6 ручек: **PITCH**, **DRONE/QUEEN**, **TRAILS**, **TIME**, **ANGER/FRENZY** (MANGLE), **MIX**;
-- 3 тумблера: **PATTERN** LADDER / SCATTER / REVERSE, **SHIFT** −1 oct / +1 oct / +2 oct, **RAW / CLEAN**;
+- 3 тумблера: **STEPS** LADDER / SCATTER / STUTTER (готовые паттерны шагов), **SHIFT** −1 oct / +1 oct / +2 oct, **RAW / CLEAN**;
 - 2 футсвича: **SHIFT** и **VENOM** (моментальные); удержание обоих — байпас. RISE/FALL, BUZZ, SWARM — вторыми функциями (зажатый футсвич + ручка).
 
 ## Как проверить на железе

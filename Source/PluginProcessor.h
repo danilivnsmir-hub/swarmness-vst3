@@ -60,6 +60,7 @@ public:
         std::array<std::atomic<float>, 2> output {};
         std::atomic<float> pitchSemitones { 0.0f };   // current NOISE transposition
         std::atomic<bool>  noiseEngaged { false };
+        std::atomic<int>   trailStep { -1 };             // TRAILS step now playing (-1 = none)
         std::atomic<float> reverbLevel { 0.0f };       // CRYPT wet peak
     };
 
@@ -118,7 +119,9 @@ private:
     // Parameters (cached raw pointers - lock-free reads on the audio thread)
     struct Params
     {
-        std::atomic<float>* oct1 {};       std::atomic<float>* oct2 {};        std::atomic<float>* shiftA {};    std::atomic<float>* shiftB {};  std::atomic<float>* hiveFollow {}; std::atomic<float>* hivePattern {};
+        std::atomic<float>* oct1 {};       std::atomic<float>* oct2 {};        std::atomic<float>* shiftA {};    std::atomic<float>* shiftB {};  std::atomic<float>* hiveFollow {};
+        std::atomic<float>* trSteps {};    std::atomic<float>* trGate {};
+        std::array<std::atomic<float>*, 16> trLevels {}, trMoves {};
         std::atomic<float>* rise {};       std::atomic<float>* panic {};       std::atomic<float>* chaos {};
         std::atomic<float>* speed {};      std::atomic<float>* fall {};        std::atomic<float>* stingMix {};    std::atomic<float>* rbDetune {};    std::atomic<float>* rbRaw {};
         std::atomic<float>* rbOn {};       std::atomic<float>* rbPitch {};     std::atomic<float>* rbSnap {};
