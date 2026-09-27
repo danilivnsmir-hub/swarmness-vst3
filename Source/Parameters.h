@@ -142,6 +142,7 @@ namespace ParamIDs
     inline constexpr const char* input       = "input";        // input sensitivity (compensated at the output)
     inline constexpr const char* output      = "output";
     inline constexpr const char* switchMode  = "switchMode";   // footswitch behaviour: momentary / latch
+    inline constexpr const char* scene       = "scene";        // current scene A..D of the preset
     inline constexpr const char* bypass      = "bypass";
 }
 
@@ -156,6 +157,7 @@ namespace ParamRanges
 namespace ParamChoices
 {
     inline const juce::StringArray switchModes { "Momentary", "Latch" };
+    inline const juce::StringArray scenes      { "A", "B", "C", "D" };
     inline const juce::StringArray fuzzVoices  { "Down", "Mid", "Up" };
     inline const juce::StringArray reverbTypes { "Room", "Plate", "Hall", "Abyss", "IR" };
     inline const juce::StringArray stepMoves { "Hold", "Up", "Down", "Random", "Reverse" };
@@ -333,7 +335,8 @@ namespace Chain
 /** Performance switches: not stored in presets (like a pedal's footswitch position). */
 inline bool isPerformanceParameter (const juce::String& id)
 {
-    return id == ParamIDs::bypass || id == ParamIDs::oct1 || id == ParamIDs::oct2 || id == ParamIDs::magicHold;
+    return id == ParamIDs::bypass || id == ParamIDs::oct1 || id == ParamIDs::oct2 || id == ParamIDs::magicHold
+        || id == ParamIDs::scene;
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();

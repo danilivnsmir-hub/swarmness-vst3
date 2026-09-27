@@ -345,6 +345,9 @@ void PresetManager::takeSnapshot()
 
     const juce::ScopedLock sl (lock);
     snapshot = std::move (values);
+    savedScenes = scenes;
+    if (! scenes[(size_t) currentScene].empty())
+        savedScenes[(size_t) currentScene] = captureSceneValues();
 }
 
 juce::String PresetManager::getCurrentPresetName() const
@@ -362,6 +365,9 @@ void PresetManager::setCurrentName (const juce::String& name)
 bool PresetManager::isDirty() const
 {
     const juce::ScopedLock sl (lock);
+    for (int k = 0; k < kScenes; ++k)
+        if (k != currentScene && scenes[(size_t) k] != savedScenes[(size_t) k])
+            return true;
     for (auto* param : apvts.processor.getParameters())
         if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (param))
             if (auto it = snapshot.find (ranged->getParameterID()); it != snapshot.end())
@@ -496,6 +502,7 @@ bool PresetManager::loadPreset (const juce::String& name)
         if (fp.name == name)
         {
             applyValues (fp.values, true);
+            loadScenesFromJson ({});
             setCurrentName (name);
             takeSnapshot();
             return true;
@@ -513,6 +520,7 @@ bool PresetManager::loadPreset (const juce::String& name)
         return false;
 
     applyValues (values, true);
+    loadScenesFromJson (json);
     if (onLoadExtras)
         onLoadExtras (json);
     setCurrentName (name);
@@ -540,7 +548,7 @@ bool PresetManager::saveUserPreset (const juce::String& rawName)
         return false;
 
     auto file = getPresetsDirectory().getChildFile (name + extension);
-    if (! file.replaceWithText (juce::JSON::toString (toJson (name, captureValues()))))
+    if (! file.replaceWithText (juce::JSON::toString (presetJson (name))))
         return false;
 
     setCurrentName (name);
@@ -583,12 +591,163 @@ bool PresetManager::importPreset (const juce::File& file)
         name << " (imported)";
 
     applyValues (values, true);
+    loadScenesFromJson (json);
     if (onLoadExtras)
         onLoadExtras (json);
     return saveUserPreset (name);
 }
 
-bool PresetManager::exportPreset (const juce::File& file) const
+bool PresetManager::exportPreset (const juce::File& file)
 {
-    return file.replaceWithText (juce::JSON::toString (toJson (file.getFileNameWithoutExtension(), captureValues())));
+    return file.replaceWithText (juce::JSON::toString (presetJson (file.getFileNameWithoutExtension())));
+}
+
+//==============================================================================
+bool PresetManager::isSceneParameter (const juce::String& id)
+{
+    if (! isPresetParameter (id))
+        return false;
+    for (int b = 0; b < Chain::numBlocks; ++b)
+        if (id == Chain::slotIds[b] || id == Chain::laneIds[b])
+            return false;   // the chain order / routing is shared by all scenes
+    return true;
+}
+
+PresetManager::ValueMap PresetManager::captureSceneValues() const
+{
+    ValueMap values;
+    for (auto* param : apvts.processor.getParameters())
+        if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (param))
+            if (isSceneParameter (ranged->getParameterID()))
+                values[ranged->getParameterID()] = ranged->convertFrom0to1 (ranged->getValue());
+    return values;
+}
+
+void PresetManager::resetScenes()
+{
+    for (auto& sc : scenes) sc.clear();
+    for (auto& sc : savedScenes) sc.clear();
+    currentScene = 0;
+    if (auto* p = apvts.getParameter (ParamIDs::scene))
+        p->setValueNotifyingHost (0.0f);
+}
+
+void PresetManager::loadScenesFromJson (const juce::var& json)
+{
+    resetScenes();
+    scenes[0] = captureSceneValues();
+    if (auto* list = json["scenes"].getArray())
+        for (int k = 1; k < juce::jmin (kScenes, list->size()); ++k)
+            if (auto* obj = (*list)[k].getDynamicObject())
+            {
+                ValueMap values;
+                for (const auto& prop : obj->getProperties())
+                    values[prop.name.toString()] = (float) (double) prop.value;
+                if (values.empty())
+                    continue;
+                migrateLegacyValues (values);
+                // a scene only holds scene parameters; anything missing comes from scene A
+                ValueMap full = scenes[0];
+                for (const auto& [id, v] : values)
+                    if (full.find (id) != full.end())
+                        full[id] = v;
+                scenes[(size_t) k] = std::move (full);
+            }
+    savedScenes = scenes;
+}
+
+juce::var PresetManager::presetJson (const juce::String& name)
+{
+    scenes[(size_t) currentScene] = captureSceneValues();
+    auto values = captureValues();
+    for (const auto& [id, v] : scenes[0])
+        values[id] = v;   // the preset's own parameters = scene A
+    auto json = toJson (name, values);
+    bool any = false;
+    juce::Array<juce::var> list;
+    for (int k = 0; k < kScenes; ++k)
+    {
+        auto* obj = new juce::DynamicObject();
+        if (k > 0 && ! scenes[(size_t) k].empty())
+        {
+            any = true;
+            for (const auto& [id, v] : scenes[(size_t) k])
+                obj->setProperty (id, v);
+        }
+        list.add (juce::var (obj));
+    }
+    if (any)
+        json.getDynamicObject()->setProperty ("scenes", list);
+    return json;
+}
+
+bool PresetManager::isSceneUsed (int index) const
+{
+    return index == currentScene || ! scenes[(size_t) juce::jlimit (0, kScenes - 1, index)].empty();
+}
+
+void PresetManager::selectScene (int index)
+{
+    index = juce::jlimit (0, kScenes - 1, index);
+    if (index == currentScene)
+        return;
+    scenes[(size_t) currentScene] = captureSceneValues();
+    if (scenes[(size_t) index].empty())
+    {
+        // a new scene starts as a copy of the one you come from
+        scenes[(size_t) index] = scenes[(size_t) currentScene];
+        if (savedScenes[(size_t) index].empty())
+            savedScenes[(size_t) index] = scenes[(size_t) index];
+    }
+    currentScene = index;
+    applyValues (scenes[(size_t) index], false);
+    syncSceneSnapshot();
+    if (auto* p = apvts.getParameter (ParamIDs::scene))
+        if (juce::roundToInt (p->convertFrom0to1 (p->getValue())) != index)
+            p->setValueNotifyingHost (p->convertTo0to1 ((float) index));
+}
+
+void PresetManager::copyCurrentSceneTo (int index)
+{
+    index = juce::jlimit (0, kScenes - 1, index);
+    if (index != currentScene)
+        scenes[(size_t) index] = captureSceneValues();
+}
+
+void PresetManager::syncSceneSnapshot()
+{
+    const juce::ScopedLock sl (lock);
+    for (const auto& [id, v] : savedScenes[(size_t) currentScene])
+        if (auto* p = apvts.getParameter (id))
+            snapshot[id] = p->convertTo0to1 (v);
+}
+
+juce::var PresetManager::scenesToVar()
+{
+    scenes[(size_t) currentScene] = captureSceneValues();
+    juce::Array<juce::var> list;
+    for (const auto& sc : scenes)
+    {
+        auto* obj = new juce::DynamicObject();
+        for (const auto& [id, v] : sc)
+            obj->setProperty (id, v);
+        list.add (juce::var (obj));
+    }
+    return list;
+}
+
+void PresetManager::scenesFromVar (const juce::var& v, int current)
+{
+    for (auto& sc : scenes) sc.clear();
+    if (auto* list = v.getArray())
+        for (int k = 0; k < juce::jmin (kScenes, list->size()); ++k)
+            if (auto* obj = (*list)[k].getDynamicObject())
+            {
+                for (const auto& prop : obj->getProperties())
+                    scenes[(size_t) k][prop.name.toString()] = (float) (double) prop.value;
+                if (! scenes[(size_t) k].empty())
+                    migrateLegacyValues (scenes[(size_t) k]);
+            }
+    currentScene = juce::jlimit (0, kScenes - 1, current);
+    savedScenes = scenes;
 }

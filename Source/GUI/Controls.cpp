@@ -1247,3 +1247,85 @@ void StepGrid::paint (juce::Graphics& g)
         }
     }
 }
+
+//==============================================================================
+SceneBar::SceneBar()
+{
+    setTooltip ("SCENES: four versions of the current preset's sound. Click to switch (glides, no clicks); a new scene starts as a "
+                "copy of the one you are in, and your edits stay in the scene. The chain order is shared. Saved with the preset. "
+                "Right-click: MIDI learn a pedal for this scene, copy the current scene here");
+    setMouseCursor (juce::MouseCursor::PointingHandCursor);
+}
+
+void SceneBar::refresh()
+{
+    const int current = getCurrent != nullptr ? getCurrent() : 0;
+    std::array<bool, kScenes> used {};
+    for (int k = 0; k < kScenes; ++k)
+        used[(size_t) k] = isUsed != nullptr && isUsed (k);
+    if (current != shownCurrent || used != shownUsed)
+    {
+        shownCurrent = current;
+        shownUsed = used;
+        repaint();
+    }
+}
+
+juce::Rectangle<float> SceneBar::buttonArea (int scene) const
+{
+    const float w = 112.0f, gap = 12.0f;
+    const float total = kScenes * w + (kScenes - 1) * gap;
+    const float x0 = ((float) getWidth() - total) * 0.5f;
+    return { x0 + (float) scene * (w + gap), 4.0f, w, (float) getHeight() - 8.0f };
+}
+
+void SceneBar::mouseDown (const juce::MouseEvent& e)
+{
+    for (int k = 0; k < kScenes; ++k)
+        if (buttonArea (k).contains (e.position))
+        {
+            if (e.mods.isPopupMenu()) { if (onRightClick != nullptr) onRightClick (k); }
+            else if (onSelect != nullptr) onSelect (k);
+            return;
+        }
+}
+
+void SceneBar::paint (juce::Graphics& g)
+{
+    using namespace Theme;
+    g.setFont (displayFont (17.0f));
+    g.setColour (Colours::textDim);
+    g.drawText ("SCENES", getLocalBounds().toFloat().withTrimmedLeft (18.0f), juce::Justification::centredLeft, false);
+
+    static const char* letters[] { "A", "B", "C", "D" };
+    for (int k = 0; k < kScenes; ++k)
+    {
+        const auto r = buttonArea (k);
+        const bool current = k == shownCurrent, used = shownUsed[(size_t) k];
+        auto shape = chamfered (r, 7.0f);
+        if (current)
+        {
+            g.setGradientFill (juce::ColourGradient (Colours::accentBright, r.getX(), r.getY(), Colours::accentDeep, r.getX(), r.getBottom(), false));
+            g.fillPath (shape);
+        }
+        else
+        {
+            g.setColour (Colours::inset);
+            g.fillPath (shape);
+        }
+        g.setColour (current ? Colours::accentBright : (used ? Colours::accent.withAlpha (0.8f) : Colours::panelBorder));
+        g.strokePath (shape, juce::PathStrokeType (current ? 1.6f : 1.2f));
+
+        g.setFont (displayFont (20.0f));
+        g.setColour (current ? Colours::background : (used ? Colours::text : Colours::textFaint));
+        g.drawText (letters[k], r.withTrimmedBottom (describeMidi != nullptr && describeMidi (k).isNotEmpty() ? 10.0f : 0.0f),
+                    juce::Justification::centred, false);
+        if (describeMidi != nullptr)
+            if (const auto midi = describeMidi (k); midi.isNotEmpty())
+            {
+                g.setFont (font (11.0f, true));
+                g.setColour (current ? Colours::background.withAlpha (0.8f) : Colours::textDim);
+                g.drawText (midi, r.withTrimmedTop (r.getHeight() - 14.0f), juce::Justification::centred, false);
+            }
+    }
+}

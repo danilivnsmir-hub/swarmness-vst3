@@ -77,6 +77,7 @@ SwarmnessAudioProcessor::SwarmnessAudioProcessor()
     for (auto* param : getParameters())
         if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (param))
             learnableParams.add (ranged);
+    apvts.addParameterListener (id::scene, this);
     jassert (bypassParam != nullptr);
 
     presetManager = std::make_unique<PresetManager> (apvts);
@@ -663,6 +664,29 @@ juce::String SwarmnessAudioProcessor::getReverbIRDescription() const
 }
 
 //==============================================================================
+SwarmnessAudioProcessor::~SwarmnessAudioProcessor()
+{
+    apvts.removeParameterListener (ParamIDs::scene, this);
+    cancelPendingUpdate();
+}
+
+void SwarmnessAudioProcessor::parameterChanged (const juce::String& parameterID, float newValue)
+{
+    if (parameterID != ParamIDs::scene || restoringState)
+        return;
+    pendingScene.store (juce::roundToInt (newValue));
+    if (juce::MessageManager::existsAndIsCurrentThread())
+        handleAsyncUpdate();
+    else
+        triggerAsyncUpdate();   // from the audio thread (automation / MIDI): switch on the message thread
+}
+
+void SwarmnessAudioProcessor::handleAsyncUpdate()
+{
+    if (presetManager != nullptr)
+        presetManager->selectScene (pendingScene.load());
+}
+
 int SwarmnessAudioProcessor::indexOfParam (const juce::String& paramID) const noexcept
 {
     for (int i = 0; i < learnableParams.size(); ++i)
@@ -671,8 +695,9 @@ int SwarmnessAudioProcessor::indexOfParam (const juce::String& paramID) const no
     return -1;
 }
 
-void SwarmnessAudioProcessor::startMidiLearn (const juce::String& paramID) noexcept
+void SwarmnessAudioProcessor::startMidiLearn (const juce::String& paramID, int value) noexcept
 {
+    midiLearnValue.store (value);
     midiLearnParam.store (indexOfParam (paramID));
 }
 
@@ -682,24 +707,24 @@ juce::String SwarmnessAudioProcessor::getMidiLearnParam() const
     return juce::isPositiveAndBelow (i, learnableParams.size()) ? learnableParams.getUnchecked (i)->paramID : juce::String();
 }
 
-void SwarmnessAudioProcessor::clearMidiBindings (const juce::String& paramID) noexcept
+void SwarmnessAudioProcessor::clearMidiBindings (const juce::String& paramID, int value) noexcept
 {
     const int index = indexOfParam (paramID);
     for (auto& b : midiBindings)
-        if (index >= 0 && b.param.load() == index)
+        if (index >= 0 && b.param.load() == index && b.value.load() == value)
         {
             b.kind.store (0);
             b.param.store (-1);
         }
 }
 
-juce::String SwarmnessAudioProcessor::describeMidiBinding (const juce::String& paramID) const
+juce::String SwarmnessAudioProcessor::describeMidiBinding (const juce::String& paramID, int value) const
 {
     const int index = indexOfParam (paramID);
     juce::StringArray parts;
     for (const auto& b : midiBindings)
     {
-        if (index < 0 || b.param.load() != index)
+        if (index < 0 || b.param.load() != index || b.value.load() != value)
             continue;
         const int n = b.number.load();
         switch ((MidiKind) b.kind.load())
@@ -730,9 +755,10 @@ void SwarmnessAudioProcessor::handleMidi (const juce::MidiBuffer& midi)
         const int learn = midiLearnParam.load();
         if (learn >= 0 && (isCC || msg.isNoteOn()))
         {
+            const int learnValue = midiLearnValue.load();
             MidiBinding* slot = nullptr;
             for (auto& b : midiBindings)
-                if (b.param.load() == learn && b.kind.load() == kind && b.number.load() == number)
+                if (b.param.load() == learn && b.kind.load() == kind && b.number.load() == number && b.value.load() == learnValue)
                     slot = &b;                                    // already bound
             for (auto& b : midiBindings)
                 if (slot == nullptr && b.param.load() < 0)
@@ -742,6 +768,7 @@ void SwarmnessAudioProcessor::handleMidi (const juce::MidiBuffer& midi)
                 slot->kind.store (kind);
                 slot->number.store (number);
                 slot->down.store (pressed);                        // the learning press does not also switch
+                slot->value.store (learnValue);
                 slot->param.store (learn);
             }
             midiLearnParam.store (-1);
@@ -756,6 +783,12 @@ void SwarmnessAudioProcessor::handleMidi (const juce::MidiBuffer& midi)
             if (auto* param = learnableParams[index])
             {
                 const bool wasDown = b.down.exchange (pressed);
+                if (const int fixed = b.value.load(); fixed >= 0)
+                {
+                    if (pressed && ! wasDown)
+                        param->setValueNotifyingHost (param->convertTo0to1 ((float) fixed));   // e.g. "scene C"
+                    continue;
+                }
                 const bool continuous = dynamic_cast<juce::AudioParameterBool*> (param) == nullptr
                                      && dynamic_cast<juce::AudioParameterChoice*> (param) == nullptr;
                 if (continuous ? isCC : wasDown != pressed)
@@ -803,12 +836,15 @@ void SwarmnessAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
     state.setProperty ("presetName", presetManager->getCurrentPresetName(), nullptr);
     state.setProperty ("pluginVersion", JucePlugin_VersionString, nullptr);
     state.setProperty ("uiScale", uiScale.load(), nullptr);
+    state.setProperty ("uiMini", uiMini.load(), nullptr);
     state.setProperty ("reverbIR", getReverbIRFile().getFullPathName(), nullptr);
     juce::StringArray bindings;
     for (const auto& b : midiBindings)
         if (const int index = b.param.load(); index >= 0 && b.kind.load() != 0)
-            bindings.add (learnableParams[index]->paramID + ":" + juce::String (b.kind.load()) + ":" + juce::String (b.number.load()));
+            bindings.add (learnableParams[index]->paramID + ":" + juce::String (b.kind.load()) + ":" + juce::String (b.number.load())
+                          + (b.value.load() >= 0 ? ":" + juce::String (b.value.load()) : juce::String()));
     state.setProperty ("midiBindings", bindings.joinIntoString (";"), nullptr);
+    state.setProperty ("scenes", juce::JSON::toString (presetManager->scenesToVar(), true), nullptr);
 
     if (auto xml = state.createXml())
         copyXmlToBinary (*xml, destData);
@@ -821,7 +857,11 @@ void SwarmnessAudioProcessor::setStateInformation (const void* data, int sizeInB
         if (xml->hasTagName (apvts.state.getType()))
         {
             auto tree = juce::ValueTree::fromXml (*xml);
+            restoringState = true;   // the scene parameter comes back with the state; its scenes are restored below
+            const auto scenesJson = tree.getProperty ("scenes").toString();
+            tree.removeProperty ("scenes", nullptr);
             uiScale = juce::jlimit (0.7f, 2.0f, (float) tree.getProperty ("uiScale", 1.0f));
+            uiMini = (bool) tree.getProperty ("uiMini", false);
             // MIDI bindings ("paramID:kind:number;..."); up to beta.24 only the footswitches ("midi0".."midi3")
             for (auto& b : midiBindings)
             {
@@ -830,7 +870,7 @@ void SwarmnessAudioProcessor::setStateInformation (const void* data, int sizeInB
                 b.down.store (false);
             }
             size_t next = 0;
-            auto addBinding = [&] (const juce::String& paramID, int kind, int number)
+            auto addBinding = [&] (const juce::String& paramID, int kind, int number, int value = -1)
             {
                 const int index = indexOfParam (paramID);
                 if (index < 0 || kind <= 0 || kind > 2 || number < 0 || next >= midiBindings.size())
@@ -838,13 +878,14 @@ void SwarmnessAudioProcessor::setStateInformation (const void* data, int sizeInB
                 auto& b = midiBindings[next++];
                 b.kind.store (kind);
                 b.number.store (number);
+                b.value.store (value);
                 b.param.store (index);
             };
             for (const auto& entry : juce::StringArray::fromTokens (tree.getProperty ("midiBindings").toString(), ";", ""))
             {
                 const auto parts = juce::StringArray::fromTokens (entry, ":", "");
-                if (parts.size() == 3)
-                    addBinding (parts[0], parts[1].getIntValue(), parts[2].getIntValue());
+                if (parts.size() >= 3)
+                    addBinding (parts[0], parts[1].getIntValue(), parts[2].getIntValue(), parts.size() > 3 ? parts[3].getIntValue() : -1);
             }
             static const char* legacyTargets[] { ParamIDs::oct1, ParamIDs::oct2, ParamIDs::magicHold, ParamIDs::bypass };
             for (int t = 0; t < 4; ++t)
@@ -888,7 +929,10 @@ void SwarmnessAudioProcessor::setStateInformation (const void* data, int sizeInB
             else
                 clearReverbIR();
 
+            presetManager->scenesFromVar (juce::JSON::parse (scenesJson),
+                                          juce::roundToInt (apvts.getRawParameterValue (ParamIDs::scene)->load()));
             presetManager->restoreFromState (tree.getProperty ("presetName").toString());
+            restoringState = false;
 
             // Momentary footswitches must never come back "stuck down" after reloading a session.
             if (apvts.getRawParameterValue (ParamIDs::switchMode)->load() < 0.5f)

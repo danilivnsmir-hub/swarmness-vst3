@@ -190,6 +190,31 @@ private:
 };
 
 //==============================================================================
+/** Scene buttons A..D of the current preset (left-click = select, right-click = menu). */
+class SceneBar : public juce::Component,
+                 public juce::SettableTooltipClient
+{
+public:
+    SceneBar();
+    std::function<int()> getCurrent;
+    std::function<bool (int)> isUsed;
+    std::function<void (int)> onSelect, onRightClick;
+    std::function<juce::String (int)> describeMidi;   // e.g. "CC 30" (shown under the letter)
+
+    void refresh();   // from the editor timer
+    void paint (juce::Graphics&) override;
+    void mouseDown (const juce::MouseEvent&) override;
+    juce::Rectangle<float> buttonArea (int scene) const;
+
+private:
+    static constexpr int kScenes = 4;
+    int shownCurrent = -1;
+    std::array<bool, kScenes> shownUsed {};
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SceneBar)
+};
+
+//==============================================================================
 /**
  * Metal stomp switch bound to a boolean parameter: LED on top, caption below.
  * Momentary switches are "on" only while held (mouse down .. mouse up); latching ones toggle.

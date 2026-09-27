@@ -863,6 +863,65 @@ namespace
         check (r.describeMidiBinding (magicHold) == "CC 64", "old session: VENOM footswitch binding kept");
     }
 
+    void testScenes()
+    {
+        std::printf ("\nScenes A..D\n");
+        using namespace ParamIDs;
+        SwarmnessAudioProcessor p;
+        resetToInit (p);
+        auto& pm = p.getPresetManager();
+        auto v = [&p] (const char* id) { return p.getAPVTS().getRawParameterValue (id)->load(); };
+        setParam (p, fuzzOn, 1.0f);
+        setParam (p, fuzz, 30.0f);
+        setParam (p, scene, 1.0f);                                   // B: starts as a copy of A
+        const bool copied = std::abs (v (fuzz) - 30.0f) < 0.1f && v (fuzzOn) > 0.5f;
+        setParam (p, fuzz, 90.0f);
+        setParam (p, revOn, 1.0f);
+        setParam (p, scene, 0.0f);
+        const bool backToA = std::abs (v (fuzz) - 30.0f) < 0.1f && v (revOn) < 0.5f;
+        setParam (p, scene, 1.0f);
+        check (copied && backToA && std::abs (v (fuzz) - 90.0f) < 0.1f && v (revOn) > 0.5f && pm.getCurrentScene() == 1,
+               "a new scene copies the current one; each scene keeps its own settings");
+
+        // the chain order is shared
+        setParam (p, Chain::slotIds[Chain::crypt], 5.0f);
+        setParam (p, scene, 0.0f);
+        check (p.getRequestedLayout().order[0] == Chain::crypt, "the chain order is shared by all scenes");
+        setParam (p, Chain::slotIds[Chain::crypt], (float) Chain::defaultSlots[Chain::crypt]);
+
+        // saved with a user preset (scene A = the preset's parameters)
+        setParam (p, scene, 1.0f);
+        check (pm.isDirty(), "editing a scene marks the preset as modified");
+        pm.saveUserPreset ("Scene Test");
+        pm.loadPreset ("Init");
+        pm.loadPreset ("Scene Test");
+        const bool loadedA = pm.getCurrentScene() == 0 && std::abs (v (fuzz) - 30.0f) < 0.1f;
+        setParam (p, scene, 1.0f);
+        check (loadedA && std::abs (v (fuzz) - 90.0f) < 0.1f && ! pm.isDirty(), "scenes saved with the user preset (loads on A, B comes back)");
+
+        // saved with the session (current scene too)
+        juce::MemoryBlock mb;
+        p.getStateInformation (mb);
+        SwarmnessAudioProcessor q;
+        q.setStateInformation (mb.getData(), (int) mb.getSize());
+        auto qv = [&q] (const char* id) { return q.getAPVTS().getRawParameterValue (id)->load(); };
+        const bool inB = q.getPresetManager().getCurrentScene() == 1 && std::abs (qv (fuzz) - 90.0f) < 0.1f;
+        q.getAPVTS().getParameter (scene)->setValueNotifyingHost (0.0f);
+        check (inB && std::abs (qv (fuzz) - 30.0f) < 0.1f, "scenes and the current scene saved with the session");
+
+        // MIDI: one pedal per scene
+        p.prepareToPlay (48000.0, 256);
+        juce::AudioBuffer<float> buf (2, 256);
+        auto send = [&] (const juce::MidiMessage& m) { juce::MidiBuffer midi; midi.addEvent (m, 0); buf.clear(); p.processBlock (buf, midi); };
+        p.startMidiLearn (scene, 0);
+        send (juce::MidiMessage::controllerEvent (1, 30, 127));
+        send (juce::MidiMessage::controllerEvent (1, 30, 0));
+        send (juce::MidiMessage::controllerEvent (1, 30, 127));
+        check (pm.getCurrentScene() == 0 && std::abs (v (fuzz) - 30.0f) < 0.1f && p.describeMidiBinding (scene, 0) == "CC 30",
+               "a pedal learned on scene A selects scene A");
+        pm.deleteUserPreset ("Scene Test");
+    }
+
     void testUnsupportedPresets()
     {
         std::printf ("\nUser bank: Swarmness 1.x presets are moved out\n");
@@ -1849,8 +1908,10 @@ int main (int argc, char** argv)
         const float scale = argc >= 5 ? juce::String (argv[4]).getFloatValue() : 1.0f;
         if (argc >= 6)
             p.setUiPage (juce::String (argv[5]).getIntValue());
+        const bool mini = argc >= 7 && juce::String (argv[6]) == "mini";
+        p.setUiMini (mini);
         std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
-        editor->setSize (juce::roundToInt (MainPanel::baseWidth * scale), juce::roundToInt (MainPanel::baseHeight * scale));
+        editor->setSize (juce::roundToInt (MainPanel::baseWidth * scale), juce::roundToInt ((mini ? MainPanel::miniHeight : MainPanel::baseHeight) * scale));
 
         // Feed a little audio so meters and the pitch trace show activity.
         auto input = makeGuitar (48000.0, 256);
@@ -1939,6 +2000,7 @@ int main (int argc, char** argv)
     testMonoToStereo();
     testMidiLearn();
     testUnsupportedPresets();
+    testScenes();
     testDetune();
     testInputSensitivity();
     testSwarmBounded();

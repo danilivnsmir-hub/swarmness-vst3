@@ -3,6 +3,7 @@
 #include <JuceHeader.h>
 #include <functional>
 #include <map>
+#include <array>
 
 /**
  * Factory + user preset handling.
@@ -38,13 +39,29 @@ public:
     bool deleteUserPreset (const juce::String& name);
 
     bool importPreset (const juce::File& file);
-    bool exportPreset (const juce::File& file) const;
+    bool exportPreset (const juce::File& file);
 
     juce::String getCurrentPresetName() const;
     bool isDirty() const;
 
     /** Called after the host restores plug-in state. */
     void restoreFromState (const juce::String& presetName);
+
+    //==============================================================================
+    /**
+     * Scenes: every preset holds up to four versions of its sound (A..D). Edits belong to the
+     * scene you are in; a scene you enter for the first time starts as a copy of the one you
+     * came from. The chain order / routing is shared by all scenes. Message thread only.
+     */
+    static constexpr int kScenes = 4;
+    void selectScene (int index);
+    int getCurrentScene() const noexcept { return currentScene; }
+    bool isSceneUsed (int index) const;
+    /** Copies the scene you are in over another one. */
+    void copyCurrentSceneTo (int index);
+    /** Session state: the scenes (with the current one captured). */
+    juce::var scenesToVar();
+    void scenesFromVar (const juce::var&, int current);
 
     static juce::File getPresetsDirectory();
     /** Moves presets of Swarmness 1.x (unreadable) out of the user bank; returns how many. */
@@ -72,6 +89,9 @@ private:
     void stepPreset (bool userBank, int delta);
 
     juce::var toJson (const juce::String& name, const ValueMap& values) const;
+    /** The whole preset as JSON: scene A as its parameters, the other scenes alongside. */
+    juce::var presetJson (const juce::String& name);
+    void loadScenesFromJson (const juce::var& json);
     static bool fromJson (const juce::var& json, juce::String& name, ValueMap& values);
 
     juce::AudioProcessorValueTreeState& apvts;
@@ -85,4 +105,12 @@ private:
     mutable juce::CriticalSection lock;
     juce::String currentName { "Init" };
     std::map<juce::String, float> snapshot;   // normalised values at last load/save
+
+    static bool isSceneParameter (const juce::String& id);
+    ValueMap captureSceneValues() const;
+    void resetScenes();
+    void syncSceneSnapshot();
+    std::array<ValueMap, kScenes> scenes;       // empty = not created yet
+    std::array<ValueMap, kScenes> savedScenes;  // as loaded / saved (dirty tracking)
+    int currentScene = 0;
 };

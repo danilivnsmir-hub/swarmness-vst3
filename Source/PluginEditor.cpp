@@ -48,7 +48,12 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     // Chain strip
     chainStrip.getLayout = [this] { return processor.getRequestedLayout(); };
     chainStrip.setLayout = [this] (const Chain::Layout& l) { processor.setChainLayout (l); };
-    chainStrip.onBlockClicked = [this] (int block) { showPage (pageForBlock (block)); };
+    chainStrip.onBlockClicked = [this] (int block)
+    {
+        if (mini)
+            setMini (false);   // a tile opens the full view at its page
+        showPage (pageForBlock (block));
+    };
     chainStrip.onBlockRightClick = [this] (int block)
     {
         if (auto* id = ChainStrip::powerParamFor (block))
@@ -67,6 +72,26 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     addAndMakeVisible (infoButton);
     infoButton.setTooltip ("Help");
     infoButton.onClick = [this] { infoOverlay.setVisible (true); infoOverlay.toFront (false); };
+    addAndMakeVisible (miniButton);
+    miniButton.setTooltip ("MINI: a small window with just the chain, the scenes and the footswitches - for playing live. Click again for the full view");
+    miniButton.onClick = [this] { setMini (! mini); };
+
+    // Scenes
+    auto& pm = processor.getPresetManager();
+    sceneBar.getCurrent = [&pm] { return pm.getCurrentScene(); };
+    sceneBar.isUsed = [&pm] (int k) { return pm.isSceneUsed (k); };
+    sceneBar.describeMidi = [this] (int k) { return processor.describeMidiBinding (ParamIDs::scene, k); };
+    sceneBar.onSelect = [this] (int k)
+    {
+        if (auto* p = state.getParameter (ParamIDs::scene))
+        {
+            p->beginChangeGesture();
+            p->setValueNotifyingHost (p->convertTo0to1 ((float) k));
+            p->endChangeGesture();
+        }
+    };
+    sceneBar.onRightClick = [this] (int k) { showMidiMenu (ParamIDs::scene, &sceneBar, k); };
+    addAndMakeVisible (sceneBar);
 
     // Pages
     pitchPage.setInterceptsMouseClicks (false, true);
@@ -180,7 +205,8 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
 
     addChildComponent (infoOverlay);
 
-    setSize (baseWidth, baseHeight);
+    mini = processor.getUiMini();
+    setSize (baseWidth, getBaseHeight());
     showPage (processor.getUiPage());
     tick();
 }
@@ -206,14 +232,28 @@ int MainPanel::pageForBlock (int block)
     }
 }
 
+void MainPanel::setMini (bool shouldBeMini)
+{
+    if (shouldBeMini == mini)
+        return;
+    mini = shouldBeMini;
+    processor.setUiMini (mini);
+    setSize (baseWidth, getBaseHeight());
+    showPage (currentPage);
+    if (onModeChanged != nullptr)
+        onModeChanged();
+}
+
 void MainPanel::showPage (int page)
 {
     currentPage = juce::jlimit (0, numPages - 1, page);
     processor.setUiPage (currentPage);
-    fxPage.setVisible (currentPage == fxPageIndex);
-    pitchPage.setVisible (currentPage == pitchPageIndex);
-    eqPage.setVisible (currentPage == eqPageIndex);
-    reverbPage.setVisible (currentPage == spacePageIndex);
+    fxPage.setVisible (! mini && currentPage == fxPageIndex);
+    pitchPage.setVisible (! mini && currentPage == pitchPageIndex);
+    eqPage.setVisible (! mini && currentPage == eqPageIndex);
+    reverbPage.setVisible (! mini && currentPage == spacePageIndex);
+    miniButton.setToggleState (mini, juce::dontSendNotification);
+    miniButton.setButtonText (mini ? "FULL" : "MINI");
     if (currentPage != eqPageIndex)
         processor.getSpectrumTap().setActive (false);
 
@@ -245,7 +285,8 @@ void MainPanel::resized()
 {
     // Header
     presetBar.setBounds (222, 16, 580, 32);
-    switchModeSelector.setBounds (822, 18, 196, 28);
+    switchModeSelector.setBounds (818, 18, 170, 28);
+    miniButton.setBounds (baseWidth - 16 - 32 - 8 - 52, 16, 52, 32);
     infoButton.setBounds (baseWidth - 16 - 32, 16, 32, 32);
 
     // Chain strip and the page area below it
@@ -257,10 +298,10 @@ void MainPanel::resized()
     fxPage.setBounds (getLocalBounds());
     pitchPage.setBounds (getLocalBounds());
 
-    // FX page: SMOKE on top, SWARM and WINGS below
-    fuzzArea   = { 16.0f,  144.0f, (float) baseWidth - 32.0f, 226.0f };
-    swarmArea  = { 16.0f,  382.0f, 520.0f, 226.0f };
-    flowArea   = { 548.0f, 382.0f, (float) baseWidth - 16.0f - 548.0f, 226.0f };
+    // FX page: SMOKE, SWARM, WINGS side by side (room below for more blocks)
+    fuzzArea   = { 16.0f,  144.0f, 540.0f, 200.0f };
+    swarmArea  = { 568.0f, 144.0f, 246.0f, 200.0f };
+    flowArea   = { 826.0f, 144.0f, (float) baseWidth - 16.0f - 826.0f, 200.0f };
     // PITCH page: HIVE on top, SHIFT below
     hiveArea   = { 16.0f, 144.0f, (float) baseWidth - 32.0f, 262.0f };
     shiftArea  = { 16.0f, 418.0f, (float) baseWidth - 32.0f, 190.0f };
@@ -270,7 +311,7 @@ void MainPanel::resized()
 
     // HIVE: VOICES | TRAILS | MANGLE
     {
-        const float widths[3] { 300.0f, 430.0f, 0.0f };
+        const float widths[3] { 262.0f, 500.0f, 0.0f };
         float x = hiveArea.getX();
         for (int i = 0; i < 3; ++i)
         {
@@ -299,17 +340,24 @@ void MainPanel::resized()
 
         row (voiceSec, y1, { &pitchKnob, &primaryKnob, &secondaryKnob });
         row (voiceSec, y2, { &trackingKnob, nullptr, nullptr });
-        snapToggle.setBounds ((int) voiceSec.getX() + 120, y2 + 22, 60, 24);
+        // switches live in the section's heading row, right-aligned
+        snapToggle.setBounds ((int) voiceSec.getRight() - 12 - 60, (int) voiceSec.getY() + 36, 60, 22);
 
-        rbSyncToggle.setBounds ((int) trailSec.getRight() - 12 - 60, (int) trailSec.getY() + 36, 60, 22);   // header row
+        rbSyncToggle.setBounds ((int) trailSec.getRight() - 12 - 60, (int) trailSec.getY() + 36, 60, 22);
         trDryToggle .setBounds ((int) trailSec.getRight() - 12 - 126, (int) trailSec.getY() + 36, 60, 22);
-        kw = 64;
-        row (trailSec, y1, { &magicKnob, &rbTimeKnob, &toneKnob, &gateKnob }, 4);
-        kw = 72;
-        rbDivKnob.setBounds (rbTimeKnob.getBounds());
-        stepGrid.setBounds ((int) trailSec.getX() + 16, y2 - 2, (int) trailSec.getWidth() - 32, (int) hiveArea.getBottom() - 10 - (y2 - 2));
+        // TRAILS: four small knobs (2 x 2) on the left, a tall step grid on the right (easy to draw)
+        {
+            const int kx = (int) trailSec.getX() + 12, ky = (int) hiveArea.getY() + 62, sw = 66, sh = 96;
+            magicKnob .setBounds (kx,      ky,      sw, sh);
+            rbTimeKnob.setBounds (kx + sw, ky,      sw, sh);
+            toneKnob  .setBounds (kx,      ky + sh, sw, sh);
+            gateKnob  .setBounds (kx + sw, ky + sh, sw, sh);
+            rbDivKnob.setBounds (rbTimeKnob.getBounds());
+            const int gx = kx + 2 * sw + 12;
+            stepGrid.setBounds (gx, (int) hiveArea.getY() + 64, (int) trailSec.getRight() - 14 - gx, (int) hiveArea.getBottom() - 12 - ((int) hiveArea.getY() + 64));
+        }
 
-        rbRawToggle.setBounds ((int) mangleSec.getRight() - 48 - 60, (int) mangleSec.getY() + 36, 60, 22);
+        rbRawToggle.setBounds ((int) mangleSec.getRight() - 12 - 60, (int) mangleSec.getY() + 36, 60, 22);
         row (mangleSec, y1, { &hvAngerKnob, &hvFrenzyKnob, &hvBuzzKnob });
         row (mangleSec, y2, { &rbDetuneKnob, &rbMixKnob }, 2);
     }
@@ -362,7 +410,9 @@ void MainPanel::resized()
 
     // Footer: footswitches centred (LINK mini switches beside the octaves), meters at the sides
     {
-        const int fy = 620, fw = 92, fh = 118, spacing = 136;
+        // scenes above the footswitches (full view: under the pages)
+        sceneBar.setBounds (16, mini ? 144 : 616, baseWidth - 32, 40);
+        const int fy = mini ? 196 : 668, fw = 92, fh = 118, spacing = 136;
         const int total = spacing * 3 + fw;
         int x = (baseWidth - total) / 2;
         for (auto* f : { &oct1Switch, &oct2Switch, &magicSwitch, &bypassSwitch })
@@ -387,9 +437,10 @@ void MainPanel::resized()
 //==============================================================================
 void MainPanel::paintBackdrop (juce::Graphics& g)
 {
-    const auto all = juce::Rectangle<float> ((float) baseWidth, (float) baseHeight);
-    g.setGradientFill (juce::ColourGradient (Colours::backgroundHi, baseWidth * 0.5f, baseHeight * 0.45f,
-                                             Colours::background, 0.0f, (float) baseHeight, true));
+    const float H = (float) getBaseHeight();
+    const auto all = juce::Rectangle<float> ((float) baseWidth, H);
+    g.setGradientFill (juce::ColourGradient (Colours::backgroundHi, baseWidth * 0.5f, H * 0.45f,
+                                             Colours::background, 0.0f, H, true));
     g.fillAll();
 
     // Honeycomb wall
@@ -401,7 +452,7 @@ void MainPanel::paintBackdrop (juce::Graphics& g)
         const float h = 640.0f, w = h * (float) emblem.getWidth() / (float) emblem.getHeight();
         g.setOpacity (0.2f);
         g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
-        g.drawImage (emblem, juce::Rectangle<float> (w, h).withCentre ({ baseWidth * 0.5f, baseHeight * 0.52f }),
+        g.drawImage (emblem, juce::Rectangle<float> (w, h).withCentre ({ baseWidth * 0.5f, H * 0.52f }),
                      juce::RectanglePlacement::centred);
         g.setOpacity (1.0f);
     }
@@ -409,7 +460,7 @@ void MainPanel::paintBackdrop (juce::Graphics& g)
     drawGrime (g, all, 0.6f);
 
     // Vignette
-    g.setGradientFill (juce::ColourGradient (juce::Colours::transparentBlack, baseWidth * 0.5f, baseHeight * 0.5f,
+    g.setGradientFill (juce::ColourGradient (juce::Colours::transparentBlack, baseWidth * 0.5f, H * 0.5f,
                                              juce::Colours::black.withAlpha (0.75f), 0.0f, 0.0f, true));
     g.fillAll();
 
@@ -457,15 +508,19 @@ void MainPanel::paintBackdrop (juce::Graphics& g)
         }
     }
 
-    // Footswitch plate (pedalboard strip behind the stomps and LINK switches)
+    // Footswitch plate (pedalboard strip behind the stomps and LINK switches) and the scene strip
     drawPanel (g, footswitchArea, 12.0f);
+    drawPanel (g, sceneBar.getBounds().toFloat(), 10.0f);
 
     g.setFont (font (13.0f));
     g.setColour (Colours::textFaint);
-    g.drawText ("v" + juce::String (JucePlugin_VersionString), juce::Rectangle<float> (16.0f, (float) baseHeight - 22.0f, 120.0f, 16.0f),
+    g.drawText ("v" + juce::String (JucePlugin_VersionString), juce::Rectangle<float> (16.0f, H - 22.0f, 120.0f, 16.0f),
                 juce::Justification::centredLeft, false);
 
     auto titleRow = [] (juce::Rectangle<float> a) { return a.reduced (16.0f, 0.0f).withTrimmedTop (8.0f).withHeight (26.0f); };
+
+    if (mini)
+        return;
 
     if (currentPage == fxPageIndex)
     {
@@ -537,6 +592,7 @@ void MainPanel::tick()
     }
 
     presetBar.refresh();
+    sceneBar.refresh();
     chainStrip.refresh();
     eqPage.tick();
     reverbPage.tick();
@@ -595,15 +651,10 @@ SwarmnessAudioProcessorEditor::SwarmnessAudioProcessorEditor (SwarmnessAudioProc
     setLookAndFeel (&lookAndFeel);
     addAndMakeVisible (panel);
 
-    const double ratio = (double) MainPanel::baseWidth / (double) MainPanel::baseHeight;
     setResizable (true, true);
-    setResizeLimits ((int) (MainPanel::baseWidth * 0.7), (int) (MainPanel::baseHeight * 0.7),
-                     MainPanel::baseWidth * 2, MainPanel::baseHeight * 2);
-    if (auto* c = getConstrainer())
-        c->setFixedAspectRatio (ratio);
-
     const float scale = juce::jlimit (0.7f, 2.0f, swarmProcessor.getUiScale());
-    setSize (juce::roundToInt (MainPanel::baseWidth * scale), juce::roundToInt (MainPanel::baseHeight * scale));
+    applyMode (scale);
+    panel.onModeChanged = [this] { applyMode ((float) getWidth() / (float) MainPanel::baseWidth); };
 
     startTimerHz (30);
 }
@@ -623,7 +674,7 @@ void SwarmnessAudioProcessorEditor::resized()
 {
     const float scale = (float) getWidth() / (float) MainPanel::baseWidth;
     panel.setTransform (juce::AffineTransform::scale (scale));
-    panel.setBounds (0, 0, MainPanel::baseWidth, MainPanel::baseHeight);
+    panel.setBounds (0, 0, MainPanel::baseWidth, panel.getBaseHeight());
     swarmProcessor.setUiScale (scale);
 }
 
@@ -659,29 +710,42 @@ juce::Component* MainPanel::findLearnable (const juce::String& paramID)
     return search (*this);
 }
 
-void MainPanel::showMidiMenu (const juce::String& paramID, juce::Component* target)
+void MainPanel::showMidiMenu (const juce::String& paramID, juce::Component* target, int value)
 {
     auto* param = state.getParameter (paramID);
     if (param == nullptr)
         return;
     auto& proc = processor;
-    const auto bound = proc.describeMidiBinding (paramID);
+    const bool isScene = paramID == ParamIDs::scene && value >= 0;
+    const juce::String what = isScene ? "Scene " + ParamChoices::scenes[value] : param->getName (40);
+    const auto bound = proc.describeMidiBinding (paramID, value);
     juce::PopupMenu menu;
-    menu.addSectionHeader (param->getName (40) + (bound.isNotEmpty() ? "  -  MIDI: " + bound : juce::String ("  -  MIDI: not assigned")));
-    if (proc.getMidiLearnParam() == paramID)
+    menu.addSectionHeader (what + (bound.isNotEmpty() ? "  -  MIDI: " + bound : juce::String ("  -  MIDI: not assigned")));
+    if (proc.getMidiLearnParam() == paramID && proc.getMidiLearnValue() == value)
         menu.addItem ("Cancel MIDI Learn", [&proc] { proc.cancelMidiLearn(); });
     else
         menu.addItem (bound.isNotEmpty() ? "MIDI Learn another pedal / key / CC" : "MIDI Learn (press a pedal / key or move a CC)",
-                      [&proc, paramID] { proc.startMidiLearn (paramID); });
-    menu.addItem ("Clear MIDI", bound.isNotEmpty(), false, [&proc, paramID] { proc.clearMidiBindings (paramID); });
+                      [&proc, paramID, value] { proc.startMidiLearn (paramID, value); });
+    menu.addItem ("Clear MIDI", bound.isNotEmpty(), false, [&proc, paramID, value] { proc.clearMidiBindings (paramID, value); });
     menu.addSeparator();
-    const bool isSwitch = dynamic_cast<juce::AudioParameterBool*> (param) != nullptr;
-    const bool isChoice = dynamic_cast<juce::AudioParameterChoice*> (param) != nullptr;
-    const bool isFootswitch = paramID == ParamIDs::oct1 || paramID == ParamIDs::oct2 || paramID == ParamIDs::magicHold;
-    menu.addItem (isFootswitch ? "Footswitch: follows MOMENTARY (held = on) / LATCH (press = on / off)"
-                  : isSwitch   ? "Switch: every press toggles it - one pedal can drive several switches"
-                  : isChoice   ? "Selector: every press steps to the next option"
-                               : "Knob: follows the CC value (0..127)", false, false, nullptr);
+    if (isScene)
+    {
+        auto& pm = proc.getPresetManager();
+        const int current = pm.getCurrentScene();
+        menu.addItem ("Copy scene " + ParamChoices::scenes[current] + " here", value != current, false,
+                      [&pm, value] { pm.copyCurrentSceneTo (value); });
+        menu.addItem ("Scene pedal: selects this scene on every press", false, false, nullptr);
+    }
+    else
+    {
+        const bool isSwitch = dynamic_cast<juce::AudioParameterBool*> (param) != nullptr;
+        const bool isChoice = dynamic_cast<juce::AudioParameterChoice*> (param) != nullptr;
+        const bool isFootswitch = paramID == ParamIDs::oct1 || paramID == ParamIDs::oct2 || paramID == ParamIDs::magicHold;
+        menu.addItem (isFootswitch ? "Footswitch: follows MOMENTARY (held = on) / LATCH (press = on / off)"
+                      : isSwitch   ? "Switch: every press toggles it - one pedal can drive several switches"
+                      : isChoice   ? "Selector: every press steps to the next option"
+                                   : "Knob: follows the CC value (0..127)", false, false, nullptr);
+    }
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (target));
 }
 
@@ -690,4 +754,15 @@ void MainPanel::LearnMarker::paint (juce::Graphics& g)
     const float a = 0.45f + 0.4f * std::sin (phase);
     g.setColour (Colours::accentBright.withAlpha (a));
     g.drawRoundedRectangle (getLocalBounds().toFloat().reduced (1.5f), 8.0f, 2.5f);
+}
+
+void SwarmnessAudioProcessorEditor::applyMode (float scale)
+{
+    // full view or MINI: same width, different height (the aspect ratio follows)
+    const int h = panel.getBaseHeight();
+    setResizeLimits ((int) (MainPanel::baseWidth * 0.7), (int) (h * 0.7), MainPanel::baseWidth * 2, h * 2);
+    if (auto* c = getConstrainer())
+        c->setFixedAspectRatio ((double) MainPanel::baseWidth / (double) h);
+    setSize (juce::roundToInt (MainPanel::baseWidth * scale), juce::roundToInt ((float) h * scale));
+    resized();
 }

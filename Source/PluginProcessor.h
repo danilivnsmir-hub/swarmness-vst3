@@ -16,11 +16,13 @@
 #include <atomic>
 #include <optional>
 
-class SwarmnessAudioProcessor : public juce::AudioProcessor
+class SwarmnessAudioProcessor : public juce::AudioProcessor,
+                                private juce::AudioProcessorValueTreeState::Listener,
+                                private juce::AsyncUpdater
 {
 public:
     SwarmnessAudioProcessor();
-    ~SwarmnessAudioProcessor() override = default;
+    ~SwarmnessAudioProcessor() override;
 
     //==============================================================================
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
@@ -92,6 +94,8 @@ public:
     /** Editor scale factor, persisted with the plug-in state. */
     float getUiScale() const noexcept     { return uiScale.load(); }
     void setUiScale (float scale) noexcept { uiScale = scale; }
+    bool getUiMini() const noexcept       { return uiMini.load(); }
+    void setUiMini (bool m) noexcept      { uiMini = m; }
     /** Last page shown in the editor (FX / EQ / CRYPT), kept while the plug-in is loaded. */
     int getUiPage() const noexcept         { return uiPage.load(); }
     void setUiPage (int page) noexcept     { uiPage = page; }
@@ -113,18 +117,27 @@ public:
     static constexpr int kMaxMidiBindings = 64;
     enum class MidiKind : int { none = 0, cc = 1, note = 2 };
 
-    void startMidiLearn (const juce::String& paramID) noexcept;
+    /** value >= 0: the binding sets that value on every press (e.g. one scene button). */
+    void startMidiLearn (const juce::String& paramID, int value = -1) noexcept;
     void cancelMidiLearn() noexcept               { midiLearnParam.store (-1); }
-    void clearMidiBindings (const juce::String& paramID) noexcept;
+    void clearMidiBindings (const juce::String& paramID, int value = -1) noexcept;
     /** The parameter waiting for a MIDI message, empty when not learning. */
     juce::String getMidiLearnParam() const;
+    int getMidiLearnValue() const noexcept        { return midiLearnValue.load(); }
     /** "CC 64, Note C1" - empty when not assigned. */
-    juce::String describeMidiBinding (const juce::String& paramID) const;
+    juce::String describeMidiBinding (const juce::String& paramID, int value = -1) const;
 
 private:
-    struct MidiBinding { std::atomic<int> param { -1 }, kind { 0 }, number { -1 }; std::atomic<bool> down { false }; };
+    struct MidiBinding { std::atomic<int> param { -1 }, kind { 0 }, number { -1 }, value { -1 }; std::atomic<bool> down { false }; };
     std::array<MidiBinding, kMaxMidiBindings> midiBindings;
-    std::atomic<int> midiLearnParam { -1 };
+    std::atomic<int> midiLearnParam { -1 }, midiLearnValue { -1 };
+
+    // Scenes: the scene parameter (host automation, MIDI, the scene buttons) switches the preset's
+    // scene on the message thread
+    void parameterChanged (const juce::String& parameterID, float newValue) override;
+    void handleAsyncUpdate() override;
+    std::atomic<int> pendingScene { 0 };
+    bool restoringState = false;
     juce::Array<juce::RangedAudioParameter*> learnableParams;   // index = binding param
     int indexOfParam (const juce::String& paramID) const noexcept;
     void handleMidi (const juce::MidiBuffer&);
@@ -217,6 +230,7 @@ private:
 
     Meters meters;
     std::atomic<float> uiScale { 1.0f };
+    std::atomic<bool> uiMini { false };
     std::atomic<int> uiPage { 0 };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SwarmnessAudioProcessor)

@@ -12,7 +12,13 @@ class MainPanel : public juce::Component
 {
 public:
     static constexpr int baseWidth  = 1100;
-    static constexpr int baseHeight = 748;
+    static constexpr int baseHeight = 800;   // full view
+    static constexpr int miniHeight = 330;   // MINI: chain, scenes and footswitches for playing live
+
+    int getBaseHeight() const noexcept { return mini ? miniHeight : baseHeight; }
+    bool isMini() const noexcept { return mini; }
+    void setMini (bool shouldBeMini);
+    std::function<void()> onModeChanged;   // the editor resizes
 
     explicit MainPanel (SwarmnessAudioProcessor&);
 
@@ -42,7 +48,7 @@ private:
 
     // MIDI learn: right-click any control (or a chain tile) for its menu
     void mouseDown (const juce::MouseEvent&) override;
-    void showMidiMenu (const juce::String& paramID, juce::Component* target);
+    void showMidiMenu (const juce::String& paramID, juce::Component* target, int value = -1);
     juce::Component* findLearnable (const juce::String& paramID);
     struct LearnMarker : juce::Component
     {
@@ -67,7 +73,9 @@ private:
     // Header
     PresetBar presetBar;
     SegmentedChoice switchModeSelector;
-    juce::TextButton infoButton { "?" };
+    juce::TextButton infoButton { "?" }, miniButton { "MINI" };
+    SceneBar sceneBar;
+    bool mini = false;
 
     // SHIFT (footswitch shifter)
     Knob shiftAKnob { "SHIFT A", true }, shiftBKnob { "SHIFT B", true }, riseKnob { "RISE" }, fallKnob { "FALL" }, blendKnob { "MIX" };
@@ -139,6 +147,7 @@ public:
 
 private:
     void timerCallback() override { refresh(); }
+    void applyMode (float scale);
 
     SwarmnessAudioProcessor& swarmProcessor;
     SwarmLookAndFeel lookAndFeel;
