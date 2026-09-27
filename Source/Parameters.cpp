@@ -286,7 +286,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
             return (v > 0.05f ? "+" : "") + juce::String (v, 1) + " dB";
         })));
     out->addChild (std::make_unique<juce::AudioParameterChoice> (pid (switchMode), "Footswitch Mode", ParamChoices::switchModes, 0));
-    out->addChild (std::make_unique<juce::AudioParameterChoice> (pid (scene), "Scene", ParamChoices::scenes, 0));
+    // meta: switching the scene changes other parameters
+    out->addChild (std::make_unique<juce::AudioParameterChoice> (pid (scene), "Scene", ParamChoices::scenes, 0,
+                                                                 juce::AudioParameterChoiceAttributes().withMeta (true)));
     out->addChild (toggle (bypass, "Bypass", false));
 
     layout.add (std::move (hive), std::move (swarm), std::move (fz), std::move (flow),

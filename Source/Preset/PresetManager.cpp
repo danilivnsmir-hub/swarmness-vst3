@@ -711,7 +711,15 @@ void PresetManager::selectScene (int index)
             savedScenes[(size_t) index] = scenes[(size_t) index];
     }
     currentScene = index;
-    applyValues (scenes[(size_t) index], false);
+    // only what differs: parameters already on the scene's value are left alone
+    for (const auto& [id, v] : scenes[(size_t) index])
+        if (auto* p = apvts.getParameter (id))
+            if (std::abs (p->convertFrom0to1 (p->getValue()) - v) > 1.0e-5f * juce::jmax (1.0f, std::abs (v)))
+            {
+                p->beginChangeGesture();
+                p->setValueNotifyingHost (juce::jlimit (0.0f, 1.0f, p->convertTo0to1 (v)));
+                p->endChangeGesture();
+            }
     syncSceneSnapshot();
     if (auto* p = apvts.getParameter (ParamIDs::scene))
         if (juce::roundToInt (p->convertFrom0to1 (p->getValue())) != index)
