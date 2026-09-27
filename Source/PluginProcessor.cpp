@@ -28,7 +28,9 @@ SwarmnessAudioProcessor::SwarmnessAudioProcessor()
     };
 
     namespace id = ParamIDs;
-    p.oct1 = get (id::oct1);             p.oct2 = get (id::oct2);               p.shiftA = get (id::shiftA);  p.shiftB = get (id::shiftB);  p.hiveFollow = get (id::hiveFollow);
+    p.oct1 = get (id::oct1);             p.oct2 = get (id::oct2);               p.shiftA = get (id::shiftA);  p.shiftB = get (id::shiftB);
+    p.shStack = get (id::shStack);       p.shSnap = get (id::shSnap);           p.shRaw = get (id::shRaw);    p.shDetune = get (id::shDetune);
+    p.hvAnger = get (id::hvAnger);       p.hvFrenzy = get (id::hvFrenzy);       p.hvBuzz = get (id::hvBuzz);
     p.trSteps = get (id::trSteps);       p.trGate = get (id::trGate);
     for (int k = 0; k < 16; ++k)
     {
@@ -107,6 +109,7 @@ void SwarmnessAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBl
     maxBlockSize = juce::jmax (1, samplesPerBlock);
 
     fuzzStage.prepare (sampleRate, maxBlockSize);
+    shift.prepare (sampleRate, maxBlockSize);
     hive.prepare (sampleRate, maxBlockSize);
     swarmChorus.prepare (sampleRate);
     flow .prepare (sampleRate);
@@ -152,6 +155,7 @@ void SwarmnessAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBl
 void SwarmnessAudioProcessor::releaseResources()
 {
     fuzzStage.reset();
+    shift.reset();
     hive.reset();
     swarmChorus.reset();
     comb.reset();
@@ -329,7 +333,7 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     // ---- OUTPUT gain + bypass crossfade
     outputGainSmoothed.setTargetValue (juce::Decibels::decibelsToGain (p.output->load()));
     // (the NOISE return glide after releasing a footswitch is allowed to finish, too)
-    bypassSmoothed.setTargetValue (on (p.bypass) && ! anySwitchHeld && ! hive.isShiftEngaged() ? 1.0f : 0.0f);
+    bypassSmoothed.setTargetValue (on (p.bypass) && ! anySwitchHeld && ! shift.isEngaged() ? 1.0f : 0.0f);
 
     for (int i = 0; i < numSamples; ++i)
     {
@@ -367,7 +371,8 @@ void SwarmnessAudioProcessor::processChainBlock (int block, const BlockContext& 
 {
     switch (block)
     {
-        case Chain::pitch: processPitch (ctx, audio, numChannels, numSamples); break;
+        case Chain::shift: processShift (ctx, audio, numChannels, numSamples); break;
+        case Chain::pitch: processHive (ctx, audio, numChannels, numSamples); break;
         case Chain::smoke: processSmoke (audio, numChannels, numSamples); break;
         case Chain::wings: processWings (ctx, audio, numChannels, numSamples); break;
 
@@ -443,21 +448,36 @@ void SwarmnessAudioProcessor::processSmoke (float* const* audio, int numChannels
     fuzzStage.process (audio, numChannels, numSamples);
 }
 
-void SwarmnessAudioProcessor::processPitch (const BlockContext& ctx, float* const* audio, int numChannels, int numSamples) noexcept
+void SwarmnessAudioProcessor::processShift (const BlockContext& ctx, float* const* audio, int numChannels, int numSamples) noexcept
 {
-    HiveBlock::Settings s;
+    ShiftBlock::Settings s;
     s.shiftA = ctx.oct1Held;
     s.shiftB = ctx.oct2Held;
-    s.venom = ctx.magicHeld;
+    s.stack = on (p.shStack);
     s.shiftASemis = std::round (p.shiftA->load());
     s.shiftBSemis = std::round (p.shiftB->load());
     s.riseMs = p.rise->load();
     s.fallMs = p.fall->load();
     s.blend = pct (p.stingMix);
+    s.anger = pct (p.panic);
+    s.frenzy = pct (p.chaos);
+    s.buzz = pct (p.speed);
+    s.snap = on (p.shSnap);
+    s.raw = on (p.shRaw);
+    s.detuneCents = p.shDetune->load();
 
+    shift.setParams (s);
+    shift.process (audio, numChannels, numSamples);
+    meters.pitchSemitones.store (shift.getSemitones(), std::memory_order_relaxed);
+    meters.noiseEngaged.store (shift.isEngaged(), std::memory_order_relaxed);
+}
+
+void SwarmnessAudioProcessor::processHive (const BlockContext& ctx, float* const* audio, int numChannels, int numSamples) noexcept
+{
+    HiveBlock::Settings s;
+    s.venom = ctx.magicHeld;
     s.voicesOn = on (p.rbOn);
     s.snap = on (p.rbSnap);
-    s.follow = on (p.hiveFollow);
     s.pitchSemis = p.rbPitch->load();
     s.drone = pct (p.rbPrimary);
     s.queen = pct (p.rbSecondary);
@@ -477,17 +497,15 @@ void SwarmnessAudioProcessor::processPitch (const BlockContext& ctx, float* cons
     // SYNC while the host plays: the steps follow the song grid instead of restarting on every note
     s.hostStep = on (p.rbSync) && ctx.ppq.has_value() ? *ctx.ppq / divBeats : -1.0;
 
-    s.anger = pct (p.panic);
-    s.frenzy = pct (p.chaos);
-    s.buzz = pct (p.speed);
+    s.anger = pct (p.hvAnger);
+    s.frenzy = pct (p.hvFrenzy);
+    s.buzz = pct (p.hvBuzz);
     s.raw = on (p.rbRaw);
     s.detuneCents = p.rbDetune->load();
     s.mix = pct (p.rbMix);
 
     hive.setParams (s);
     hive.process (audio, numChannels, numSamples);
-    meters.pitchSemitones.store (hive.getShiftSemitones(), std::memory_order_relaxed);
-    meters.noiseEngaged.store (hive.isShiftEngaged(), std::memory_order_relaxed);
     meters.trailStep.store (hive.getCurrentStep(), std::memory_order_relaxed);
 }
 

@@ -3,6 +3,7 @@
 #include <JuceHeader.h>
 #include "Parameters.h"
 #include "DSP/HiveBlock.h"
+#include "DSP/ShiftBlock.h"
 #include "DSP/FuzzStage.h"
 #include "DSP/SwarmChorus.h"
 #include "DSP/FlowGate.h"
@@ -58,7 +59,7 @@ public:
     {
         std::array<std::atomic<float>, 2> input  {};
         std::array<std::atomic<float>, 2> output {};
-        std::atomic<float> pitchSemitones { 0.0f };   // current NOISE transposition
+        std::atomic<float> pitchSemitones { 0.0f };   // current SHIFT transposition
         std::atomic<bool>  noiseEngaged { false };
         std::atomic<int>   trailStep { -1 };             // TRAILS step now playing (-1 = none)
         std::atomic<float> reverbLevel { 0.0f };       // CRYPT wet peak
@@ -119,11 +120,13 @@ private:
     // Parameters (cached raw pointers - lock-free reads on the audio thread)
     struct Params
     {
-        std::atomic<float>* oct1 {};       std::atomic<float>* oct2 {};        std::atomic<float>* shiftA {};    std::atomic<float>* shiftB {};  std::atomic<float>* hiveFollow {};
+        std::atomic<float>* oct1 {};       std::atomic<float>* oct2 {};        std::atomic<float>* shiftA {};    std::atomic<float>* shiftB {};
         std::atomic<float>* trSteps {};    std::atomic<float>* trGate {};
         std::array<std::atomic<float>*, 16> trLevels {}, trMoves {};
         std::atomic<float>* rise {};       std::atomic<float>* panic {};       std::atomic<float>* chaos {};
         std::atomic<float>* speed {};      std::atomic<float>* fall {};        std::atomic<float>* stingMix {};    std::atomic<float>* rbDetune {};    std::atomic<float>* rbRaw {};
+        std::atomic<float>* shStack {};    std::atomic<float>* shSnap {};      std::atomic<float>* shRaw {};       std::atomic<float>* shDetune {};
+        std::atomic<float>* hvAnger {};    std::atomic<float>* hvFrenzy {};    std::atomic<float>* hvBuzz {};
         std::atomic<float>* rbOn {};       std::atomic<float>* rbPitch {};     std::atomic<float>* rbSnap {};
         std::atomic<float>* rbPrimary {};  std::atomic<float>* rbSecondary {}; std::atomic<float>* rbTone {};
         std::atomic<float>* rbTracking {}; std::atomic<float>* rbMagic {};     std::atomic<float>* magicHold {};
@@ -159,7 +162,8 @@ private:
     };
 
     void processChainBlock (int block, const BlockContext&, float* const* audio, int numChannels, int numSamples) noexcept;
-    void processPitch (const BlockContext&, float* const* audio, int numChannels, int numSamples) noexcept;
+    void processShift (const BlockContext&, float* const* audio, int numChannels, int numSamples) noexcept;
+    void processHive (const BlockContext&, float* const* audio, int numChannels, int numSamples) noexcept;
     void processSmoke (float* const* audio, int numChannels, int numSamples) noexcept;
     void processWings (const BlockContext&, float* const* audio, int numChannels, int numSamples) noexcept;
 
@@ -167,7 +171,8 @@ private:
 
     // The blocks (each once; the order comes from the chain slot parameters)
     FuzzStage          fuzzStage;
-    HiveBlock          hive;          // SHIFT + VOICES + TRAILS + MANGLE
+    ShiftBlock         shift;         // footswitch shifter
+    HiveBlock          hive;          // VOICES + TRAILS
     SwarmChorus        swarmChorus;
     FlowGate           flow;
     swarm::GraphicEq    comb;

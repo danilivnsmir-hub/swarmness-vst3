@@ -7,13 +7,11 @@
 #include <vector>
 
 /**
- * HIVE - the destructive pitch-delay. One block, four sections:
+ * HIVE - harmonies and pitch-shifting repeats (the footswitch shifter is its own block, SHIFT).
  *
- *  SHIFT   footswitches SHIFT A / SHIFT B transpose the played signal (any interval, -24..+24 st),
- *          RISE / FALL glide in and out (Whammy / Tallon "The Noise" style), BLEND = how much of the
- *          shifted signal replaces the dry one (100% = only the shifted note, 50% = doubled).
- *  VOICES  DRONE (PITCH interval) and QUEEN (its octave) harmonise the played note - or the
- *          shifted one with FOLLOW. TRACKING: tight .. laggy with repeating grains.
+ *  VOICES  DRONE (PITCH interval) and QUEEN (its octave) harmonise whatever reaches the block -
+ *          after SHIFT in the chain they follow the shifted note, before it they do not.
+ *          TRACKING: tight .. laggy with repeating grains.
  *  TRAILS  pitch-shifting regeneration (Rainbow Machine style), shaped by a STEP pattern like a
  *          pattern tremolo - but its steps are the repeats. Step k = repeat k+1 after the note
  *          (restarts on every picked note, or follows the host grid with SYNC). Each step has a
@@ -23,13 +21,14 @@
  *            RANDOM  a random chord tone of PITCH or an octave (glitch arpeggios)
  *            REVERSE the repeat plays backwards
  *          GATE shortens every step (100% = full repeat, low = stuttering chops). TIME = step /
- *          repeat spacing, TONE = brightness; VENOM drives the loop into self-oscillation.
- *  MANGLE  shared by everything the block adds: ANGER (sour detuned second voices), FRENZY
- *          (random pitch jumps), BUZZ (all-pass feedback + AM), RAW (cheap-pedal-DSP character),
- *          DETUNE (fine offset / spread) and MIX (dry / effect, pedal law).
+ *          repeat spacing, TONE = brightness; VENOM drives the loop into self-oscillation (and
+ *          switches HIVE on while held).
+ *  MANGLE  on the voices and trails: ANGER (sour detuned voices), FRENZY (random pitch jumps),
+ *          BUZZ (all-pass feedback + AM), RAW (cheap-pedal-DSP character), DETUNE (width) and
+ *          MIX (dry / voices, pedal law).
  *
- * Shifters share input rings: SHIFT + ANGER read the dry ring, DRONE + QUEEN the voice ring,
- * the trail voice its own ring. Idle voices are not processed at all.
+ * DRONE + QUEEN read one shared input ring, the trail voice its own ring. Idle voices are not
+ * processed at all.
  */
 class HiveBlock
 {
@@ -83,13 +82,8 @@ public:
 
     struct Settings
     {
-        // SHIFT (footswitches already combined with LINK by the caller)
-        bool shiftA = false, shiftB = false;
-        float shiftASemis = 12.0f, shiftBSemis = 24.0f;
-        float riseMs = 30.0f, fallMs = 30.0f, blend = 1.0f;
-
         // VOICES
-        bool voicesOn = false, snap = true, follow = false;
+        bool voicesOn = false, snap = true;
         float pitchSemis = 7.0f, drone = 0.6f, queen = 0.0f, tracking = 0.8f;
 
         // TRAILS
@@ -109,30 +103,20 @@ public:
         (void) maxBlockSize;   // works in control blocks of 32 samples
         sampleRate = sr;
 
-        for (auto* r : { &dryRing, &voiceRing, &trailRing })
+        for (auto* r : { &voiceRing, &trailRing })
             r->prepare (sr, 2);
-        for (auto* v : { &shiftVoice, &angerVoice })
-        {
-            v->prepare (dryRing);
-            v->setRawCharacter (5.0f, 7.0f, 0.0f);   // RAW: slight warble; splices stay tight (footswitch attack)
-        }
         droneVoice.prepare (voiceRing);
         queenVoice.prepare (voiceRing);
         trailVoice.prepare (trailRing);
         for (auto* v : allVoices())
             v->setLoFi (26000.0f, 13.0f, 10000.0f);  // cheap converters, shared by every voice
 
-        for (auto* b : { &dry, &mainOut, &followIn, &shifted, &angerBuf, &voiceIn, &droneBuf, &queenBuf, &trailIn, &trailBuf, &voicesOut })
+        for (auto* b : { &dry, &voiceIn, &droneBuf, &queenBuf, &trailIn, &trailBuf, &voicesOut })
             b->setSize (2, kControlBlock, false, false, true);
 
-        speedMain.prepare (sr);
         speedVoices.prepare (sr);
         chaosSmoother.setTime (sr / kControlBlock, 0.012);
         dryLevelCoeff = (float) (1.0 - std::exp (-1.0 / (0.02 * sr)));
-        envAttack  = (float) (1.0 - std::exp (-1.0 / (0.0005 * sr)));
-        envRelease = (float) (1.0 - std::exp (-1.0 / (0.025 * sr)));
-        gainUp     = (float) (1.0 - std::exp (-1.0 / (0.001 * sr)));
-        gainDown   = (float) (1.0 - std::exp (-1.0 / (0.008 * sr)));
         onsetAttack  = (float) (1.0 - std::exp (-1.0 / (0.001 * sr)));
         onsetRelease = (float) (1.0 - std::exp (-1.0 / (0.03 * sr)));
         onsetSlow    = (float) (1.0 - std::exp (-1.0 / (0.05 * sr)));
@@ -165,11 +149,8 @@ public:
             loopLp[(size_t) ch].setParams (sr, 3500.0f, 0.7071f);
             loopHp[(size_t) ch].setType (swarm::SVF::Type::highPass);
             loopHp[(size_t) ch].setParams (sr, 45.0f, 0.7071f);
-            for (auto* f : { &voiceSubsonic[(size_t) ch], &shiftSubsonic[(size_t) ch] })
-            {
-                f->setType (swarm::SVF::Type::highPass);
-                f->setParams (sr, 38.0f, 0.7071f);
-            }
+            voiceSubsonic[(size_t) ch].setType (swarm::SVF::Type::highPass);
+            voiceSubsonic[(size_t) ch].setParams (sr, 38.0f, 0.7071f);
         }
         const double controlRate = sr / kControlBlock;
         for (auto& d : driftCents)
@@ -180,31 +161,23 @@ public:
 
     void reset()
     {
-        for (auto* r : { &dryRing, &voiceRing, &trailRing })
+        for (auto* r : { &voiceRing, &trailRing })
             r->clear();
         for (auto* v : allVoices())
             v->reset();
-        speedMain.reset();
         speedVoices.reset();
         lagLine.reset();
         clearLoop();
 
-        currentSemis = targetSemis = rampStep = 0.0f;
-        wet = 0.0f;
-        angerLevel = 0.0f;
         chaosPhase = chaosTarget = wobblePhase = 0.0f;
         chaosSmoother.reset (0.0f);
-        restoreGain = 1.0f;
-        dryEnv = wetEnv = 0.0f;
-        chipmunkLp = { 0.0f, 0.0f };
-        shiftIdle = queenIdle = trailIdle = true;
-        lastMainRatio = lastAngerRatio = lastDroneRatio = lastQueenRatio = lastTrailRatio = 1.0f;
+        queenIdle = trailIdle = true;
+        lastDroneRatio = lastQueenRatio = lastTrailRatio = 1.0f;
 
         toneState = droneLp = queenLp = trailLp = loopTone = { 0.0f, 0.0f };
         for (auto& f : loopLp) f.reset();
         for (auto& f : loopHp) f.reset();
         for (auto& f : voiceSubsonic) f.reset();
-        for (auto& f : shiftSubsonic) f.reset();
         for (auto& d : dc) d.reset();
         for (auto& d : driftCents) d.reset (0.0f);
         driftTarget = { 0.0f, 0.0f, 0.0f };
@@ -244,12 +217,10 @@ public:
         loopGain.setTargetValue (s.venom ? 1.3f : 0.9f * std::pow (sw::jlimit (0.0f, 1.0f, s.trails), 0.8f));
         resonance.setTargetValue (s.venom ? 0.5f : 0.0f);
 
-        // MIX (pedal law): 50% = dry and effect both full, 100% = effect only. It only turns the dry
-        // part down, so a held SHIFT still sounds on top.
+        // MIX (pedal law): 50% = dry and effect both full, 100% = effect only
         dryLevelTarget = voicesActive ? sw::jmin (1.0f, 2.0f * (1.0f - s.mix)) : 1.0f;
         voiceGain.setTargetValue (voicesActive ? sw::jmin (1.0f, 2.0f * s.mix) : 1.0f);
 
-        speedMain.setAmount (s.buzz);
         speedVoices.setAmount (s.buzz);
 
         if (s.hostStep >= 0.0)
@@ -261,23 +232,10 @@ public:
         {
             hostSynced = false;
         }
-
-        // SHIFT target: B wins over A (like +2 OCT over +1 OCT)
-        const float semis = s.shiftB ? s.shiftBSemis : (s.shiftA ? s.shiftASemis : 0.0f);
-        if (! sw::exactlyEqual (semis, targetSemis))
-        {
-            // Moving away from home uses RISE, returning home (released) uses FALL.
-            const bool returning = std::abs (semis) < std::abs (targetSemis) || std::abs (semis) < 0.001f;
-            targetSemis = semis;
-            const float ms = returning ? s.fallMs : s.riseMs;
-            rampStep = std::abs (targetSemis - currentSemis) / sw::jmax (1.0f, ms * 0.001f * (float) sampleRate);
-        }
     }
 
-    bool isShiftEngaged() const noexcept    { return std::abs (targetSemis) > 0.001f || std::abs (currentSemis) > 0.001f; }
     /** The TRAILS step now playing, -1 while there are no trails (for the editor). */
     int getCurrentStep() const noexcept      { return trailIdle ? -1 : stepIndex; }
-    float getShiftSemitones() const noexcept { return displaySemis; }
 
     void process (float* const* audio, int numChannels, int numSamples) noexcept
     {
@@ -291,7 +249,7 @@ public:
     }
 
 private:
-    std::array<PitchVoice*, 5> allVoices() noexcept { return { &shiftVoice, &angerVoice, &droneVoice, &queenVoice, &trailVoice }; }
+    std::array<PitchVoice*, 3> allVoices() noexcept { return { &droneVoice, &queenVoice, &trailVoice }; }
 
     static float ratioFor (float semis) noexcept { return std::pow (2.0f, semis / 12.0f); }
 
@@ -300,13 +258,6 @@ private:
     {
         const auto& s = settings;
         const float dt = (float) n / (float) sampleRate;
-
-        // ---- SHIFT glide (linear in semitones)
-        const float stepThisBlock = rampStep * (float) n;
-        if (currentSemis < targetSemis) currentSemis = sw::jmin (targetSemis, currentSemis + stepThisBlock);
-        else                            currentSemis = sw::jmax (targetSemis, currentSemis - stepThisBlock);
-        const bool engaged = isShiftEngaged();
-        const float engage = engaged ? 1.0f : 0.0f;
 
         // ---- MANGLE control: FRENZY random pitch targets, ANGER detune (+ slow wobble when high)
         chaosPhase += (2.0f + 16.0f * s.frenzy) * dt;
@@ -345,36 +296,6 @@ private:
         for (int ch = 0; ch < numChannels; ++ch)
             dry.copyFrom (ch, 0, audio[ch], n);
 
-        // ================================================================ SHIFT
-        const int dryBase = dryRing.write (audio, numChannels, n);
-        const bool shiftRunning = engaged || wet > 1.0e-5f;
-        if (shiftRunning)
-            processShift (numChannels, n, dryBase, engage, chaos * engage, angerSemis * engage, fine * engage);
-        else
-            shiftIdle = true;
-        displaySemis = engaged ? currentSemis + chaos + 0.5f * angerSemis + fine : 0.0f;
-
-        // main = dry / shifted (BLEND while engaged), with MIX turning only the dry part down
-        for (int i = 0; i < n; ++i)
-        {
-            wet += 0.004f * (engage * s.blend - wet);
-            if (! engaged && wet < 1.0e-5f)
-                wet = 0.0f;
-            dryLevel += dryLevelCoeff * (dryLevelTarget - dryLevel);
-            if (std::abs (dryLevel - dryLevelTarget) < 1.0e-6f)
-                dryLevel = dryLevelTarget;
-
-            float dryG, wetG;
-            swarm::equalPowerGains (wet, dryG, wetG);
-            for (int ch = 0; ch < numChannels; ++ch)
-            {
-                const float sh = shiftRunning ? wetG * shifted.getSample (ch, i) : 0.0f;
-                followIn.setSample (ch, i, dryG * dry.getSample (ch, i) + sh);              // before MIX
-                mainOut.setSample (ch, i, dryG * dryLevel * dry.getSample (ch, i) + sh);
-            }
-        }
-
-        // ================================================================ VOICES + TRAILS
         const bool voicesActive = onSmoothed.getCurrentValue() > 0.0f || onSmoothed.isSmoothing();
         if (voicesActive)
         {
@@ -386,90 +307,16 @@ private:
             clearLoop();
         }
 
-        // ================================================================ OUTPUT
+        // ---- OUTPUT: dry (turned down by MIX) + voices
         for (int i = 0; i < n; ++i)
         {
+            dryLevel += dryLevelCoeff * (dryLevelTarget - dryLevel);
+            if (std::abs (dryLevel - dryLevelTarget) < 1.0e-6f)
+                dryLevel = dryLevelTarget;
             const float g = voiceGain.getNextValue();
             for (int ch = 0; ch < numChannels; ++ch)
-                audio[ch][i] = mainOut.getSample (ch, i) + (voicesActive ? g * voicesOut.getSample (ch, i) : 0.0f);
+                audio[ch][i] = dryLevel * dry.getSample (ch, i) + (voicesActive ? g * voicesOut.getSample (ch, i) : 0.0f);
         }
-    }
-
-    //==========================================================================
-    void processShift (int numChannels, int n, int base, float engage, float chaos, float anger, float fine) noexcept
-    {
-        const auto& s = settings;
-        if (shiftIdle)
-        {
-            shiftVoice.reset();
-            angerVoice.reset();
-            speedMain.reset();
-            lastMainRatio = lastAngerRatio = 1.0f;
-            shiftIdle = false;
-        }
-
-        const float mainSemis  = currentSemis + chaos + 0.5f * anger + fine;
-        const float angerVSemis = currentSemis + chaos - 0.5f * anger + fine;
-        const float mainRatio = ratioFor (mainSemis), angerRatio = ratioFor (angerVSemis);
-
-        float* out[2] = { shifted.getWritePointer (0), shifted.getWritePointer (1) };
-        shiftVoice.process (out, numChannels, n, base, lastMainRatio, mainRatio);
-        lastMainRatio = mainRatio;
-
-        // ANGER: a second voice detuned the other way
-        if (s.anger > 0.001f || angerLevel > 0.001f)
-        {
-            float* a[2] = { angerBuf.getWritePointer (0), angerBuf.getWritePointer (1) };
-            angerVoice.process (a, numChannels, n, base, lastAngerRatio, angerRatio);
-            lastAngerRatio = angerRatio;
-            const float targetLevel = sw::jmin (1.0f, s.anger * 2.5f) * 0.85f;
-            for (int i = 0; i < n; ++i)
-            {
-                angerLevel += 0.002f * (targetLevel - angerLevel);
-                const float norm = 1.0f / (1.0f + 0.45f * angerLevel);
-                for (int ch = 0; ch < numChannels; ++ch)
-                    out[ch][i] = (out[ch][i] + angerLevel * a[ch][i]) * norm;
-            }
-        }
-
-        if (engage > 0.0f)
-        {
-            // Anti-chipmunk (clean engine only - in RAW the converter emulation darkens it)
-            const float lpHz = 16000.0f / std::pow (ratioFor (sw::jmax (0.0f, mainSemis)), 0.9f);
-            const float lpCoeff = shiftVoice.isRaw() ? 0.0f : std::exp (-swarm::kTwoPi * lpHz / (float) sampleRate);
-
-            for (int i = 0; i < n; ++i)
-            {
-                // Attack restoration: the shifted signal follows the dry envelope (bounded, fast attack)
-                float dryA = 0.0f, wetA = 0.0f;
-                for (int ch = 0; ch < numChannels; ++ch)
-                {
-                    dryA = sw::jmax (dryA, std::abs (dry.getSample (ch, i)));
-                    wetA = sw::jmax (wetA, std::abs (out[ch][i]));
-                }
-                dryEnv += (dryA > dryEnv ? envAttack : envRelease) * (dryA - dryEnv);
-                wetEnv += (wetA > wetEnv ? envAttack : envRelease) * (wetA - wetEnv);
-                const float target = sw::jlimit (0.6f, 2.0f, (dryEnv + 1.0e-4f) / (wetEnv + 1.0e-4f));
-                restoreGain += (target > restoreGain ? gainUp : gainDown) * (target - restoreGain);
-
-                for (int ch = 0; ch < numChannels; ++ch)
-                {
-                    auto& z = chipmunkLp[(size_t) ch];
-                    z = out[ch][i] + lpCoeff * (z - out[ch][i]);
-                    // sub-sonic cut: a down-shift on a low tuning would otherwise land at 20-30 Hz
-                    out[ch][i] = shiftSubsonic[(size_t) ch].process (z * restoreGain);
-                }
-            }
-        }
-        else
-        {
-            restoreGain = 1.0f;
-            dryEnv = wetEnv = 0.0f;
-            chipmunkLp = { 0.0f, 0.0f };
-            for (auto& f : shiftSubsonic) f.reset();
-        }
-
-        speedMain.process (out, numChannels, n);   // BUZZ
     }
 
     //==========================================================================
@@ -500,7 +347,7 @@ private:
         };
         const float droneLpC = lpCoeff (droneRatio), queenLpC = lpCoeff (queenRatio);
 
-        // Voice input: the played note (lagged by TRACKING) - or the shifted one with FOLLOW
+        // Voice input: what reaches the block, lagged by TRACKING
         bool onset = false;
         for (int i = 0; i < n; ++i)
         {
@@ -508,7 +355,7 @@ private:
             float peak = 0.0f;
             for (int ch = 0; ch < numChannels; ++ch)
             {
-                lagLine.pushSample (ch, s.follow ? followIn.getSample (ch, i) : dry.getSample (ch, i));
+                lagLine.pushSample (ch, dry.getSample (ch, i));
                 const float v = lagLine.popSample (ch);
                 voiceIn.setSample (ch, i, v);
                 peak = sw::jmax (peak, std::abs (v));
@@ -803,10 +650,10 @@ private:
     double sampleRate = 44100.0;
     Settings settings;
 
-    ShiftRing dryRing, voiceRing, trailRing;
-    PitchVoice shiftVoice, angerVoice, droneVoice, queenVoice, trailVoice;
-    SpeedStage speedMain, speedVoices;
-    sw::AudioBuffer<float> dry, mainOut, followIn, shifted, angerBuf, voiceIn, droneBuf, queenBuf, trailIn, trailBuf, voicesOut;
+    ShiftRing voiceRing, trailRing;
+    PitchVoice droneVoice, queenVoice, trailVoice;
+    SpeedStage speedVoices;
+    sw::AudioBuffer<float> dry, voiceIn, droneBuf, queenBuf, trailIn, trailBuf, voicesOut;
     sw::dsp::DelayLine<float, sw::dsp::DelayLineInterpolationTypes::Linear> lagLine { 1 };
     sw::SmoothedValue<float> onSmoothed, droneLevel, queenLevel, loopGain, resonance, lagSmoothed, voiceGain;
     swarm::FastRandom rng { 0x5EED1E5u };
@@ -815,17 +662,10 @@ private:
     std::array<float, 3> driftTarget {};
     int driftCounter = 0;
 
-    // SHIFT
-    float currentSemis = 0.0f, targetSemis = 0.0f, rampStep = 0.0f, displaySemis = 0.0f;
-    float wet = 0.0f, angerLevel = 0.0f;
     float chaosPhase = 0.0f, chaosTarget = 0.0f, wobblePhase = 0.0f;
-    float dryEnv = 0.0f, wetEnv = 0.0f, restoreGain = 1.0f;
     float dryLevel = 1.0f, dryLevelTarget = 1.0f, dryLevelCoeff = 0.001f;
-    float envAttack = 0.05f, envRelease = 0.001f, gainUp = 0.02f, gainDown = 0.003f;
-    std::array<float, 2> chipmunkLp {};
-    std::array<swarm::SVF, 2> shiftSubsonic;
-    bool shiftIdle = true, queenIdle = true, trailIdle = true;
-    float lastMainRatio = 1.0f, lastAngerRatio = 1.0f, lastDroneRatio = 1.0f, lastQueenRatio = 1.0f, lastTrailRatio = 1.0f;
+    bool queenIdle = true, trailIdle = true;
+    float lastDroneRatio = 1.0f, lastQueenRatio = 1.0f, lastTrailRatio = 1.0f;
 
     // VOICES / TRAILS
     std::array<std::vector<float>, 2> loopBuf;

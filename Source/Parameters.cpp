@@ -22,10 +22,11 @@ namespace
     std::unique_ptr<juce::AudioParameterFloat> cents (const char* id, const juce::String& name)
     {
         return std::make_unique<juce::AudioParameterFloat> (
-            pid (id), name, juce::NormalisableRange<float> (-50.0f, 50.0f, 0.1f), 0.0f,
+            pid (id), name, juce::NormalisableRange<float> (-50.0f, 50.0f, 1.0f), 0.0f,
             Attr().withLabel ("ct").withStringFromValueFunction ([] (float v, int)
             {
-                return (v > 0.05f ? "+" : "") + juce::String (v, std::abs (v) < 10.0f ? 1 : 0) + " ct";
+                const int c = juce::roundToInt (v);
+                return (c > 0 ? "+" : "") + juce::String (c) + " ct";
             }));
     }
 
@@ -88,6 +89,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     hive->addChild (glideTime (rise, "Rise"));
     hive->addChild (glideTime (fall, "Fall"));
     hive->addChild (percent (stingMix, "Shift Blend", 100.0f));
+    hive->addChild (toggle (shStack, "Shift Stack A+B", false));
+    hive->addChild (percent (panic, "Shift Anger", 0.0f));
+    hive->addChild (percent (chaos, "Shift Frenzy", 0.0f));
+    hive->addChild (percent (speed, "Shift Buzz", 0.0f));
+    hive->addChild (toggle (shSnap, "Shift Snap", true));
+    hive->addChild (toggle (shRaw, "Shift Raw", true));
+    hive->addChild (cents (shDetune, "Shift Detune"));
 
     // VOICES
     hive->addChild (toggle (rbOn, "Hive Voices On", false));
@@ -105,7 +113,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     hive->addChild (percent (rbPrimary, "Drone", 60.0f));
     hive->addChild (percent (rbSecondary, "Queen", 0.0f));
     hive->addChild (percent (rbTracking, "Hive Tracking", 80.0f));
-    hive->addChild (toggle (hiveFollow, "Hive Follow Shift", false));
 
     // TRAILS
     hive->addChild (percent (rbMagic, "Hive Trails", 0.0f));
@@ -134,9 +141,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     hive->addChild (toggle (linkOct2, "Venom Links Shift B", false));
 
     // MANGLE
-    hive->addChild (percent (panic, "Anger", 0.0f));
-    hive->addChild (percent (chaos, "Frenzy", 0.0f));
-    hive->addChild (percent (speed, "Buzz", 0.0f));
+    hive->addChild (percent (hvAnger, "Hive Anger", 0.0f));
+    hive->addChild (percent (hvFrenzy, "Hive Frenzy", 0.0f));
+    hive->addChild (percent (hvBuzz, "Hive Buzz", 0.0f));
     hive->addChild (toggle (rbRaw, "Hive Raw", true));
     hive->addChild (cents (rbDetune, "Hive Detune"));
     hive->addChild (percent (rbMix, "Hive Mix", 50.0f));

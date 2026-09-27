@@ -3,7 +3,7 @@
 /**
  * SWARMNESS pedal engine: the "destructive pitch-delay" pedal.
  *
- *     IN -> INPUT -> HIVE (SHIFT + VOICES + TRAILS + MANGLE) -> SWARM (chorus) -> VOLUME -> OUT
+ *     IN -> INPUT -> SHIFT (footswitches) -> HIVE (VOICES + TRAILS) -> SWARM (chorus) -> VOLUME -> OUT
  *
  * Pure C++17: compiles with the plug-in (JUCE) or stand-alone with SWARM_NO_JUCE for pedal
  * hardware (Daisy / STM32H7, Raspberry Pi / Linux ARM, ...). It uses the exact same DSP classes
@@ -12,6 +12,7 @@
  * Real-time rules: prepare() allocates; setParams() / process() never allocate or lock.
  */
 
+#include "../DSP/ShiftBlock.h"
 #include "../DSP/HiveBlock.h"
 #include "../DSP/SwarmChorus.h"
 
@@ -23,6 +24,7 @@ namespace swarmness
         bool shiftA = false, shiftB = false, venom = false, bypass = false;
         bool linkA = false, linkB = false;   // VENOM drags the SHIFTs in
 
+        ShiftBlock::Settings shift;                // see ShiftBlock.h (footswitch fields are set from the ones above)
         HiveBlock::Settings hive;                  // see HiveBlock.h
 
         // SWARM
@@ -39,6 +41,7 @@ namespace swarmness
         {
             sr = sampleRate;
             maxBlock = sw::jlimit (1, kTrack, maxBlockSize);
+            shift.prepare (sr, maxBlock);
             hive.prepare (sr, maxBlock);
             swarm.prepare (sr);
             dry.setSize (2, maxBlock, false, false, true);
@@ -52,6 +55,7 @@ namespace swarmness
 
         void reset()
         {
+            shift.reset();
             hive.reset();
             swarm.reset();
         }
@@ -59,7 +63,7 @@ namespace swarmness
         void setParams (const PedalParams& p) noexcept { params = p; }
 
         /** Live SHIFT transposition (for an LED / display). */
-        float getShiftSemitones() const noexcept { return hive.getShiftSemitones(); }
+        float getShiftSemitones() const noexcept { return shift.getSemitones(); }
 
         /**
          * In-place processing. numChannels = 1 (mono pedal) or 2 (stereo out: pass the guitar in
@@ -96,18 +100,22 @@ namespace swarmness
             }
 
             // Footswitches work even while bypassed, like momentary pedals
-            auto s = p.hive;
-            s.shiftA = p.shiftA || (p.venom && p.linkA);
-            s.shiftB = p.shiftB || (p.venom && p.linkB);
-            s.venom = p.venom;
-            hive.setParams (s);
+            auto sh = p.shift;
+            sh.shiftA = p.shiftA || (p.venom && p.linkA);
+            sh.shiftB = p.shiftB || (p.venom && p.linkB);
+            shift.setParams (sh);
+            shift.process (audio, numChannels, n);
+
+            auto hv = p.hive;
+            hv.venom = p.venom;
+            hive.setParams (hv);
             hive.process (audio, numChannels, n);
 
             swarm.setParams (p.swarmRateHz, p.swarmDepth, p.swarmOn ? p.swarmMix : 0.0f, p.swarmDeep);
             swarm.process (audio, numChannels, n);
 
-            const bool anyHeld = s.shiftA || s.shiftB || s.venom;
-            bypassMix.setTargetValue (p.bypass && ! anyHeld && ! hive.isShiftEngaged() ? 1.0f : 0.0f);
+            const bool anyHeld = sh.shiftA || sh.shiftB || p.venom;
+            bypassMix.setTargetValue (p.bypass && ! anyHeld && ! shift.isEngaged() ? 1.0f : 0.0f);
             outGain.setTargetValue (dbToGain (p.outputDb));
 
             for (int i = 0; i < n; ++i)
@@ -130,6 +138,7 @@ namespace swarmness
         double sr = 48000.0;
         int maxBlock = 64;
         PedalParams params;
+        ShiftBlock shift;
         HiveBlock hive;
         SwarmChorus swarm;
         sw::AudioBuffer<float> dry;

@@ -55,7 +55,7 @@ namespace swarmness::bench
 
         P angry = idle;
         angry.shiftB = true;
-        angry.hive.anger = 0.8f; angry.hive.frenzy = 0.5f; angry.hive.buzz = 0.5f;
+        angry.shift.anger = 0.8f; angry.shift.frenzy = 0.5f; angry.shift.buzz = 0.5f;
         list.push_back ({ "SHIFT B +2 OCT + ANGER/FRENZY/BUZZ", angry });
 
         P hive = idle;

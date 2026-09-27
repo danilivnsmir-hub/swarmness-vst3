@@ -19,7 +19,7 @@ public:
     void resized() override;
     void tick();   // called by the editor's timer
 
-    enum Page { fxPageIndex = 0, eqPageIndex, spacePageIndex, numPages };
+    enum Page { fxPageIndex = 0, eqPageIndex, spacePageIndex, pitchPageIndex, numPages };
     void showPage (int page);
     static int pageForBlock (int block);
 
@@ -48,7 +48,7 @@ private:
 
     // Chain + pages (the FX page holds the original sections; EQ and CRYPT have their own components)
     ChainStrip chainStrip;
-    juce::Component fxPage;
+    juce::Component fxPage, pitchPage;   // FX = SMOKE / SWARM / WINGS, PITCH = HIVE + SHIFT
     EqPage eqPage;
     ReverbPage reverbPage;
     int currentPage = fxPageIndex;
@@ -58,17 +58,21 @@ private:
     SegmentedChoice switchModeSelector;
     juce::TextButton infoButton { "?" };
 
-    // HIVE: SHIFT | VOICES | TRAILS | MANGLE
+    // SHIFT (footswitch shifter)
     Knob shiftAKnob { "SHIFT A", true }, shiftBKnob { "SHIFT B", true }, riseKnob { "RISE" }, fallKnob { "FALL" }, blendKnob { "BLEND" };
-    PowerButton hivePower;
+    Knob panicKnob { "ANGER" }, chaosKnob { "FRENZY" }, speedKnob { "BUZZ" }, shDetuneKnob { "DETUNE", true };
+    PillToggle stackToggle { "STACK" }, shSnapToggle { "SNAP" }, shRawToggle { "RAW" };
     PitchScope pitchScope;
-    PillToggle snapToggle { "SNAP" }, followToggle { "FOLLOW" };
+
+    // HIVE: VOICES | TRAILS | MANGLE
+    PowerButton hivePower;
+    PillToggle snapToggle { "SNAP" };
     Knob pitchKnob { "PITCH", true }, primaryKnob { "DRONE" }, secondaryKnob { "QUEEN" }, trackingKnob { "TRACKING" };
     PillToggle rbSyncToggle { "SYNC" };
     Knob magicKnob { "TRAILS" }, rbTimeKnob { "TIME" }, rbDivKnob { "DIV" }, toneKnob { "TONE" }, gateKnob { "GATE" };
     StepGrid stepGrid;
     PillToggle rbRawToggle { "RAW" };
-    Knob panicKnob { "ANGER" }, chaosKnob { "FRENZY" }, speedKnob { "BUZZ" }, rbDetuneKnob { "DETUNE", true }, rbMixKnob { "MIX" };
+    Knob hvAngerKnob { "ANGER" }, hvFrenzyKnob { "FRENZY" }, hvBuzzKnob { "BUZZ" }, rbDetuneKnob { "DETUNE", true }, rbMixKnob { "MIX" };
 
     // SWARM
     PowerButton swarmPower;
@@ -99,9 +103,9 @@ private:
     std::vector<std::unique_ptr<APVTS::ButtonAttachment>> buttonAttachments;
 
     // Section rectangles (base coordinates)
-    juce::Rectangle<float> hiveArea, swarmArea, fuzzArea, flowArea, footswitchArea;
-    std::array<juce::Rectangle<float>, 4> hiveSections;   // SHIFT, VOICES, TRAILS, MANGLE
-    std::array<bool, 5> lastSectionStates {};   // HIVE lit, VOICES on, SWARM, SMOKE, WINGS
+    juce::Rectangle<float> hiveArea, shiftArea, swarmArea, fuzzArea, flowArea, footswitchArea;
+    std::array<juce::Rectangle<float>, 3> hiveSections;   // VOICES, TRAILS, MANGLE
+    std::array<bool, 5> lastSectionStates {};   // SHIFT engaged, HIVE on, SWARM, SMOKE, WINGS
     int lastShiftA = 999, lastShiftB = 999;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainPanel)

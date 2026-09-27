@@ -14,8 +14,8 @@
  */
 namespace ParamIDs
 {
-    // HIVE - one block, four sections (IDs keep their original names so sessions / MIDI stay valid)
-    // SHIFT: footswitches SHIFT A / SHIFT B (oct1 / oct2) transpose the played signal
+    // SHIFT - the footswitch shifter (IDs keep their original names so sessions / MIDI stay valid)
+    // footswitches SHIFT A / SHIFT B (oct1 / oct2) transpose the signal while held
     inline constexpr const char* oct1        = "oct1";         // footswitch: SHIFT A
     inline constexpr const char* oct2        = "oct2";         // footswitch: SHIFT B
     inline constexpr const char* shiftA      = "shiftA";       // SHIFT A interval, semitones
@@ -23,6 +23,15 @@ namespace ParamIDs
     inline constexpr const char* rise        = "rise";         // glide into the interval (footswitch down)
     inline constexpr const char* fall        = "fall";         // glide back home (footswitch released)
     inline constexpr const char* stingMix    = "stingMix";     // SHIFT BLEND: dry / shifted while a footswitch is down
+    inline constexpr const char* shStack     = "shStack";      // A + B held: both intervals sound (off = B wins)
+    inline constexpr const char* panic       = "panic";        // SHIFT ANGER
+    inline constexpr const char* chaos       = "chaos";        // SHIFT FRENZY
+    inline constexpr const char* speed       = "speed";        // SHIFT BUZZ
+    inline constexpr const char* shSnap      = "shSnap";       // FRENZY jumps on 4ths / 5ths / octaves
+    inline constexpr const char* shRaw       = "shRaw";        // RAW engine character
+    inline constexpr const char* shDetune    = "shDetune";     // cents
+
+    // HIVE - voices + trails
     // VOICES
     inline constexpr const char* rbOn        = "rbOn";         // voices on
     inline constexpr const char* rbPitch     = "rbPitch";      // DRONE interval
@@ -30,7 +39,6 @@ namespace ParamIDs
     inline constexpr const char* rbPrimary   = "rbPrimary";    // DRONE level
     inline constexpr const char* rbSecondary = "rbSecondary";  // QUEEN level
     inline constexpr const char* rbTracking  = "rbTracking";
-    inline constexpr const char* hiveFollow  = "hiveFollow";   // voices harmonise the shifted note
     // TRAILS
     inline constexpr const char* rbMagic     = "rbMagic";      // TRAILS: regeneration
     inline constexpr const char* trSteps     = "trSteps";      // TRAILS step pattern length (1..16)
@@ -46,10 +54,10 @@ namespace ParamIDs
     inline constexpr const char* magicHold   = "magicHold";    // footswitch: VENOM (self-oscillation)
     inline constexpr const char* linkOct1    = "linkOct1";     // VENOM also engages SHIFT A
     inline constexpr const char* linkOct2    = "linkOct2";     // VENOM also engages SHIFT B
-    // MANGLE (everything HIVE adds)
-    inline constexpr const char* panic       = "panic";        // ANGER
-    inline constexpr const char* chaos       = "chaos";        // FRENZY
-    inline constexpr const char* speed       = "speed";        // BUZZ
+    // MANGLE (on the voices and trails)
+    inline constexpr const char* hvAnger     = "hvAnger";
+    inline constexpr const char* hvFrenzy    = "hvFrenzy";
+    inline constexpr const char* hvBuzz      = "hvBuzz";
     inline constexpr const char* rbRaw       = "rbRaw";        // RAW engine character
     inline constexpr const char* rbDetune    = "rbDetune";     // cents: fine offset / spread
     inline constexpr const char* rbMix       = "rbMix";        // dry / effect (50% = both full, 100% = effect only)
@@ -60,6 +68,8 @@ namespace ParamIDs
     inline constexpr const char* stingDetuneLegacy = "stingDetune";
     // Beta.20-22: one PATTERN choice instead of the step pattern (values = HiveBlock fills 0..4)
     inline constexpr const char* hivePatternLegacy = "hivePattern";
+    // Beta.20-24: FOLLOW (the chain order decides now: HIVE after SHIFT follows the shifted note)
+    inline constexpr const char* hiveFollowLegacy  = "hiveFollow";
 
     // SWARM (chorus)
     inline constexpr const char* swarmOn     = "swarmOn";
@@ -202,16 +212,17 @@ namespace ParamRanges
  */
 namespace Chain
 {
-    enum Block : int { pitch = 0, smoke, swarm, wings, comb, carve, crypt, numBlocks };
+    // (pitch = HIVE; SHIFT was split off in beta.25 and sits right before HIVE by default)
+    enum Block : int { pitch = 0, smoke, swarm, wings, comb, carve, crypt, shift, numBlocks };
 
     inline constexpr const char* slotIds[numBlocks] { "chainPitch", "chainSmoke", "chainSwarm", "chainWings",
-                                                      "chainComb", "chainCarve", "chainCrypt" };
-    inline constexpr int defaultSlots[numBlocks] { 20, 10, 30, 40, 50, 60, 70 };   // SMOKE, PITCH, SWARM, WINGS, COMB, CARVE, CRYPT
+                                                      "chainComb", "chainCarve", "chainCrypt", "chainShift" };
+    inline constexpr int defaultSlots[numBlocks] { 20, 10, 30, 40, 50, 60, 70, 15 };   // SMOKE, SHIFT, HIVE, SWARM, WINGS, COMB, CARVE, CRYPT
     inline constexpr int slotMax = 99;
     inline constexpr int legacyPostSmokeSlot = 35;   // old "SMOKE POST" = after SWARM, before WINGS
 
-    inline constexpr const char* names[numBlocks]     { "HIVE", "SMOKE", "SWARM", "WINGS", "COMB", "CARVE", "CRYPT" };
-    inline constexpr const char* subtitles[numBlocks] { "PITCH DELAY", "FUZZ", "CHORUS", "TREMOLO", "GRAPHIC EQ", "PARAM EQ", "REVERB" };
+    inline constexpr const char* names[numBlocks]     { "HIVE", "SMOKE", "SWARM", "WINGS", "COMB", "CARVE", "CRYPT", "SHIFT" };
+    inline constexpr const char* subtitles[numBlocks] { "HARMONIES", "FUZZ", "CHORUS", "TREMOLO", "GRAPHIC EQ", "PARAM EQ", "REVERB", "FOOTSWITCH" };
 
     using Order = std::array<int, numBlocks>;
 
@@ -232,8 +243,8 @@ namespace Chain
     /** Where a block sits: in the main (series) line, or on parallel path A (upper) / B (lower). */
     enum Lane : int { series = 0, pathA, pathB };
     inline constexpr const char* laneIds[numBlocks] { "lanePitch", "laneSmoke", "laneSwarm", "laneWings",
-                                                      "laneComb", "laneCarve", "laneCrypt" };
-    /** A / B balance of each split, numbered left to right (7 blocks allow at most 4 splits). */
+                                                      "laneComb", "laneCarve", "laneCrypt", "laneShift" };
+    /** A / B balance of each split, numbered left to right (8 blocks allow at most 4 splits). */
     inline constexpr int maxSplits = 4;
     inline constexpr const char* parallelMixIds[maxSplits] { "chainParMix", "chainParMix2", "chainParMix3", "chainParMix4" };
 

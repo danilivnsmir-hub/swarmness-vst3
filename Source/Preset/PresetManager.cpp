@@ -60,7 +60,7 @@ void PresetManager::initialiseFactoryPresets()
           { { rise, 220 }, { fall, 70 }, { panic, 30 }, { chaos, 8 }, { speed, 60 },
             { fuzzOn, 1 }, { fuzzVoice, 1 }, { fuzz, 85 }, { fuzzTone, 50 }, { fuzzScoop, 45 } } },
         { "Noise - In-Key Chaos", recipes, "FRENZY with SNAP: the pitch jumps between 4ths, 5ths and octaves instead of random pitches - the chaos stays musical. Hold SHIFT A.",
-          { { rise, 10 }, { chaos, 70 }, { panic, 15 }, { speed, 15 }, { rbSnap, 1 },
+          { { rise, 10 }, { chaos, 70 }, { panic, 15 }, { speed, 15 }, { shSnap, 1 },
             { fuzzOn, 1 }, { fuzzVoice, 2 }, { fuzz, 75 }, { fuzzScoop, 30 } } },
         { "Slam - Semitone Clash", recipes, "Slam-style dissonance: a constant voice one semitone above, both at full level (MIX 50%), tight and clean, into a DOWN fuzz. SHIFT A / B add -1 / -2 oct layers (BLEND 50%).",
           { { rbOn, 1 }, { rbRaw, 0 }, { rbPitch, 1 }, { rbPrimary, 100 }, { rbTracking, 100 }, { rbMix, 50 },
@@ -159,8 +159,9 @@ void PresetManager::initialiseFactoryPresets()
           { { rbOn, 1 }, { rbSnap, 0 }, { rbPitch, -2.6f }, { rbPrimary, 80 }, { rbTracking, 15 }, { rbTone, 30 },
             { fuzzOn, 1 }, { slotSmoke, 35 }, { fuzz, 45 }, { fuzzTone, 20 },
             { flowOn, 1 }, { flowHard, 0 }, { flowSpeed, 6.0f }, { flowAmount, 60 } } },
-        { "Hive Collapse", attack, "Everything at once. One stomp on VENOM: SHIFT B (LINK), self-oscillating HIVE and gated SMOKE.",
+        { "Hive Collapse", attack, "Everything at once. HIVE runs INTO SHIFT here: one stomp on VENOM and the self-oscillating trails, gated SMOKE and all get dragged two octaves up (LINK to SHIFT B).",
           { { panic, 40 }, { chaos, 40 }, { rbOn, 1 }, { rbPitch, 12 }, { rbPrimary, 60 }, { rbMagic, 100 }, { rbTracking, 55 },
+            { juce::String (Chain::slotIds[Chain::shift]), 25 },
             { fuzzOn, 1 }, { slotSmoke, 35 }, { fuzz, 90 }, { fuzzScoop, 60 }, { fuzzGlare, 40 }, { fuzzGate, 30 }, { linkOct2, 1 } } },
 
         // ------------------------------------------------------- chain, EQ & CRYPT
@@ -405,20 +406,40 @@ void PresetManager::migrateLegacyValues (ValueMap& values)
     auto has = [&values] (const char* id) { return values.find (id) != values.end(); };
     auto get = [&values] (const char* id, float def) { auto it = values.find (id); return it != values.end() ? it->second : def; };
 
-    // Beta.19 and older: STING (DIVE, own RAW / DETUNE) + HIVE -> one HIVE block
-    if (! has (shiftA) && ! has (shiftB))
+    // Beta.19 and older: STING had DIVE and its own RAW / DETUNE
+    const bool fromSting = ! has (shiftA) && ! has (shiftB);
+    if (fromSting && get (noiseDownLegacy, 0.0f) > 0.5f)
     {
-        if (get (noiseDownLegacy, 0.0f) > 0.5f)
-        {
-            values[shiftA] = -12.0f;
-            values[shiftB] = -24.0f;
-        }
-        const bool voicesWereOn = get (rbOn, 0.0f) > 0.5f;
-        if (! voicesWereOn && has (stingRawLegacy))
-            values[rbRaw] = get (stingRawLegacy, 1.0f);
-        if (std::abs (get (rbDetune, 0.0f)) < 0.05f && has (stingDetuneLegacy))
-            values[rbDetune] = get (stingDetuneLegacy, 0.0f);
+        values[shiftA] = -12.0f;
+        values[shiftB] = -24.0f;
     }
+
+    // Beta.25: SHIFT split off HIVE again, each with its own MANGLE / RAW / DETUNE / SNAP.
+    // Beta.20-24 shared one set, so both blocks get a copy; STING values (beta.19) go to SHIFT.
+    if (! has (shRaw))
+    {
+        if (fromSting && (has (stingRawLegacy) || has (stingDetuneLegacy)))
+        {
+            values[shRaw] = get (stingRawLegacy, 1.0f);
+            values[shDetune] = get (stingDetuneLegacy, 0.0f);
+        }
+        else
+        {
+            values[shRaw] = get (rbRaw, 1.0f);
+            values[shDetune] = get (rbDetune, 0.0f);
+            values[hvAnger] = get (panic, 0.0f);
+            values[hvFrenzy] = get (chaos, 0.0f);
+            values[hvBuzz] = get (speed, 0.0f);
+        }
+        values[shSnap] = get (rbSnap, 1.0f);
+    }
+    // SHIFT goes where HIVE was (same slot: SHIFT sorts first), on the same lane
+    if (! has (Chain::slotIds[Chain::shift]))
+    {
+        values[Chain::slotIds[Chain::shift]] = get (Chain::slotIds[Chain::pitch], (float) Chain::defaultSlots[Chain::pitch]);
+        values[Chain::laneIds[Chain::shift]] = get (Chain::laneIds[Chain::pitch], 0.0f);
+    }
+    values.erase (hiveFollowLegacy);
     values.erase (noiseDownLegacy);
     values.erase (stingRawLegacy);
     values.erase (stingDetuneLegacy);

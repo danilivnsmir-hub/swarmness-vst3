@@ -492,13 +492,14 @@ juce::String ChainStrip::getTooltip()
                "(path A / B), back to the middle for series. Click a block to open its controls";
 
     static const char* what[Chain::numBlocks] {
-        "HIVE: destructive pitch-delay (SHIFT footswitches, voices, trails). The SHIFT / VENOM footswitches work even while it is off",
+        "HIVE: harmonies and pitch-shifting repeats. LED = on / off; the VENOM footswitch switches it on while held",
         "SMOKE: fuzz",
         "SWARM: chorus",
         "WINGS: tremolo / stutter gate",
         "COMB: 10-band graphic EQ",
         "CARVE: parametric EQ with low / high cut",
-        "CRYPT: reverb (algorithmic or your impulse response)" };
+        "CRYPT: reverb (algorithmic or your impulse response)",
+        "SHIFT: the footswitch pitch shifter - it sounds only while SHIFT A / B is held, like a momentary pedal (no on / off)" };
     juce::String tip (what[hover]);
     tip << ". Click to open; drag sideways to move, up / down for parallel paths";
     if (powerParamFor (hover) != nullptr)

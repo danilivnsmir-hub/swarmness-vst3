@@ -549,7 +549,7 @@ namespace
 
     void testHiveMix()
     {
-        std::printf ("\nHIVE MIX: 100%% leaves only the HIVE voices, the STING octave still sounds\n");
+        std::printf ("\nHIVE MIX: 100%% leaves only the HIVE voices; after SHIFT they follow the shifted note\n");
         const double sr = 48000.0;
         auto input = makeSine (sr, 48000 * 2, 220.0, 0.3f);
         for (bool octave : { false, true })
@@ -573,8 +573,9 @@ namespace
             else
             {
                 const double oct = goertzelDb (out, sr, 440.0, 48000, 24000);
-                check (oct > voice - 12.0 && oct - dry > 30.0,
-                       juce::String::formatted ("MIX 100%% + hold +1 OCT: octave %.1f dB vs voice, dry %.1f dB below", oct - voice, oct - dry));
+                const double shiftedVoice = goertzelDb (out, sr, 659.26, 48000, 24000);
+                check (shiftedVoice - oct > 30.0 && shiftedVoice - dry > 30.0,
+                       juce::String::formatted ("MIX 100%% + hold +1 OCT (SHIFT -> HIVE): the voice moves to 659 Hz, the octave itself %.1f dB below it", shiftedVoice - oct));
             }
         }
     }
@@ -773,7 +774,7 @@ namespace
         resetToInit (p);
         setParam (p, ParamIDs::rbRaw, 0.0f);
         setParam (p, ParamIDs::rise, 0.0f);
-        setParam (p, ParamIDs::rbDetune, -30.0f);
+        setParam (p, ParamIDs::shDetune, -30.0f);
         setParam (p, ParamIDs::oct1, 1.0f);
         const double sr = 48000.0;
         auto out = render (p, makeSine (sr, 48000 * 2, 220.0), sr, 256);
@@ -997,10 +998,10 @@ namespace
             for (int b = 0; b < Chain::numBlocks; ++b)
                 slots[(size_t) b] = (float) Chain::defaultSlots[b];
             const auto def = Chain::orderFromSlots (slots);
-            check (def[0] == Chain::smoke && def[1] == Chain::pitch && def[6] == Chain::crypt, "default order: SMOKE, PITCH, ..., CRYPT");
+            check (def[0] == Chain::smoke && def[1] == Chain::shift && def[2] == Chain::pitch && def[7] == Chain::crypt, "default order: SMOKE, SHIFT, HIVE, ..., CRYPT");
             slots.fill (0.0f);   // all tied -> default order
             check (Chain::orderFromSlots (slots) == def, "tied slots fall back to the default order");
-            Chain::Order custom { Chain::crypt, Chain::comb, Chain::pitch, Chain::wings, Chain::smoke, Chain::carve, Chain::swarm };
+            Chain::Order custom { Chain::crypt, Chain::comb, Chain::pitch, Chain::shift, Chain::wings, Chain::smoke, Chain::carve, Chain::swarm };
             check (Chain::orderFromSlots (Chain::slotsForOrder (custom)) == custom, "slots <-> order round trip");
         }
 
@@ -1011,7 +1012,7 @@ namespace
             resetToInit (p);
             p.prepareToPlay (sr, 256);
             const int latencyDefault = p.getLatencySamples();
-            setOrder (p, { Chain::crypt, Chain::carve, Chain::comb, Chain::wings, Chain::swarm, Chain::pitch, Chain::smoke });
+            setOrder (p, { Chain::crypt, Chain::carve, Chain::comb, Chain::wings, Chain::swarm, Chain::pitch, Chain::shift, Chain::smoke });
             auto out = render (p, input, sr, 256);
             check (p.getLatencySamples() == latencyDefault, juce::String::formatted ("latency independent of the order (%d samples)", latencyDefault));
             const double db = nullDb (out, input, p.getLatencySamples(), 4096, input.getNumSamples());
@@ -1029,8 +1030,8 @@ namespace
                 setOrder (p, order);
                 return render (p, input, sr, 256);
             };
-            auto a = renderWith ({ Chain::smoke, Chain::pitch, Chain::swarm, Chain::wings, Chain::comb, Chain::carve, Chain::crypt });
-            auto b = renderWith ({ Chain::crypt, Chain::pitch, Chain::swarm, Chain::wings, Chain::comb, Chain::carve, Chain::smoke });
+            auto a = renderWith ({ Chain::smoke, Chain::shift, Chain::pitch, Chain::swarm, Chain::wings, Chain::comb, Chain::carve, Chain::crypt });
+            auto b = renderWith ({ Chain::crypt, Chain::shift, Chain::pitch, Chain::swarm, Chain::wings, Chain::comb, Chain::carve, Chain::smoke });
             const double diff = nullDb (a, b, 0, 4096, a.getNumSamples());
             check (diff > -6.0 && allFinite (a) && allFinite (b), juce::String::formatted ("fuzz -> reverb differs from reverb -> fuzz (%.1f dB)", diff));
         }
@@ -1045,7 +1046,7 @@ namespace
             for (int start = 0; start < out.getNumSamples(); start += 128)
             {
                 if (start == 24064)
-                    setOrder (p, { Chain::wings, Chain::swarm, Chain::pitch, Chain::smoke, Chain::comb, Chain::carve, Chain::crypt });
+                    setOrder (p, { Chain::wings, Chain::swarm, Chain::shift, Chain::pitch, Chain::smoke, Chain::comb, Chain::carve, Chain::crypt });
                 juce::AudioBuffer<float> view (out.getArrayOfWritePointers(), 2, start, 128);
                 p.processBlock (view, midi);
             }
@@ -1101,18 +1102,18 @@ namespace
     {
         std::printf ("\nParallel paths (split -> A || B -> merge)\n");
         {
-            Chain::Layout l { { Chain::smoke, Chain::pitch, Chain::swarm, Chain::crypt, Chain::wings, Chain::comb, Chain::carve }, {} };
+            Chain::Layout l { { Chain::smoke, Chain::shift, Chain::pitch, Chain::swarm, Chain::crypt, Chain::wings, Chain::comb, Chain::carve }, {} };
             l.lanes[Chain::swarm] = Chain::pathA;
             l.lanes[Chain::crypt] = Chain::pathB;
             const auto plan = Chain::planFor (l);
-            const auto& split = plan.stages[2];
-            check (plan.numStages == 6 && plan.numSplits == 1 && split.parallel && split.numA == 1 && split.numB == 1
-                   && split.a[0] == Chain::swarm && split.b[0] == Chain::crypt && plan.stages[3].block == Chain::wings,
-                   "plan: SMOKE, PITCH -> [SWARM || CRYPT] -> WINGS, COMB, CARVE");
+            const auto& split = plan.stages[3];
+            check (plan.numStages == 7 && plan.numSplits == 1 && split.parallel && split.numA == 1 && split.numB == 1
+                   && split.a[0] == Chain::swarm && split.b[0] == Chain::crypt && plan.stages[4].block == Chain::wings,
+                   "plan: SMOKE, SHIFT, HIVE -> [SWARM || CRYPT] -> WINGS, COMB, CARVE");
 
             // two splits with a series block between: [SMOKE || PITCH] -> SWARM -> [WINGS || COMB] -> CARVE -> CRYPT
             Chain::Layout two { Chain::defaultOrder(), {} };
-            two.lanes[Chain::smoke] = Chain::pathA;  two.lanes[Chain::pitch] = Chain::pathB;
+            two.lanes[Chain::smoke] = Chain::pathA;  two.lanes[Chain::shift] = Chain::pathA;  two.lanes[Chain::pitch] = Chain::pathB;
             two.lanes[Chain::wings] = Chain::pathA;  two.lanes[Chain::comb]  = Chain::pathB;
             const auto p2 = Chain::planFor (two);
             check (p2.numSplits == 2 && p2.numStages == 5 && p2.stages[0].parallel && p2.stages[0].split == 0
@@ -1239,25 +1240,47 @@ namespace
             check (std::abs (1200.0 * std::log2 (f2 / 110.0)) < 5.0, juce::String::formatted ("A + B held: B wins (-12): %.2f Hz", f2));
         }
         {
-            // FOLLOW: the DRONE harmonises the shifted note
-            auto droneAt = [&] (bool follow)
+            // The chain order decides what HIVE harmonises: after SHIFT (default) the shifted note,
+            // with SHIFT || HIVE in parallel the played one
+            auto droneAt = [&] (bool parallel)
             {
                 SwarmnessAudioProcessor p;
                 resetToInit (p);
                 setParam (p, ParamIDs::rbRaw, 0.0f);
+                setParam (p, ParamIDs::shRaw, 0.0f);
                 setParam (p, ParamIDs::rise, 0.0f);
                 setParam (p, ParamIDs::oct1, 1.0f);          // SHIFT A +12 -> 440
                 setParam (p, ParamIDs::rbOn, 1.0f);
                 setParam (p, ParamIDs::rbPitch, 7.0f);
                 setParam (p, ParamIDs::rbPrimary, 100.0f);
                 setParam (p, ParamIDs::rbTracking, 100.0f);
-                setParam (p, ParamIDs::hiveFollow, follow ? 1.0f : 0.0f);
+                if (parallel)
+                    setLanes (p, { { Chain::shift, Chain::pathA }, { Chain::pitch, Chain::pathB } });
                 auto out = render (p, makeSine (sr, 48000 * 2, 220.0), sr, 256);
                 return std::pair<double, double> { toneDb (out, sr, 329.63, 48000, 32768), toneDb (out, sr, 659.26, 48000, 32768) };
             };
-            const auto off = droneAt (false), on = droneAt (true);
-            check (off.first > off.second + 10.0, juce::String::formatted ("FOLLOW off: DRONE on the played note (329.6 Hz %+.1f dB vs 659 Hz %+.1f dB)", off.first, off.second));
-            check (on.second > on.first + 10.0, juce::String::formatted ("FOLLOW on: DRONE on the shifted note (659 Hz %+.1f dB vs 329.6 Hz %+.1f dB)", on.second, on.first));
+            const auto par = droneAt (true), ser = droneAt (false);
+            check (ser.second > ser.first + 10.0, juce::String::formatted ("SHIFT -> HIVE: DRONE on the shifted note (659 Hz %+.1f dB vs 329.6 Hz %+.1f dB)", ser.second, ser.first));
+            check (par.first > par.second + 10.0, juce::String::formatted ("SHIFT || HIVE: DRONE on the played note (329.6 Hz %+.1f dB vs 659 Hz %+.1f dB)", par.first, par.second));
+        }
+        {
+            // STACK: A + B held = both intervals; off = B wins
+            auto stacked = [&] (bool stack)
+            {
+                SwarmnessAudioProcessor p;
+                resetToInit (p);
+                setParam (p, ParamIDs::shRaw, 0.0f);
+                setParam (p, ParamIDs::rise, 0.0f);
+                setParam (p, ParamIDs::shStack, stack ? 1.0f : 0.0f);
+                setParam (p, ParamIDs::oct1, 1.0f);          // +12 -> 440
+                setParam (p, ParamIDs::oct2, 1.0f);          // +24 -> 880
+                auto out = render (p, makeSine (sr, 48000 * 2, 220.0), sr, 256);
+                return std::pair<double, double> { toneDb (out, sr, 440.0, 48000, 32768), toneDb (out, sr, 880.0, 48000, 32768) };
+            };
+            const auto off = stacked (false), on = stacked (true);
+            check (off.second > off.first + 15.0, juce::String::formatted ("A + B, STACK off: B wins (880 Hz %+.1f dB, 440 Hz %+.1f dB)", off.second, off.first));
+            check (std::abs (on.first - on.second) < 6.0 && on.first > off.first + 15.0,
+                   juce::String::formatted ("A + B, STACK on: both sound (440 Hz %+.1f dB, 880 Hz %+.1f dB)", on.first, on.second));
         }
         {
             // STEPS: the first repeats of a plucked 220 Hz note, DRONE a fifth up
@@ -1330,7 +1353,8 @@ namespace
             juce::MemoryBlock mb;
             a.getStateInformation (mb);
             auto xml = juce::AudioProcessor::getXmlFromBinary (mb.getData(), (int) mb.getSize());
-            for (auto* id : { ParamIDs::shiftA, ParamIDs::shiftB, ParamIDs::rbRaw, ParamIDs::rbDetune })
+            for (auto* id : { ParamIDs::shiftA, ParamIDs::shiftB, ParamIDs::shRaw, ParamIDs::shDetune, ParamIDs::shSnap,
+                              ParamIDs::hvAnger, ParamIDs::hvFrenzy, ParamIDs::hvBuzz, Chain::slotIds[Chain::shift], Chain::laneIds[Chain::shift] })
                 if (auto* e = xml->getChildByAttribute ("id", id))
                     xml->removeChildElement (e, true);
             auto addLegacy = [&xml] (const char* id, double v)
@@ -1351,8 +1375,10 @@ namespace
             SwarmnessAudioProcessor b;
             b.setStateInformation (legacy.getData(), (int) legacy.getSize());
             auto v = [&b] (const char* id) { return b.getAPVTS().getRawParameterValue (id)->load(); };
-            check (v (ParamIDs::shiftA) < -11.5f && v (ParamIDs::shiftB) < -23.5f && v (ParamIDs::rbRaw) < 0.5f && std::abs (v (ParamIDs::rbDetune) + 20.0f) < 0.1f,
-                   "old session: DIVE -> SHIFT -12 / -24, STING RAW off and DETUNE -20 ct carried over");
+            check (v (ParamIDs::shiftA) < -11.5f && v (ParamIDs::shiftB) < -23.5f && v (ParamIDs::shRaw) < 0.5f && std::abs (v (ParamIDs::shDetune) + 20.0f) < 0.1f,
+                   "old session: DIVE -> SHIFT -12 / -24, STING RAW off and DETUNE -20 ct carried over to SHIFT");
+            check (b.getRequestedLayout().order[0] == Chain::smoke && b.getRequestedLayout().order[1] == Chain::shift
+                   && b.getRequestedLayout().order[2] == Chain::pitch, "old session: SHIFT lands right before HIVE");
             check (juce::roundToInt (v (ParamIDs::trMoves[0])) == HiveBlock::random && juce::roundToInt (v (ParamIDs::trMoves[5])) == HiveBlock::random
                    && juce::roundToInt (v (ParamIDs::trSteps)) == 8,
                    "old session: PATTERN SCATTER -> 8 RANDOM steps");
