@@ -51,6 +51,9 @@ public:
     void setStateInformation (const void* data, int sizeInBytes) override;
 
     juce::AudioProcessorParameter* getBypassParameter() const override { return bypassParam; }
+    /** The host calls this while ON is off: the plug-in does its own bypass (latency-aligned dry, and
+        the footswitches / MIDI pedals keep working), so it takes the normal path. */
+    void processBlockBypassed (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi) override { processBlock (buffer, midi); }
 
     //==============================================================================
     juce::AudioProcessorValueTreeState& getAPVTS() noexcept { return apvts; }

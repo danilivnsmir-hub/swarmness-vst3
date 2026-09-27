@@ -845,6 +845,19 @@ namespace
         send (juce::MidiMessage::noteOn (1, 40, (juce::uint8) 100));
         check (juce::roundToInt (value (fuzzVoice)) == (juce::roundToInt (v0) + 1) % 3, "a selector steps to the next option on each press");
 
+        {
+            // while ON is off the host calls processBlockBypassed: the pedal must still switch it back on
+            const float onBefore = value (bypass);
+            juce::MidiBuffer midi;
+            midi.addEvent (juce::MidiMessage::controllerEvent (1, 70, 127), 0);
+            buf.clear();
+            p.processBlockBypassed (buf, midi);
+            juce::MidiBuffer up;
+            up.addEvent (juce::MidiMessage::controllerEvent (1, 70, 0), 0);
+            p.processBlockBypassed (buf, up);
+            check (std::abs (value (bypass) - onBefore) > 0.5f, "MIDI also works while the host has the plug-in bypassed (processBlockBypassed)");
+        }
+
         juce::MemoryBlock mb;
         p.getStateInformation (mb);
         SwarmnessAudioProcessor q;
