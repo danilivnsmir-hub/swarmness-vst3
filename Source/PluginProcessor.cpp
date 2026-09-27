@@ -114,6 +114,28 @@ SwarmnessAudioProcessor::SwarmnessAudioProcessor()
             }
         }
     };
+    tone3000.onDownloaded = [this] (const Tone3000::Download& d)
+    {
+        // loading a tone means you want to hear it
+        auto select = [this] (const char* id, int index)
+        {
+            if (auto* param = apvts.getParameter (id))
+            {
+                param->beginChangeGesture();
+                param->setValueNotifyingHost (param->convertTo0to1 ((float) index));
+                param->endChangeGesture();
+            }
+        };
+        for (const auto& f : d.files)
+        {
+            if (d.target == Tone3000::Target::amp ? loadNamModel (f).isEmpty() : loadCabIR (f).isEmpty())
+            {
+                if (d.target == Tone3000::Target::amp) select (ParamIDs::ampChannel, AmpBlock::nam);
+                else                                   select (ParamIDs::cabType, CabBlock::ir);
+                break;
+            }
+        }
+    };
     housekeeper = std::make_unique<Housekeeper> (*this);
     housekeeper->startThread (juce::Thread::Priority::low);
 }
@@ -838,6 +860,41 @@ juce::String SwarmnessAudioProcessor::getCabIRDescription() const
 {
     const juce::ScopedLock sl (irInfoLock);
     return cabIRDescription;
+}
+
+void SwarmnessAudioProcessor::browseTone3000 (bool forCab)
+{
+    tone3000.start (forCab ? Tone3000::Target::cab : Tone3000::Target::amp);
+}
+
+namespace
+{
+    /** The file before / after `current` among the files with the same extension in its folder. */
+    juce::File neighbour (const juce::File& current, const juce::String& wildcard, int direction)
+    {
+        if (! current.existsAsFile())
+            return {};
+        auto files = current.getParentDirectory().findChildFiles (juce::File::findFiles, false, wildcard);
+        if (files.size() < 2)
+            return {};
+        files.sort();
+        const int i = files.indexOf (current);
+        return files[(juce::jmax (0, i) + direction + files.size()) % files.size()];
+    }
+}
+
+void SwarmnessAudioProcessor::stepNamModel (int direction)
+{
+    const auto next = neighbour (getNamModelFile(), "*.nam", direction);
+    if (next.existsAsFile())
+        loadNamModel (next);
+}
+
+void SwarmnessAudioProcessor::stepCabIR (int direction)
+{
+    const auto next = neighbour (getCabIRFile(), "*.wav;*.aif;*.aiff;*.flac", direction);
+    if (next.existsAsFile())
+        loadCabIR (next);
 }
 
 void SwarmnessAudioProcessor::updateCabModel (bool force)

@@ -122,7 +122,8 @@ juce_add_plugin(Swarmness
     VST3_CATEGORIES Fx "Pitch Shift" Modulation
     AU_MAIN_TYPE kAudioUnitType_Effect
     MICROPHONE_PERMISSION_ENABLED TRUE
-    MICROPHONE_PERMISSION_TEXT "Swarmness Standalone processes your instrument input.")
+    MICROPHONE_PERMISSION_TEXT "Swarmness Standalone processes your instrument input."
+    NEEDS_CURL TRUE)
 
 juce_generate_juce_header(Swarmness)
 
@@ -137,6 +138,7 @@ juce_add_binary_data(SwarmnessBinaryData
         Source/Assets/Fonts/Rajdhani-Bold.ttf)
 
 set(SWARMNESS_DSP_SOURCES
+    Source/Amp/Tone3000.cpp
     Source/Parameters.cpp
     Source/PluginProcessor.cpp
     Source/Preset/PresetManager.cpp)
@@ -152,9 +154,23 @@ target_sources(Swarmness PRIVATE ${SWARMNESS_DSP_SOURCES} ${SWARMNESS_GUI_SOURCE
 
 target_include_directories(Swarmness PRIVATE Source)
 
+# TONE3000 publishable key (an OAuth client id, not a secret): -DSWARMNESS_TONE3000_KEY=t3k_pub_...
+set(SWARMNESS_TONE3000_KEY "" CACHE STRING "TONE3000 publishable API key")
+if(SWARMNESS_TONE3000_KEY STREQUAL "" AND DEFINED ENV{SWARMNESS_TONE3000_KEY})
+    set(SWARMNESS_TONE3000_KEY $ENV{SWARMNESS_TONE3000_KEY})
+endif()
+
+# HTTPS for TONE3000: native on macOS / Windows, libcurl on Linux
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(SWARMNESS_USE_CURL 1)
+else()
+    set(SWARMNESS_USE_CURL 0)
+endif()
+
 target_compile_definitions(Swarmness PUBLIC
     JUCE_WEB_BROWSER=0
-    JUCE_USE_CURL=0
+    JUCE_USE_CURL=${SWARMNESS_USE_CURL}
+    SWARMNESS_TONE3000_KEY="${SWARMNESS_TONE3000_KEY}"
     JUCE_VST3_CAN_REPLACE_VST2=0
     JUCE_DISPLAY_SPLASH_SCREEN=0
     JUCE_REPORT_APP_USAGE=0
@@ -168,6 +184,7 @@ target_link_libraries(Swarmness
         swarmness_nam
         juce::juce_audio_utils
         juce::juce_dsp
+        juce::juce_cryptography
     PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags
@@ -206,6 +223,7 @@ if(SWARMNESS_BUILD_TESTS)
         swarmness_nam
         juce::juce_audio_utils
         juce::juce_dsp
+        juce::juce_cryptography
         juce::juce_recommended_config_flags)
 
     if(MSVC)

@@ -2139,6 +2139,15 @@ namespace
             const double load = std::chrono::duration<double> (std::chrono::steady_clock::now() - t0).count() / 5.0 * 100.0;
             check (load < 20.0, juce::String::formatted ("%s circuit model: %.1f%% of one core", ParamChoices::ampChannels[chn].toRawUTF8(), load));
         }
+        {
+            // TONE3000 sign-in pieces: PKCE S256 challenge, base64url, the browser's callback
+            check (Tone3000::codeChallengeFor ("dBjftJeZ4CVP-mJ92IjGp3Ioq6Y0t4kEFzr1LVgsQJ0") == "_3BvrKfwzKcl7_-QgZsEYWs6xAgHEnw4Cu02jEYfy2I",
+                   "TONE3000: PKCE S256 code challenge");
+            const auto q = Tone3000::parseQuery ("GET /callback?code=ab%2Fc&state=xyz&tone_id=42 HTTP/1.1");
+            check (q["__path"] == "/callback" && q["code"] == "ab/c" && q["state"] == "xyz" && q["tone_id"] == "42",
+                   "TONE3000: callback query parsed");
+            check (Tone3000::redirectUri() == "http://127.0.0.1:43167/callback", "TONE3000: loopback redirect " + Tone3000::redirectUri());
+        }
         const auto a2 = namExample ("A2.nam");
         if (a2.existsAsFile())
         {

@@ -212,7 +212,9 @@ private:
     CharacterSlider characterSlider;
     juce::TextButton loadNamButton { "LOAD .NAM" }, toneButton { "TONE3000" }, clearNamButton { "CLEAR" };
     Knob micKnob { "MIC" }, distKnob { "DISTANCE" }, lowCutKnob { "LOW CUT" }, highCutKnob { "HIGH CUT" }, cabLevelKnob { "LEVEL", true };
-    juce::TextButton loadIrButton { "LOAD IR" }, clearIrButton { "CLEAR" };
+    juce::TextButton loadIrButton { "LOAD IR" }, clearIrButton { "CLEAR" }, irToneButton { "TONE3000" };
+    juce::TextButton namPrev { "<" }, namNext { ">" }, irPrev { "<" }, irNext { ">" };
+    juce::String toneStatus;
 
     std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>> buttonAttachments;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> characterAttachment;

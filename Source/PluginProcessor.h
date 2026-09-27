@@ -13,6 +13,7 @@
 #include "DSP/CabBlock.h"
 #include "DSP/SpectrumTap.h"
 #include "Preset/PresetManager.h"
+#include "Amp/Tone3000.h"
 
 #include <array>
 #include <atomic>
@@ -107,6 +108,13 @@ public:
     void clearCabIR();
     juce::File getCabIRFile() const;
     juce::String getCabIRDescription() const;
+    /** TONE3000: pick a NAM capture (AMP) or a cabinet IR (CAB) on tone3000.com; it downloads and loads. */
+    void browseTone3000 (bool forCab);
+    juce::String getTone3000Status() const { return tone3000.getStatus(); }
+    /** The previous / next capture (or IR) in the folder of the loaded one - e.g. the other models of a TONE3000 tone. */
+    void stepNamModel (int direction);
+    void stepCabIR (int direction);
+
     /** Rebuilds the modelled cabinet IR when its settings changed (message thread; also run by a timer). */
     void updateCabModel (bool force = false);
 
@@ -173,6 +181,7 @@ private:
         SwarmnessAudioProcessor& owner;
     };
     std::unique_ptr<Housekeeper> housekeeper;
+    Tone3000 tone3000;
     std::atomic<int> pendingScene { 0 };
     bool restoringState = false;
     juce::Array<juce::RangedAudioParameter*> learnableParams;   // index = binding param

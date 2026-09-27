@@ -998,8 +998,17 @@ AmpCabSection::AmpCabSection (SwarmnessAudioProcessor& p)
 
     loadNamButton.setTooltip ("Load a Neural Amp Modeler capture (.nam). Or drop one on the AMP panel");
     loadNamButton.onClick = [this] { choose (true); };
-    toneButton.setTooltip ("Open TONE3000 in the browser - the free library of NAM captures and cabinet IRs. Download a .nam, then load or drop it here");
-    toneButton.onClick = [] { juce::URL ("https://www.tone3000.com/search?gear=amp").launchInDefaultBrowser(); };
+    toneButton.setTooltip (Tone3000::isConfigured()
+                               ? "TONE3000: browse thousands of free NAM captures in your browser - pick one and it downloads and loads here "
+                                 "(all models of the tone; step through them with < >)"
+                               : "Open TONE3000 in the browser - the free library of NAM captures and cabinet IRs. Download a .nam, then load or drop it here");
+    toneButton.onClick = [this] { processor.browseTone3000 (false); };
+    namPrev.setTooltip ("Previous capture in the same folder (e.g. the other models of a TONE3000 tone)");
+    namNext.setTooltip ("Next capture in the same folder");
+    namPrev.onClick = [this] { processor.stepNamModel (-1); };
+    namNext.onClick = [this] { processor.stepNamModel (1); };
+    for (auto* b : { &namPrev, &namNext })
+        addChildComponent (b);
     clearNamButton.setTooltip ("Forget the NAM capture");
     clearNamButton.onClick = [this] { processor.clearNamModel(); message.clear(); };
     for (auto* b : { &loadNamButton, &toneButton, &clearNamButton })
@@ -1017,8 +1026,18 @@ AmpCabSection::AmpCabSection (SwarmnessAudioProcessor& p)
     loadIrButton.onClick = [this] { choose (false); };
     clearIrButton.setTooltip ("Forget the cabinet IR");
     clearIrButton.onClick = [this] { processor.clearCabIR(); message.clear(); };
+    irToneButton.setTooltip (Tone3000::isConfigured() ? "TONE3000: pick a cabinet IR in your browser - it downloads and loads here"
+                                                      : "Open TONE3000 in the browser - thousands of free cabinet IRs");
+    irToneButton.onClick = [this] { processor.browseTone3000 (true); };
+    irPrev.setTooltip ("Previous IR in the same folder");
+    irNext.setTooltip ("Next IR in the same folder");
+    irPrev.onClick = [this] { processor.stepCabIR (-1); };
+    irNext.onClick = [this] { processor.stepCabIR (1); };
     addAndMakeVisible (loadIrButton);
     addAndMakeVisible (clearIrButton);
+    addAndMakeVisible (irToneButton);
+    for (auto* b : { &irPrev, &irNext })
+        addChildComponent (b);
 }
 
 void AmpCabSection::resized()
@@ -1046,6 +1065,8 @@ void AmpCabSection::resized()
         buttons.removeFromLeft (8);
         clearNamButton.setBounds (buttons.removeFromLeft (80));
     }
+    namPrev.setBounds ((int) morphArea.getRight() - 14 - 50, (int) morphArea.getY() + 10, 22, 20);
+    namNext.setBounds ((int) morphArea.getRight() - 14 - 26, (int) morphArea.getY() + 10, 22, 20);
     gateKnob .setBounds ((int) morphArea.getRight() + 20, 146, 72, 102);
     levelKnob.setBounds (gateKnob.getRight() + 8, 146, 72, 102);
 
@@ -1059,8 +1080,14 @@ void AmpCabSection::resized()
             k->setBounds ((int) (cabArea.getX() + 6.0f + step * ((float) i++ + 0.5f)) - 34, 70, 68, 100);
     }
     curveArea = { cabArea.getX() + 14.0f, 176.0f, cabArea.getWidth() - 28.0f - 104.0f, h - 186.0f };
-    loadIrButton .setBounds ((int) curveArea.getRight() + 8, (int) curveArea.getY(), 96, 28);
-    clearIrButton.setBounds ((int) curveArea.getRight() + 8, (int) curveArea.getY() + 34, 96, 28);
+    {
+        const int bx = (int) curveArea.getRight() + 8, by = (int) curveArea.getY(), bh = 20, gap = (int) (curveArea.getHeight() - 3 * bh) / 2;
+        loadIrButton .setBounds (bx, by, 96, bh);
+        irToneButton .setBounds (bx, by + bh + gap, 96, bh);
+        clearIrButton.setBounds (bx, by + 2 * (bh + gap), 96, bh);
+        irPrev.setBounds ((int) curveArea.getRight() - 50, (int) curveArea.getY() + 4, 22, 18);
+        irNext.setBounds ((int) curveArea.getRight() - 26, (int) curveArea.getY() + 4, 22, 18);
+    }
 }
 
 void AmpCabSection::paint (juce::Graphics& g)
@@ -1081,11 +1108,11 @@ void AmpCabSection::paint (juce::Graphics& g)
         auto t = morphArea.reduced (14.0f, 10.0f);
         g.setFont (font (15.0f, true));
         g.setColour (namDescription.isNotEmpty() ? Colours::text : Colours::textDim);
-        g.drawFittedText (namDescription.isNotEmpty() ? namDescription : juce::String ("no capture loaded"), t.removeFromTop (22.0f).toNearestInt(),
+        g.drawFittedText (namDescription.isNotEmpty() ? namDescription : juce::String ("no capture loaded"), t.removeFromTop (22.0f).withTrimmedRight (56.0f).toNearestInt(),
                           juce::Justification::centredLeft, 1, 0.8f);
         g.setFont (font (12.5f));
-        g.setColour (message.isNotEmpty() ? Colours::ledRed : Colours::textFaint);
-        g.drawFittedText (message.isNotEmpty() ? message
+        g.setColour (message.isNotEmpty() ? Colours::ledRed : (toneStatus.isNotEmpty() ? Colours::accent : Colours::textFaint));
+        g.drawFittedText (message.isNotEmpty() ? message : toneStatus.isNotEmpty() ? toneStatus
                                                : juce::String ("Drop a .nam here or find one on TONE3000. GAIN drives it, BASS..DEPTH = post EQ."),
                           t.removeFromTop (18.0f).toNearestInt(), juce::Justification::topLeft, 1, 0.85f);
     }
@@ -1100,11 +1127,12 @@ void AmpCabSection::paint (juce::Graphics& g)
         auto t = curveArea.reduced (10.0f, 6.0f);
         g.setFont (font (13.5f, true));
         g.setColour (cabIrDescription.isNotEmpty() ? Colours::text : Colours::textDim);
-        g.drawFittedText (cabIrDescription.isNotEmpty() ? cabIrDescription : juce::String ("no IR loaded"), t.removeFromTop (20.0f).toNearestInt(),
+        g.drawFittedText (cabIrDescription.isNotEmpty() ? cabIrDescription : juce::String ("no IR loaded"), t.removeFromTop (20.0f).withTrimmedRight (52.0f).toNearestInt(),
                           juce::Justification::centredLeft, 1, 0.8f);
         g.setFont (font (12.0f));
-        g.setColour (message.isNotEmpty() && dragTarget == 0 ? Colours::ledRed : Colours::textFaint);
-        g.drawFittedText (cabIrDescription.isEmpty() ? juce::String ("Load or drop a cabinet IR") : juce::String ("MIC / DISTANCE shape the modelled cabinets only"),
+        g.setColour (message.isNotEmpty() && dragTarget == 0 ? Colours::ledRed : (toneStatus.isNotEmpty() ? Colours::accent : Colours::textFaint));
+        g.drawFittedText (toneStatus.isNotEmpty() ? toneStatus
+                          : cabIrDescription.isEmpty() ? juce::String ("Load or drop a cabinet IR") : juce::String ("MIC / DISTANCE shape the modelled cabinets only"),
                           t.toNearestInt(), juce::Justification::topLeft, 2, 1.0f);
     }
     else if (cabType >= 0)
@@ -1137,6 +1165,11 @@ void AmpCabSection::tick()
     const float nowMic = state.getRawParameterValue (ParamIDs::cabMic)->load() * 0.01f;
     const float nowDist = state.getRawParameterValue (ParamIDs::cabDist)->load() * 0.01f;
     const auto nowNam = processor.getNamModelDescription(), nowIr = processor.getCabIRDescription();
+    if (const auto st = processor.getTone3000Status(); st != toneStatus)
+    {
+        toneStatus = st;
+        repaint();
+    }
     if (messageTicks > 0 && --messageTicks == 0)
     {
         message.clear();
@@ -1155,6 +1188,10 @@ void AmpCabSection::tick()
             b->setVisible (namMode);
         clearNamButton.setEnabled (namDescription.isNotEmpty());
         clearIrButton.setEnabled (cabIrDescription.isNotEmpty());
+        namPrev.setVisible (namMode && namDescription.isNotEmpty());
+        namNext.setVisible (namMode && namDescription.isNotEmpty());
+        irPrev.setVisible (cabIrMode && cabIrDescription.isNotEmpty());
+        irNext.setVisible (cabIrMode && cabIrDescription.isNotEmpty());
         masterKnob.setAlpha (namMode ? 0.35f : 1.0f);
         if (channelChanged)
             characterSlider.repaint();
