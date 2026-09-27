@@ -2,7 +2,8 @@
 
 #include "DSPUtils.h"
 #include <array>
-#include <vector>
+#include <cstdint>
+#include <cstring>
 
 /**
  * SMOKE: high-gain, Muff-family fuzz voiced after the Swollen Pickle and the Cathedral,
@@ -25,11 +26,11 @@
  * stages charges with the note, so its asymmetry changes as it rings out; the tone is brighter
  * on the pick and darker in the decay; and the parts drift slowly and independently per channel.
  *
- * Touch (always on): a real fuzz is still quieter and softer when you pick lightly - here the
- * output follows the picking strength below a normal playing level (up to -8 dB for a light
- * touch), so the fuzz responds to the hands instead of flattening every note to one level.
- * Each channel is a slightly different circuit (bias, filter corners), so a mono guitar comes
- * out wide and three-dimensional instead of one flat centre image.
+ * Touch comes from the circuit itself, not from a volume follower: both clipping stages are
+ * diode-feedback stages whose output keeps growing with the logarithm of the input, so a lighter
+ * touch is rounder, less fizzy and a little quieter - a lot at low FUZZ (it cleans up), only a
+ * little at full FUZZ (a Muff at max sustain is compressed; there the touch is in the texture).
+ * The input also loads the pickup like a real fuzz input does (damped resonance, earlier roll-off).
  *
  * Built-in noise gate (always on, like the gate every high-gain rig needs): a soft
  * downward expander on the fuzz input. Around 50 dB of fuzz gain would otherwise turn
@@ -60,6 +61,8 @@ public:
         for (auto& f : scoopBell) f.setType (swarm::SVF::Type::bell);
         for (auto& f : thump)     f.setType (swarm::SVF::Type::bell);
         for (auto& f : fizzLp)    f.setType (swarm::SVF::Type::lowPass);
+        for (auto& f : loadLp)    f.setType (swarm::SVF::Type::lowPass);
+        for (auto& f : loadBell)  f.setType (swarm::SVF::Type::bell);
     }
 
     void prepare (double sr, int maxBlockSize)
@@ -76,7 +79,6 @@ public:
         cleanDelay.prepare ({ sr, (juce::uint32) maxBlockSize, (juce::uint32) kMaxChannels });
         cleanDelay.setDelay ((float) getLatencySamples());
         cleanCopy.setSize (kMaxChannels, maxBlockSize, false, false, true);
-        touchTrack.assign ((size_t) maxBlockSize, 0.0f);
 
         onMix.reset (sr, 0.02);
         onMix.setCurrentAndTargetValue (isOn ? 1.0f : 0.0f);
@@ -87,8 +89,6 @@ public:
         gateOpen        = (float) (1.0 - std::exp (-1.0 / (0.0005 * sr)));
         gateClose       = (float) (1.0 - std::exp (-1.0 / (0.08 * sr)));
         gateHoldSamples = (int) (0.04 * sr);
-        touchAttack  = (float) (1.0 - std::exp (-1.0 / (0.004 * sr)));
-        touchRelease = (float) (1.0 - std::exp (-1.0 / (0.15 * sr)));
         sagAttack  = (float) (1.0 - std::exp (-1.0 / (0.002 * osRate)));
         slowAttack  = (float) (1.0 - std::exp (-1.0 / (0.04 * osRate)));
         slowRelease = (float) (1.0 - std::exp (-1.0 / (0.5 * osRate)));
@@ -96,9 +96,8 @@ public:
         for (auto& d : driftGain) d.setTime (sr / kControlBlock, 0.8);
         envAttack  = (float) (1.0 - std::exp (-1.0 / (0.0007 * osRate)));
         envRelease = (float) (1.0 - std::exp (-1.0 / (0.04 * osRate)));
-        // two slightly different circuits (left / right)
-        lp1Coeff   = { (float) std::exp (-swarm::kTwoPi * 4800.0 / osRate), (float) std::exp (-swarm::kTwoPi * 6300.0 / osRate) };
-        lp2Coeff   = { (float) std::exp (-swarm::kTwoPi * 9000.0 / osRate), (float) std::exp (-swarm::kTwoPi * 7200.0 / osRate) };
+        lp1Coeff   = (float) std::exp (-swarm::kTwoPi * 5500.0 / osRate);
+        lp2Coeff   = (float) std::exp (-swarm::kTwoPi * 8000.0 / osRate);
         octHpCoeff = (float) std::exp (-swarm::kTwoPi * 90.0 / osRate);
         tiltCoeff  = (float) std::exp (-swarm::kTwoPi * 800.0 / sr);
 
@@ -111,6 +110,10 @@ public:
 
         for (auto& d : dc) d.prepare (sr);
         for (auto& d : preDc) d.prepare (osRate);
+        // Pickup loading: a DI sees the pickup through ~1 MOhm, a fuzz input only through a few
+        // tens of kOhm - the pickup's resonant peak is damped and the top end rolls off earlier.
+        for (auto& f : loadBell) f.setParams (sr, 3500.0f, 1.0f, -3.5f);
+        for (auto& f : loadLp)   f.setParams (sr, 6500.0f, 0.6f);
         reset();
     }
 
@@ -120,13 +123,11 @@ public:
         cleanDelay.reset();
         for (auto& d : dc) d.reset();
         for (auto& d : preDc) d.reset();
-        for (auto* bank : { &preHp, &preBoost, &scoopBell, &thump, &fizzLp })
+        for (auto* bank : { &preHp, &preBoost, &scoopBell, &thump, &fizzLp, &loadLp, &loadBell })
             for (auto& f : *bank) f.reset();
         env = lp1 = lp2 = octHpState = octHpIn = tiltLp = { 0.0f, 0.0f };
         gateEnv = 0.0f;
         gateGain = 0.0f;
-        touchEnv = 0.0f;
-        touchGain = 1.0f;
         sagEnv = slowEnv = capState = { 0.0f, 0.0f };
         for (auto& d : driftGain) d.reset (1.0f);
         gateHoldCounter = 0;
@@ -184,8 +185,6 @@ public:
                 for (int c = 0; c < numChannels; ++c)
                     a = juce::jmax (a, std::abs (audio[c][i]));
                 gateEnv = a > gateEnv ? a : gateEnv + gateEnvRelease * (a - gateEnv);
-                touchEnv += (a > touchEnv ? touchAttack : touchRelease) * (a - touchEnv);
-                touchTrack[(size_t) i] = touchEnv;
 
                 // Expander: fully open above the threshold, closed 8 dB below it (squared, in dB)
                 const float db = juce::Decibels::gainToDecibels (gateEnv, -120.0f);
@@ -210,7 +209,8 @@ public:
                 preBoost[(size_t) c].setParams (sampleRate, sBoostFreq.get(), 0.75f, sBoostDb.get());
                 float* d = audio[c] + start;
                 for (int i = 0; i < n; ++i)
-                    d[i] = preBoost[(size_t) c].process (preHp[(size_t) c].process (d[i]));
+                    d[i] = preBoost[(size_t) c].process (preHp[(size_t) c].process (
+                               loadLp[(size_t) c].process (loadBell[(size_t) c].process (d[i]))));
             }
         }
 
@@ -222,8 +222,8 @@ public:
 
             const float gain1 = juce::Decibels::decibelsToGain (4.0f + 30.0f * f);
             const float gain2 = juce::Decibels::decibelsToGain (6.0f + 22.0f * f);
-            const float drive3 = 1.0f + 2.5f * f;                  // "Armageddon" squaring at high FUZZ
-            const float norm3 = 1.0f / std::tanh (drive3);
+            const float drive3 = 1.0f + 1.5f * f;                  // output stage: squares the peaks more at high FUZZ
+            const float norm3 = 1.0f / std::tanh (drive3 * kStage3In * kStage3Nominal);
             const float bias = 0.45f * g;
             const float threshold = 0.06f * g * g;
             const float glareAmt = 2.2f * gl;
@@ -253,8 +253,6 @@ public:
                 auto& e = env[(size_t) c];
                 auto& l1 = lp1[(size_t) c];
                 auto& l2 = lp2[(size_t) c];
-                const float c1 = lp1Coeff[(size_t) c], c2 = lp2Coeff[(size_t) c];
-                const float chBias = c == 0 ? 0.05f : -0.04f;
                 auto& ohs = octHpState[(size_t) c];
                 auto& ohi = octHpIn[(size_t) c];
 
@@ -272,10 +270,13 @@ public:
                     se += (spike > se ? sagAttack : sagRelease) * (spike - se);
                     const float droop = sag * se;
 
-                    // Stage 1: asymmetric transistor-ish clipper (+ starve bias), smoothed
-                    const float v1 = x * gain1 * dGain * (1.0f - 0.55f * droop) + bias + chBias + 0.15f * droop;
-                    float y = v1 >= 0.0f ? std::tanh (v1) : 1.25f * std::tanh (0.7f * v1);
-                    l1 = y + c1 * (l1 - y);
+                    // Stage 1: gain stage with a diode pair in its feedback (+ starve bias). Once the
+                    // diodes conduct the output keeps growing with the logarithm of the input instead
+                    // of hitting a wall, so a harder pick is still louder and edgier. Asymmetric, and
+                    // the transistor's own collector swing limits the peaks.
+                    const float v1 = x * gain1 * dGain * (1.0f - 0.55f * droop) + bias + 0.15f * droop;
+                    float y = rail (v1 >= 0.0f ? diodeLaw (v1, kDiode1) : 1.2f * diodeLaw (0.75f * v1, kDiode1), 2.6f, 2.1f);
+                    l1 = y + lp1Coeff * (l1 - y);
                     y = l1;
 
                     // Coupling capacitor: charges with the note's DC, so the next stage's
@@ -293,13 +294,12 @@ public:
                         y += glareAmt * open * ohs;
                     }
 
-                    // Stage 2: diode pair (cubic soft clip, hard-ish knee), smoothed
-                    float v2 = juce::jlimit (-1.5f, 1.5f, y * gain2 * (1.0f - 0.3f * droop));
-                    v2 = v2 - (4.0f / 27.0f) * v2 * v2 * v2;
-                    l2 = v2 + c2 * (l2 - v2);
+                    // Stage 2: the second diode-feedback stage (same law, symmetric)
+                    const float v2 = rail (diodeLaw (y * gain2 * (1.0f - 0.3f * droop), kDiode2), 2.6f, 2.6f);
+                    l2 = v2 + lp2Coeff * (l2 - v2);
 
                     // Stage 3: squaring; the sagging supply also pulls the output down a little
-                    float out = norm3 * std::tanh (drive3 * l2) * (1.0f - 0.4f * droop);
+                    float out = norm3 * std::tanh (drive3 * kStage3In * l2) * (1.0f - 0.4f * droop);
 
                     // Starve gate: sputters as the note decays
                     if (threshold > 0.0f)
@@ -329,7 +329,7 @@ public:
             const float blend = sBlend.get();
             // Voice trim, plus make-up at low FUZZ where the clippers do not compress yet
             const float lowFuzz = 1.0f - sFuzz.get();
-            const float level = 0.42f * juce::Decibels::decibelsToGain (sTrimDb.get() + 6.0f * lowFuzz * lowFuzz);
+            const float level = 0.42f * juce::Decibels::decibelsToGain (sTrimDb.get() + 10.0f * lowFuzz * lowFuzz);
 
             for (int c = 0; c < numChannels; ++c)
             {
@@ -341,9 +341,6 @@ public:
             for (int i = start; i < start + n; ++i)
             {
                 const float mixNow = onMix.getNextValue();
-                // Touch: below a normal picking level the fuzz gets quieter with the hands (<= -8 dB)
-                const float touchTarget = juce::jlimit (0.4f, 1.0f, std::pow ((touchTrack[(size_t) i] + 1.0e-5f) * (1.0f / kTouchReference), 0.3f));
-                touchGain += 0.002f * (touchTarget - touchGain);
                 for (int c = 0; c < numChannels; ++c)
                 {
                     const float clean = cleanCopy.getSample (c, i);
@@ -358,7 +355,7 @@ public:
                     x = thump[(size_t) c].process (x);
                     x = fizzLp[(size_t) c].process (x);
 
-                    const float fx = level * touchGain * x + blend * clean;
+                    const float fx = level * x + blend * clean;
                     audio[c][i] = clean + mixNow * (fx - clean);
                 }
             }
@@ -366,6 +363,38 @@ public:
     }
 
 private:
+    // Diode-feedback stage: v -> asinh (k v) / k. Linear for small signals; once the diodes conduct,
+    // the output grows with the logarithm of the input (the diode's exponential I-V curve), so
+    // every 20 dB more input still gives a few dB more output and more harmonics.
+    static float diodeLaw (float v, float k) noexcept
+    {
+        const float a = std::abs (k * v);
+        const float y = fastLn (a + std::sqrt (a * a + 1.0f)) / k;   // asinh
+        return v < 0.0f ? -y : y;
+    }
+    /** ln(x) for x >= 1: exponent from the float bits + a cubic on the mantissa (error < 3e-4). */
+    static float fastLn (float x) noexcept
+    {
+        std::uint32_t bits;
+        std::memcpy (&bits, &x, sizeof (bits));
+        const float e = (float) ((int) ((bits >> 23) & 0xff) - 127);
+        bits = (bits & 0x007fffffu) | 0x3f800000u;   // mantissa in [1, 2)
+        float m;
+        std::memcpy (&m, &bits, sizeof (m));
+        const float log2m = (((-0.07915816f * m + 0.62887362f) * m - 2.08121416f) * m + 4.02854794f) * m - 2.49684606f;
+        return 0.69314718f * (e + log2m);
+    }
+    // Collector swing: the transistor saturates / cuts off softly at its own (asymmetric) limits.
+    static float rail (float v, float pos, float neg) noexcept
+    {
+        const float lim = v >= 0.0f ? pos : neg;
+        const float x = juce::jlimit (-3.0f, 3.0f, v / lim);
+        return lim * x * (27.0f + x * x) / (27.0f + 9.0f * x * x);   // tanh, Pade
+    }
+    static constexpr float kDiode1 = 3.0f, kDiode2 = 2.5f;
+    static constexpr float kStage3In = 0.35f;       // how hard the stage-2 swing drives the output stage
+    static constexpr float kStage3Nominal = 1.6f;  // typical stage-2 peak (sets the output normalisation)
+
     struct VoiceShape { float hpHz, boostHz, boostDb, scoopHz, thumpDb, trimDb; };
 
     static VoiceShape voiceShape (int voice) noexcept
@@ -402,7 +431,7 @@ private:
     swarm::OnePole sFuzz, sGate, sGlare, sTone, sScoop, sBlend, sSag, sHpFreq, sBoostFreq, sBoostDb, sScoopFreq, sThumpDb, sTrimDb;
 
     std::array<swarm::DCBlocker, kMaxChannels> dc, preDc;
-    std::array<swarm::SVF, kMaxChannels> preHp, preBoost, scoopBell, thump, fizzLp;
+    std::array<swarm::SVF, kMaxChannels> preHp, preBoost, scoopBell, thump, fizzLp, loadLp, loadBell;
     std::array<float, kMaxChannels> env {}, lp1 {}, lp2 {}, octHpState {}, octHpIn {}, tiltLp {};
 
     double sampleRate = 44100.0, osSampleRate = 176400.0;
@@ -415,9 +444,5 @@ private:
     float sagAttack = 0.001f, capCoeff = 0.0001f, slowAttack = 0.0001f, slowRelease = 0.00001f;
     float gateEnv = 0.0f, gateGain = 0.0f, gateEnvRelease = 0.001f, gateOpen = 0.04f, gateClose = 0.0003f;
     int gateHoldSamples = 2000, gateHoldCounter = 0;
-    float envAttack = 0.1f, envRelease = 0.001f, octHpCoeff = 0.99f, tiltCoeff = 0.9f;
-    std::array<float, kMaxChannels> lp1Coeff { 0.9f, 0.9f }, lp2Coeff { 0.9f, 0.9f };
-    static constexpr float kTouchReference = 0.1f;   // input peak (after INPUT) of normal picking, about -20 dBFS
-    float touchEnv = 0.0f, touchGain = 1.0f, touchAttack = 0.01f, touchRelease = 0.0001f;
-    std::vector<float> touchTrack;
+    float envAttack = 0.1f, envRelease = 0.001f, lp1Coeff = 0.9f, lp2Coeff = 0.9f, octHpCoeff = 0.99f, tiltCoeff = 0.9f;
 };

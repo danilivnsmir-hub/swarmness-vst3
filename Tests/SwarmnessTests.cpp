@@ -709,6 +709,8 @@ namespace
         }
     }
 
+    double toneDb (const juce::AudioBuffer<float>& b, double sr, double freq, int from, int length);
+
     void testFuzzSag()
     {
         std::printf ("\nSMOKE SAG: the attack sags and the note blooms back\n");
@@ -743,29 +745,25 @@ namespace
         check (bloom[1] > bloom[0] + 1.0,
                juce::String::formatted ("body vs attack: %+.1f dB (SAG 0) -> %+.1f dB (SAG 100)", bloom[0], bloom[1]));
 
-        // TOUCH: a light touch comes out quieter than a normal one (the fuzz follows the hands),
-        // and a mono guitar comes out wide (the two channels are slightly different circuits)
-        auto fuzzOut = [&] (float amp)
+        // TOUCH from the circuit (diode-feedback stages, no volume follower): picking 20 dB softer
+        // cleans up a lot at low FUZZ, and at high FUZZ is still a little quieter and clearly rounder
+        auto fuzzOut = [&] (float fuzzAmount, float amp)
         {
             SwarmnessAudioProcessor p;
             resetToInit (p);
             setParam (p, ParamIDs::fuzzOn, 1.0f);
-            setParam (p, ParamIDs::fuzz, 80.0f);
-            return render (p, makeSine (sr, 48000, 110.0, amp), sr, 256);
+            setParam (p, ParamIDs::fuzz, fuzzAmount);
+            return render (p, makeSine (sr, 24000, 110.0, amp), sr, 256);
         };
-        const auto hard = fuzzOut (0.15f), soft = fuzzOut (0.015f);
-        const double touchDb = juce::Decibels::gainToDecibels (hard.getRMSLevel (0, 24000, 12000))
-                             - juce::Decibels::gainToDecibels (soft.getRMSLevel (0, 24000, 12000));
-        check (touchDb > 4.0 && touchDb < 12.0, juce::String::formatted ("TOUCH: picking 20 dB softer is %.1f dB quieter (not flattened to one level)", touchDb));
-        double side = 0.0, mid = 0.0;
-        for (int i = 24000; i < 36000; ++i)
-        {
-            const double l = hard.getSample (0, i), r = hard.getSample (1, i);
-            side += (l - r) * (l - r);
-            mid += (l + r) * (l + r);
-        }
-        const double widthDb = 10.0 * std::log10 (side / mid + 1.0e-12);
-        check (widthDb > -40.0 && widthDb < -8.0, juce::String::formatted ("mono in: side %.1f dB below mid (wide, still centred)", -widthDb));
+        auto levelDb = [] (const juce::AudioBuffer<float>& b) { return (double) juce::Decibels::gainToDecibels (b.getRMSLevel (0, 12000, 9600)); };
+        auto edgeDb = [&] (const juce::AudioBuffer<float>& b) { return toneDb (b, sr, 550.0, 12000, 9600) - toneDb (b, sr, 110.0, 12000, 9600); };
+        const auto lowHard = fuzzOut (30.0f, 0.1f), lowSoft = fuzzOut (30.0f, 0.01f);
+        const auto hiHard = fuzzOut (80.0f, 0.1f), hiSoft = fuzzOut (80.0f, 0.01f);
+        const double lowDrop = levelDb (lowHard) - levelDb (lowSoft), hiDrop = levelDb (hiHard) - levelDb (hiSoft);
+        const double hiRound = edgeDb (hiHard) - edgeDb (hiSoft);
+        check (lowDrop > 8.0, juce::String::formatted ("TOUCH at FUZZ 30: 20 dB softer picking is %.1f dB quieter (cleans up)", lowDrop));
+        check (hiDrop > 0.8 && hiDrop < 6.0 && hiRound > 2.0,
+               juce::String::formatted ("TOUCH at FUZZ 80: %.1f dB quieter and %.1f dB less 5th harmonic (compressed, but not a wall)", hiDrop, hiRound));
     }
 
     void testDetune()
@@ -1659,6 +1657,31 @@ namespace
 int main (int argc, char** argv)
 {
     juce::ScopedJuceInitialiser_GUI juceInit;
+
+    if (argc >= 2 && juce::String (argv[1]) == "--fuzz-dyn")
+    {
+        // SMOKE output level / brightness vs picking strength (diagnostic)
+        const double sr = 48000.0;
+        for (float fz : { 30.0f, 70.0f, 100.0f })
+            for (int voice = 0; voice < 3; ++voice)
+            {
+                std::printf ("FUZZ %3.0f VOICE %d:", fz, voice);
+                for (float amp : { 0.3f, 0.1f, 0.03f, 0.01f, 0.003f })
+                {
+                    SwarmnessAudioProcessor p;
+                    resetToInit (p);
+                    setParam (p, ParamIDs::fuzzOn, 1.0f);
+                    setParam (p, ParamIDs::fuzz, fz);
+                    setParam (p, ParamIDs::fuzzVoice, (float) voice);
+                    auto out = render (p, makeSine (sr, 24000, 110.0, amp), sr, 256);
+                    const double rms = juce::Decibels::gainToDecibels (out.getRMSLevel (0, 12000, 9600));
+                    const double h1 = toneDb (out, sr, 110.0, 12000, 9600), h5 = toneDb (out, sr, 550.0, 12000, 9600);
+                    std::printf ("  %5.1f dB (h5-h1 %+5.1f)", rms, h5 - h1);
+                }
+                std::printf ("\n");
+            }
+        return 0;
+    }
 
     if (argc >= 3 && juce::String (argv[1]) == "--screenshot")
     {
