@@ -22,7 +22,26 @@ PresetManager::PresetManager (juce::AudioProcessorValueTreeState& state)
     : apvts (state)
 {
     initialiseFactoryPresets();
+    moveUnsupportedPresets (getPresetsDirectory());
     takeSnapshot();
+}
+
+int PresetManager::moveUnsupportedPresets (const juce::File& dir)
+{
+    // Swarmness 1.x wrote presets into the same folder (normalised values, no "plugin" tag).
+    // They cannot be read any more: move them into a sub-folder instead of listing broken presets.
+    int moved = 0;
+    for (const auto& f : dir.findChildFiles (juce::File::findFiles, false, "*" + extension))
+    {
+        const auto json = juce::JSON::parse (f);
+        if (json["plugin"].toString() == "Swarmness")
+            continue;
+        const auto oldDir = dir.getChildFile ("Swarmness 1.x (unsupported)");
+        oldDir.createDirectory();
+        if (f.moveFileTo (oldDir.getNonexistentChildFile (f.getFileNameWithoutExtension(), extension, false)))
+            ++moved;
+    }
+    return moved;
 }
 
 //==============================================================================
@@ -95,10 +114,13 @@ void PresetManager::initialiseFactoryPresets()
           { { rise, 15 }, { panic, 85 } } },
         { "Frenzy", stingCat, "FRENZY only: the pitch jumps randomly around the octave, faster than your picking.",
           { { rise, 10 }, { chaos, 75 } } },
-        { "Lazy Buzz", stingCat, "Low BUZZ: slow phasing and wobble on a slightly angry octave.",
-          { { rise, 120 }, { fall, 400 }, { speed, 22 }, { panic, 25 } } },
         { "Hornet Buzz", stingCat, "High BUZZ: all-pass feedback and AM turn the octave into metallic ring-mod noise.",
           { { rise, 0 }, { fall, 0 }, { speed, 92 } } },
+        { "Stacked Octaves", stingCat, "STACK on: SHIFT A = +1 oct, SHIFT B = +2 oct. Hold A, then add B - a second voice splits off and both octaves ring together; let go of B and it merges back.",
+          { { shStack, 1 }, { rise, 40 }, { fall, 120 }, { stingMix, 70 }, { panic, 10 } } },
+        { "Power Stack", stingCat, "STACK with SHIFT A = -1 oct and SHIFT B = +7 (fifth): hold both for a sub-octave power chord out of one note, into SMOKE after it.",
+          { { shStack, 1 }, { shiftA, -12 }, { shiftB, 7 }, { rise, 0 }, { fall, 30 }, { stingMix, 55 },
+            { fuzzOn, 1 }, { slotSmoke, 35 }, { fuzzVoice, 0 }, { fuzz, 70 }, { fuzzScoop, 35 } } },
         { "Dive Bomb", stingCat, "SHIFT A = -1 oct, SHIFT B = -2 oct with a long RISE and a snappy FALL: hold for a slow dive, release to snap back. SMOKE after SWARM in the chain.",
           { { shiftA, -12 }, { shiftB, -24 }, { rise, 450 }, { fall, 60 }, { panic, 15 }, { fuzzOn, 1 }, { slotSmoke, 35 }, { fuzzVoice, 0 }, { fuzz, 70 }, { fuzzTone, 35 }, { fuzzScoop, 30 } } },
 
@@ -109,8 +131,6 @@ void PresetManager::initialiseFactoryPresets()
           { { rbOn, 1 }, { rbSnap, 0 }, { rbPitch, -0.4f }, { rbPrimary, 85 }, { rbTracking, 100 }, { rbTone, 65 } } },
         { "Tone Clusters", hiveCat, "Low TRACKING: the harmony lags and repeats grains, smearing into rhythmic clusters.",
           { { rbOn, 1 }, { rbPitch, 5 }, { rbPrimary, 70 }, { rbSecondary, 20 }, { rbTracking, 8 }, { rbMagic, 20 }, { rbTime, 90 }, { rbTone, 55 } } },
-        { "Honey Trails", hiveCat, "TRAILS mid-way: every repeat climbs another fifth - glittering ascending ladders that fade out.",
-          { { rbOn, 1 }, { rbPitch, 7 }, { rbPrimary, 55 }, { rbTracking, 75 }, { rbMagic, 55 }, { rbTime, 160 }, { rbTone, 55 } } },
         { "Honey Ladder", hiveCat, "TRAILS synced to 1/8 notes: an octave ladder that climbs in time with the song.",
           { { rbOn, 1 }, { rbPitch, 12 }, { rbPrimary, 50 }, { rbTracking, 85 }, { rbMagic, 65 }, { rbSync, 1 }, { rbDiv, 3 }, { rbTone, 60 } } },
         { "Descending Spiral", hiveCat, "Negative PITCH with TRAILS: notes fall away in a spiral of fourths.",
@@ -135,9 +155,6 @@ void PresetManager::initialiseFactoryPresets()
         { "Swarm Cloud", texture, "DEEP SWARM over a barely-detuned double: wide, seasick, huge.",
           { { rbOn, 1 }, { rbSnap, 0 }, { rbPitch, 0.2f }, { rbPrimary, 40 }, { rbTracking, 90 },
             { swarmOn, 1 }, { swarmDeep, 1 }, { swarmDepth, 75 }, { swarmRate, 0.35f }, { swarmMix, 55 } } },
-        { "Seasick Swarm", texture, "Classic SWARM pushed hard over SMOKE: deep, fast, warbling chorus - wobbly and unsettling.",
-          { { swarmOn, 1 }, { swarmDepth, 90 }, { swarmRate, 2.2f }, { swarmMix, 50 },
-            { fuzzOn, 1 }, { fuzz, 70 }, { fuzzTone, 50 }, { fuzzScoop, 45 } } },
         { "Swollen Smoke", texture, "Jumbo fuzz: MID voice, huge sustain and a deep SCOOP - the wall-of-fuzz starting point.",
           { { fuzzOn, 1 }, { fuzzVoice, 1 }, { fuzz, 90 }, { fuzzTone, 45 }, { fuzzScoop, 75 }, { fuzzSag, 55 } } },
         { "Doom Cathedral", texture, "DOWN voice: crushing low-mids and the full bottom end, flat mids, a little clean BLEND and a lot of SAG - every note sags and blooms.",
@@ -153,8 +170,6 @@ void PresetManager::initialiseFactoryPresets()
             { swarmOn, 1 }, { swarmMix, 35 }, { flowOn, 1 }, { flowHard, 0 }, { flowSpeed, 5.5f }, { flowAmount, 70 } } },
 
         // ---------------------------------------------------------- swarm attack
-        { "Queen Scream", attack, "Hot SMOKE into an angry, frenzied octave. Hold SHIFT B for the scream.",
-          { { rise, 15 }, { panic, 50 }, { chaos, 15 }, { speed, 20 }, { fuzzOn, 1 }, { fuzzVoice, 2 }, { fuzz, 85 }, { fuzzTone, 60 }, { fuzzGlare, 35 } } },
         { "Broken Radio", attack, "Atonal loose HIVE, dark SMOKE after it and WINGS tremolo: a dying transmission.",
           { { rbOn, 1 }, { rbSnap, 0 }, { rbPitch, -2.6f }, { rbPrimary, 80 }, { rbTracking, 15 }, { rbTone, 30 },
             { fuzzOn, 1 }, { slotSmoke, 35 }, { fuzz, 45 }, { fuzzTone, 20 },
@@ -189,7 +204,7 @@ void PresetManager::initialiseFactoryPresets()
           { { juce::String (Chain::laneIds[Chain::swarm]), 1 }, { juce::String (Chain::laneIds[Chain::crypt]), 2 }, { Chain::parallelMixIds[0], 45 },
             { swarmOn, 1 }, { swarmDepth, 70 }, { swarmRate, 0.8f }, { swarmMix, 50 },
             { revOn, 1 }, { revType, 2 }, { revDecay, 4 }, { revMix, 100 }, { revTone, 55 } } },
-        { "Twin Splits", space, "Two splits: [SMOKE || dry] -> PITCH -> [SWARM || CRYPT]. Parallel fuzz with clean punch, then chorus and reverb side by side.",
+        { "Twin Splits", space, "Two splits: [SMOKE || dry] -> SHIFT, HIVE -> [SWARM || CRYPT]. Parallel fuzz with clean punch, then chorus and reverb side by side.",
           { { juce::String (Chain::laneIds[Chain::smoke]), 1 }, { Chain::parallelMixIds[0], 35 },
             { juce::String (Chain::laneIds[Chain::swarm]), 1 }, { juce::String (Chain::laneIds[Chain::crypt]), 2 }, { Chain::slotIds[Chain::crypt], 35 },
             { Chain::parallelMixIds[1], 40 },

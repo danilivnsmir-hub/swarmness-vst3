@@ -647,7 +647,7 @@ namespace
                 for (int i = 0; i < input.getNumSamples(); ++i)
                     input.setSample (ch, i, amp * (rng.nextFloat() * 2.0f - 1.0f));
 
-            for (const char* preset : { "Swollen Smoke", "Glare Scream", "Doom Cathedral", "Smoked Out", "Hive Collapse", "Queen Scream" })
+            for (const char* preset : { "Swollen Smoke", "Glare Scream", "Doom Cathedral", "Smoked Out", "Hive Collapse", "Noise - Octave Panic" })
             {
                 SwarmnessAudioProcessor p;
                 p.getPresetManager().loadPreset (preset);
@@ -863,6 +863,21 @@ namespace
         check (r.describeMidiBinding (magicHold) == "CC 64", "old session: VENOM footswitch binding kept");
     }
 
+    void testUnsupportedPresets()
+    {
+        std::printf ("\nUser bank: Swarmness 1.x presets are moved out\n");
+        auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("swarmness-preset-test");
+        dir.deleteRecursively();
+        dir.createDirectory();
+        dir.getChildFile ("Chainsaw Massacre.swpreset").replaceWithText (R"({"name":"Chainsaw Massacre","author":"User","version":"1.2.5","parameters":{"saturation":1.0}})");
+        dir.getChildFile ("Mine.swpreset").replaceWithText (R"({"name":"Mine","plugin":"Swarmness","version":"3.0.0","parameters":{"fuzzOn":1}})");
+        const int moved = PresetManager::moveUnsupportedPresets (dir);
+        check (moved == 1 && ! dir.getChildFile ("Chainsaw Massacre.swpreset").exists() && dir.getChildFile ("Mine.swpreset").exists()
+               && dir.getChildFile ("Swarmness 1.x (unsupported)").getChildFile ("Chainsaw Massacre.swpreset").exists(),
+               "1.x preset moved to 'Swarmness 1.x (unsupported)', current presets stay");
+        dir.deleteRecursively();
+    }
+
     void testMonoToStereo()
     {
         std::printf ("\nMono guitar on a stereo output\n");
@@ -910,7 +925,7 @@ namespace
     {
         std::printf ("\nState save / restore\n");
         SwarmnessAudioProcessor a;
-        a.getPresetManager().loadPreset ("Honey Trails");
+        a.getPresetManager().loadPreset ("Honey Ladder");
         setParam (a, ParamIDs::fuzz, 42.0f);
         setParam (a, ParamIDs::oct1, 1.0f);   // momentary switch left down
         juce::MemoryBlock mb;
@@ -919,10 +934,10 @@ namespace
         SwarmnessAudioProcessor b;
         b.setStateInformation (mb.getData(), (int) mb.getSize());
         auto value = [&b] (const char* id) { return b.getAPVTS().getRawParameterValue (id)->load(); };
-        check (std::abs (value (ParamIDs::fuzz) - 42.0f) < 0.05f && std::abs (value (ParamIDs::rbMagic) - 55.0f) < 0.05f,
+        check (std::abs (value (ParamIDs::fuzz) - 42.0f) < 0.05f && std::abs (value (ParamIDs::rbMagic) - 65.0f) < 0.05f,
                "parameters restored");
         check (value (ParamIDs::oct1) < 0.5f, "momentary footswitch not restored as held");
-        check (b.getPresetManager().getCurrentPresetName() == "Honey Trails", "preset name restored");
+        check (b.getPresetManager().getCurrentPresetName() == "Honey Ladder", "preset name restored");
     }
 
     void testPresetDirtyTracking()
@@ -1849,6 +1864,7 @@ int main (int argc, char** argv)
     testFuzzSag();
     testMonoToStereo();
     testMidiLearn();
+    testUnsupportedPresets();
     testDetune();
     testInputSensitivity();
     testSwarmBounded();

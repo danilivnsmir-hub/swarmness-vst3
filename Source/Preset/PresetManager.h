@@ -47,6 +47,8 @@ public:
     void restoreFromState (const juce::String& presetName);
 
     static juce::File getPresetsDirectory();
+    /** Moves presets of Swarmness 1.x (unreadable) out of the user bank; returns how many. */
+    static int moveUnsupportedPresets (const juce::File& dir);
 
     using ValueMap = std::map<juce::String, float>;
 

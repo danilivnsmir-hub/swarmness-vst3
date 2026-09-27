@@ -125,14 +125,14 @@ VST3 / AU / Standalone · Windows, macOS (Universal: Apple Silicon + Intel), Lin
 
 Пресеты разделены на два банка — вкладки **FACTORY / USER** слева от имени пресета. Выбранный банк определяет, что показывает список и по чему листают стрелки **< >**; при загрузке или сохранении пресета вкладка переключается сама.
 
-**FACTORY** — 54 заводских пресета в семи категориях (подменю); каждый показывает одну возможность, описание всплывает при наведении на имя пресета:
+**FACTORY** — 52 заводских пресета в семи категориях (подменю); каждый показывает одну возможность, описание всплывает при наведении на имя пресета:
 
 - **Recipes — The Noise, Slam, glitch** (с чего начинать): Noise - Octave Panic / Whammy Sweep / In-Key Chaos (подход педали The Noise: фузз → Whammy-сдвиг, ANGER = Panic, FRENZY = Chaos, BUZZ = Speed); Slam - Semitone Clash / Minor Second Down / Tritone Dread / Sub Layer (диссонанс как в Slam Amp: постоянный голос на полутон / тритон / октавы ниже, MIX 50%); Glitch Steps, Stutter Echo, Gallop Octaves, Offbeat Fifths (ритмичные повторы через STEPS и GATE)
 - **Basics:** Init, Clean Shift, Shift Doubler, Slow Rise
-- **Shift:** Killer Bee, Angry Hive, Frenzy, Lazy Buzz, Hornet Buzz, Dive Bomb
-- **Hive Voices & Trails:** Harmony Fifth, Atonal Detune, Tone Clusters, Honey Trails, Honey Ladder, Descending Spiral, Drowning Hive, Bounce Trill, Scatter Swarm, Reverse Hive, Swell Ladder, Angry Voices, Venom Overload
-- **Smoke, Swarm & Wings:** Swarm Cloud, Seasick Swarm, Swollen Smoke, Doom Cathedral, Glare Scream, Smoked Out, Wing Beat Breakdown, Ghost Swarm
-- **Swarm Attack:** Queen Scream, Broken Radio, Hive Collapse
+- **Shift:** Killer Bee, Angry Hive, Frenzy, Hornet Buzz, Stacked Octaves, Power Stack (STACK: A и B вместе), Dive Bomb
+- **Hive Voices & Trails:** Harmony Fifth, Atonal Detune, Tone Clusters, Honey Ladder, Descending Spiral, Drowning Hive, Bounce Trill, Scatter Swarm, Reverse Hive, Swell Ladder, Angry Voices, Venom Overload
+- **Smoke, Swarm & Wings:** Swarm Cloud, Swollen Smoke, Doom Cathedral, Glare Scream, Smoked Out, Wing Beat Breakdown, Ghost Swarm
+- **Swarm Attack:** Broken Radio, Hive Collapse (HIVE перед SHIFT)
 - **Chain, EQ & Crypt:** Crypt Doom, Smoke in the Crypt (реверб *в* фузз), Tight Before Smoke (CARVE перед фуззом), Comb Smile, Hive Cathedral, Parallel Smoke (фузз ∥ чистый), Split Swarm (хорус ∥ реверб), Twin Splits (две развилки), Chug Room
 
 Пресет хранит звук (включая LINK и порядок цепи); положения футсвичей и режим MOMENTARY/LATCH в пресет не входят — ими играют вживую.
