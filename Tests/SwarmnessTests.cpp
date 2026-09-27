@@ -1567,6 +1567,39 @@ namespace
             }
 
         {
+            // quality of the HALL tail: wide (decorrelated L / R), dense, highs die faster than lows with a dark TONE
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            setParam (p, ParamIDs::revOn, 1.0f);
+            setParam (p, ParamIDs::revMix, 100.0f);
+            setParam (p, ParamIDs::revDecay, 3.0f);
+            setParam (p, ParamIDs::revTone, 20.0f);
+            setParam (p, ParamIDs::revLowCut, 20.0f);
+            auto out = reverbImpulse (p, sr, 3.0);
+            const int from = 4800 + (int) (0.15 * sr), len = (int) (0.5 * sr);
+            double lr = 0.0, ll = 0.0, rr = 0.0;
+            for (int i = from; i < from + len; ++i)
+            {
+                const double l = out.getSample (0, i), r = out.getSample (1, i);
+                lr += l * r; ll += l * l; rr += r * r;
+            }
+            const double corr = lr / std::sqrt (ll * rr + 1.0e-30);
+            check (std::abs (corr) < 0.3, juce::String::formatted ("HALL tail: left / right correlation %.2f (wide)", corr));
+
+            // echo density: in 50..100 ms after the hit, most 1 ms windows already carry energy
+            int filled = 0;
+            const float tailRms = out.getRMSLevel (0, 4800 + 2400, 2400);
+            for (int w = 0; w < 50; ++w)
+                if (out.getRMSLevel (0, 4800 + 2400 + w * 48, 48) > 0.2f * tailRms)
+                    ++filled;
+            check (filled > 40, juce::String::formatted ("HALL: dense after 50 ms (%d of 50 ms windows filled)", filled));
+
+            // two-band decay: 4 kHz loses more between 0.2 s and 1.0 s than 250 Hz does
+            auto band = [&] (double hz, double t) { return toneDb (out, sr, hz, 4800 + (int) (t * sr), 8192); };
+            const double lowDrop = band (250.0, 0.2) - band (250.0, 1.0), highDrop = band (4000.0, 0.2) - band (4000.0, 1.0);
+            check (highDrop > lowDrop + 6.0, juce::String::formatted ("dark TONE: 4 kHz decays faster (%.1f dB) than 250 Hz (%.1f dB)", highDrop, lowDrop));
+        }
+        {
             // level: noise in, 100% wet at a medium hall
             SwarmnessAudioProcessor p;
             resetToInit (p);
