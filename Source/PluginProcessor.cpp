@@ -113,7 +113,8 @@ SwarmnessAudioProcessor::SwarmnessAudioProcessor()
             }
         }
     };
-    startTimerHz (10);   // modelled cabinet IR rebuilds, freeing swapped-out NAM captures
+    housekeeper = std::make_unique<Housekeeper> (*this);
+    housekeeper->startThread (juce::Thread::Priority::low);
 }
 
 //==============================================================================
@@ -848,16 +849,11 @@ void SwarmnessAudioProcessor::updateCabModel (bool force)
     cab.setModelIR (CabBlock::designIR (type, (float) mic * 0.01f, (float) dist * 0.01f, rate), rate);
 }
 
-void SwarmnessAudioProcessor::timerCallback()
-{
-    updateCabModel();
-    amp.releaseRetired();
-}
-
 //==============================================================================
 SwarmnessAudioProcessor::~SwarmnessAudioProcessor()
 {
-    stopTimer();
+    if (housekeeper != nullptr)
+        housekeeper->stopThread (4000);
     apvts.removeParameterListener (ParamIDs::scene, this);
     cancelPendingUpdate();
 }

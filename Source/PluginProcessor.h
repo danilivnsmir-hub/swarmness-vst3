@@ -20,8 +20,7 @@
 
 class SwarmnessAudioProcessor : public juce::AudioProcessor,
                                 private juce::AudioProcessorValueTreeState::Listener,
-                                private juce::AsyncUpdater,
-                                private juce::Timer
+                                private juce::AsyncUpdater
 {
 public:
     SwarmnessAudioProcessor();
@@ -156,7 +155,24 @@ private:
     // scene on the message thread
     void parameterChanged (const juce::String& parameterID, float newValue) override;
     void handleAsyncUpdate() override;
-    void timerCallback() override;
+    /** Background upkeep (not a juce::Timer: the host may destroy the plug-in on another thread, and
+        a Timer callback still running on the message thread would then touch a dying processor).
+        The destructor stops and joins it before anything else goes. */
+    struct Housekeeper : juce::Thread
+    {
+        explicit Housekeeper (SwarmnessAudioProcessor& p) : juce::Thread ("Swarmness housekeeping"), owner (p) {}
+        void run() override
+        {
+            while (! threadShouldExit())
+            {
+                owner.updateCabModel();   // modelled cabinet IR rebuilds
+                owner.amp.releaseRetired();   // frees NAM captures the audio thread swapped out
+                wait (100);
+            }
+        }
+        SwarmnessAudioProcessor& owner;
+    };
+    std::unique_ptr<Housekeeper> housekeeper;
     std::atomic<int> pendingScene { 0 };
     bool restoringState = false;
     juce::Array<juce::RangedAudioParameter*> learnableParams;   // index = binding param
