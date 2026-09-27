@@ -140,6 +140,29 @@ namespace ParamIDs
     inline constexpr const char* revMod      = "revMod";
     inline constexpr const char* revDuck     = "revDuck";
 
+    // AMP (amp models CLEAN / CRUNCH / LEAD with CHARACTER, or a NAM capture)
+    inline constexpr const char* ampOn       = "ampOn";
+    inline constexpr const char* ampChannel  = "ampChannel";
+    inline constexpr const char* ampChar     = "ampChar";
+    inline constexpr const char* ampGain     = "ampGain";
+    inline constexpr const char* ampBass     = "ampBass";
+    inline constexpr const char* ampMid      = "ampMid";
+    inline constexpr const char* ampTreble   = "ampTreble";
+    inline constexpr const char* ampPresence = "ampPresence";
+    inline constexpr const char* ampDepth    = "ampDepth";
+    inline constexpr const char* ampMaster   = "ampMaster";
+    inline constexpr const char* ampGate     = "ampGate";
+    inline constexpr const char* ampLevel    = "ampLevel";
+
+    // CAB (modelled cabinets or a loaded IR)
+    inline constexpr const char* cabOn       = "cabOn";
+    inline constexpr const char* cabType     = "cabType";
+    inline constexpr const char* cabMic      = "cabMic";
+    inline constexpr const char* cabDist     = "cabDist";
+    inline constexpr const char* cabLowCut   = "cabLowCut";
+    inline constexpr const char* cabHighCut  = "cabHighCut";
+    inline constexpr const char* cabLevel    = "cabLevel";
+
     // OUTPUT / GLOBAL
     inline constexpr const char* input       = "input";        // input sensitivity (compensated at the output)
     inline constexpr const char* output      = "output";
@@ -162,6 +185,8 @@ namespace ParamChoices
     inline const juce::StringArray scenes      { "A", "B", "C", "D" };
     inline const juce::StringArray fuzzVoices  { "Down", "Mid", "Up" };
     inline const juce::StringArray reverbTypes { "Room", "Plate", "Hall", "Abyss", "IR" };
+    inline const juce::StringArray ampChannels { "Clean", "Crunch", "Lead", "NAM" };
+    inline const juce::StringArray cabTypes    { "1x12 Open", "2x12 Open", "4x12 Brit", "4x12 Modern", "IR" };
     inline const juce::StringArray stepMoves { "Hold", "Up", "Down", "Random", "Reverse" };
     /** Ready-made TRAILS step patterns, in HiveBlock::Fill order. */
     inline const juce::StringArray trailFills { "Ladder", "Bounce", "Scatter", "Reverse", "Swell",
@@ -221,16 +246,20 @@ namespace ParamRanges
 namespace Chain
 {
     // (pitch = HIVE; SHIFT was split off in beta.25 and sits right before HIVE by default)
-    enum Block : int { pitch = 0, smoke, swarm, wings, comb, carve, crypt, shift, numBlocks };
+    // (AMP and CAB came in v3.1, between HIVE and SWARM - where an amp sits on a pedalboard)
+    enum Block : int { pitch = 0, smoke, swarm, wings, comb, carve, crypt, shift, amp, cab, numBlocks };
 
     inline constexpr const char* slotIds[numBlocks] { "chainPitch", "chainSmoke", "chainSwarm", "chainWings",
-                                                      "chainComb", "chainCarve", "chainCrypt", "chainShift" };
-    inline constexpr int defaultSlots[numBlocks] { 20, 10, 30, 40, 50, 60, 70, 15 };   // SMOKE, SHIFT, HIVE, SWARM, WINGS, COMB, CARVE, CRYPT
+                                                      "chainComb", "chainCarve", "chainCrypt", "chainShift",
+                                                      "chainAmp", "chainCab" };
+    // SMOKE, SHIFT, HIVE, AMP, CAB, SWARM, WINGS, COMB, CARVE, CRYPT
+    inline constexpr int defaultSlots[numBlocks] { 20, 10, 30, 40, 50, 60, 70, 15, 23, 26 };
     inline constexpr int slotMax = 99;
     inline constexpr int legacyPostSmokeSlot = 35;   // old "SMOKE POST" = after SWARM, before WINGS
 
-    inline constexpr const char* names[numBlocks]     { "HIVE", "SMOKE", "SWARM", "WINGS", "COMB", "CARVE", "CRYPT", "SHIFT" };
-    inline constexpr const char* subtitles[numBlocks] { "HARMONIES", "FUZZ", "CHORUS", "TREMOLO", "GRAPHIC EQ", "PARAM EQ", "REVERB", "PITCH SHIFT" };
+    inline constexpr const char* names[numBlocks]     { "HIVE", "SMOKE", "SWARM", "WINGS", "COMB", "CARVE", "CRYPT", "SHIFT", "AMP", "CAB" };
+    inline constexpr const char* subtitles[numBlocks] { "HARMONIES", "FUZZ", "CHORUS", "TREMOLO", "GRAPHIC EQ", "PARAM EQ", "REVERB", "PITCH SHIFT",
+                                                        "AMPLIFIER", "CABINET" };
 
     using Order = std::array<int, numBlocks>;
 
@@ -251,8 +280,9 @@ namespace Chain
     /** Where a block sits: in the main (series) line, or on parallel path A (upper) / B (lower). */
     enum Lane : int { series = 0, pathA, pathB };
     inline constexpr const char* laneIds[numBlocks] { "lanePitch", "laneSmoke", "laneSwarm", "laneWings",
-                                                      "laneComb", "laneCarve", "laneCrypt", "laneShift" };
-    /** A / B balance of each split, numbered left to right (8 blocks allow at most 4 splits). */
+                                                      "laneComb", "laneCarve", "laneCrypt", "laneShift",
+                                                      "laneAmp", "laneCab" };
+    /** A / B balance of each split, numbered left to right (a fifth split shares the fourth's mix). */
     inline constexpr int maxSplits = 4;
     inline constexpr const char* parallelMixIds[maxSplits] { "chainParMix", "chainParMix2", "chainParMix3", "chainParMix4" };
 

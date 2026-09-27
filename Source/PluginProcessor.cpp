@@ -65,6 +65,11 @@ SwarmnessAudioProcessor::SwarmnessAudioProcessor()
     p.revOn = get (id::revOn);           p.revType = get (id::revType);         p.revMix = get (id::revMix);
     p.revDecay = get (id::revDecay);     p.revSize = get (id::revSize);         p.revPreDelay = get (id::revPreDelay);
     p.revTone = get (id::revTone);       p.revLowCut = get (id::revLowCut);     p.revMod = get (id::revMod);         p.revDuck = get (id::revDuck);
+    p.ampOn = get (id::ampOn);           p.ampChannel = get (id::ampChannel);   p.ampChar = get (id::ampChar);       p.ampGain = get (id::ampGain);
+    p.ampBass = get (id::ampBass);       p.ampMid = get (id::ampMid);           p.ampTreble = get (id::ampTreble);   p.ampPresence = get (id::ampPresence);
+    p.ampDepth = get (id::ampDepth);     p.ampMaster = get (id::ampMaster);     p.ampGate = get (id::ampGate);       p.ampLevel = get (id::ampLevel);
+    p.cabOn = get (id::cabOn);           p.cabType = get (id::cabType);         p.cabMic = get (id::cabMic);         p.cabDist = get (id::cabDist);
+    p.cabLowCut = get (id::cabLowCut);   p.cabHighCut = get (id::cabHighCut);   p.cabLevel = get (id::cabLevel);
     for (int b = 0; b < Chain::numBlocks; ++b)
     {
         p.chainSlots[(size_t) b] = get (Chain::slotIds[b]);
@@ -86,6 +91,10 @@ SwarmnessAudioProcessor::SwarmnessAudioProcessor()
         const auto ir = getReverbIRFile();
         if (ir != juce::File())
             json.setProperty ("reverbIR", ir.getFullPathName());
+        if (const auto nam = getNamModelFile(); nam != juce::File())
+            json.setProperty ("namModel", nam.getFullPathName());
+        if (const auto cabIr = getCabIRFile(); cabIr != juce::File())
+            json.setProperty ("cabIR", cabIr.getFullPathName());
     };
     presetManager->onLoadExtras = [this] (const juce::var& json)
     {
@@ -93,7 +102,18 @@ SwarmnessAudioProcessor::SwarmnessAudioProcessor()
         const auto path = json["reverbIR"].toString();
         if (path.isNotEmpty() && juce::File::isAbsolutePath (path) && juce::File (path).existsAsFile())
             loadReverbIR (juce::File (path));
+        // the AMP capture and the CAB IR too (a preset without them keeps what is loaded)
+        for (auto [key, isNam] : { std::pair<const char*, bool> { "namModel", true }, { "cabIR", false } })
+        {
+            const auto file = json[key].toString();
+            if (file.isNotEmpty() && juce::File::isAbsolutePath (file) && juce::File (file).existsAsFile())
+            {
+                if (isNam) loadNamModel (juce::File (file));
+                else       loadCabIR (juce::File (file));
+            }
+        }
     };
+    startTimerHz (10);   // modelled cabinet IR rebuilds, freeing swapped-out NAM captures
 }
 
 //==============================================================================
@@ -120,6 +140,9 @@ void SwarmnessAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBl
     comb .prepare (sampleRate);
     carve.prepare (sampleRate);
     crypt.prepare (sampleRate, maxBlockSize);
+    amp.prepare (sampleRate, maxBlockSize);
+    cab.prepare (sampleRate, maxBlockSize);
+    updateCabModel (true);
 
     // Only SMOKE (oversampling) adds latency, and it is there wherever SMOKE sits in the chain.
     const int latency = fuzzStage.getLatencySamples();
@@ -165,6 +188,8 @@ void SwarmnessAudioProcessor::releaseResources()
     comb.reset();
     carve.reset();
     crypt.reset();
+    amp.reset();
+    cab.reset();
     dryDelay.reset();
 }
 
@@ -433,6 +458,41 @@ void SwarmnessAudioProcessor::processChainBlock (int block, const BlockContext& 
             break;
         }
 
+        case Chain::amp:
+        {
+            AmpBlock::Settings s;
+            s.on = on (p.ampOn);
+            s.channel = juce::jlimit (0, 3, (int) p.ampChannel->load());
+            s.character = pct (p.ampChar);
+            s.gain = p.ampGain->load() * 0.1f;
+            s.bass = p.ampBass->load() * 0.1f;
+            s.mid = p.ampMid->load() * 0.1f;
+            s.treble = p.ampTreble->load() * 0.1f;
+            s.presence = p.ampPresence->load() * 0.1f;
+            s.depth = p.ampDepth->load() * 0.1f;
+            s.master = p.ampMaster->load() * 0.1f;
+            s.gate = pct (p.ampGate);
+            s.levelDb = p.ampLevel->load();
+            amp.setParams (s);
+            amp.process (audio, numChannels, numSamples);
+            break;
+        }
+
+        case Chain::cab:
+        {
+            CabBlock::Settings s;
+            s.on = on (p.cabOn);
+            s.type = juce::jlimit (0, (int) CabBlock::numTypes - 1, (int) p.cabType->load());
+            s.mic = pct (p.cabMic);
+            s.distance = pct (p.cabDist);
+            s.lowCutHz = p.cabLowCut->load();
+            s.highCutHz = p.cabHighCut->load();
+            s.levelDb = p.cabLevel->load();
+            cab.setParams (s);
+            cab.process (audio, numChannels, numSamples);
+            break;
+        }
+
         default: break;
     }
 }
@@ -665,8 +725,139 @@ juce::String SwarmnessAudioProcessor::getReverbIRDescription() const
 }
 
 //==============================================================================
+juce::String SwarmnessAudioProcessor::loadNamModel (const juce::File& file)
+{
+    if (! file.existsAsFile())
+        return "Can't find \"" + file.getFileName() + "\"";
+    if (file.getSize() > 64 * 1024 * 1024)
+        return "\"" + file.getFileName() + "\" is too big for a NAM capture";
+    std::string error;
+    auto model = NamModel::load (file.loadFileAsString().toStdString(), error);
+    if (model == nullptr)
+        return "\"" + file.getFileName() + "\": " + juce::String (error.empty() ? "not a NAM capture" : error);
+
+    // name from the capture's metadata when it has one
+    juce::String name = file.getFileNameWithoutExtension();
+    if (auto json = juce::JSON::parse (file); json.isObject())
+    {
+        const auto meta = json["metadata"];
+        const auto metaName = meta["name"].toString();
+        if (metaName.isNotEmpty())
+            name = metaName;
+    }
+    const auto desc = name + "  -  " + juce::String (model->getArchitecture()) + ", "
+                    + juce::String (model->getSampleRate() / 1000.0, 1).trimCharactersAtEnd ("0").trimCharactersAtEnd (".") + " kHz";
+    amp.setNamModel (std::move (model));
+
+    const juce::ScopedLock sl (irInfoLock);
+    namFile = file;
+    namDescription = desc;
+    return {};
+}
+
+void SwarmnessAudioProcessor::clearNamModel()
+{
+    amp.setNamModel (nullptr);
+    const juce::ScopedLock sl (irInfoLock);
+    namFile = juce::File();
+    namDescription.clear();
+}
+
+juce::File SwarmnessAudioProcessor::getNamModelFile() const
+{
+    const juce::ScopedLock sl (irInfoLock);
+    return namFile;
+}
+
+juce::String SwarmnessAudioProcessor::getNamModelDescription() const
+{
+    const juce::ScopedLock sl (irInfoLock);
+    return namDescription;
+}
+
+juce::String SwarmnessAudioProcessor::loadCabIR (const juce::File& file)
+{
+    juce::AudioFormatManager formats;
+    formats.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> reader (formats.createReaderFor (file));
+    if (reader == nullptr)
+        return "Can't read \"" + file.getFileName() + "\" (WAV / AIFF / FLAC / OGG)";
+    // cabinet IRs are short: up to 1 s (a longer file is a room - the rest is cut off)
+    const int length = (int) juce::jmin (reader->lengthInSamples, (juce::int64) (reader->sampleRate * 1.0));
+    if (length < 16 || reader->sampleRate <= 0.0)
+        return "\"" + file.getFileName() + "\" is too short";
+
+    juce::AudioBuffer<float> ir (1, length);
+    if (reader->numChannels > 1)
+    {
+        juce::AudioBuffer<float> both (2, length);
+        reader->read (&both, 0, length, 0, true, true);
+        ir.copyFrom (0, 0, both, 0, 0, length);
+        ir.addFrom (0, 0, both, 1, 0, length);
+        ir.applyGain (0.5f);
+    }
+    else
+    {
+        reader->read (&ir, 0, length, 0, true, false);
+    }
+    CabBlock::levelIR (ir, reader->sampleRate);
+    const auto desc = file.getFileNameWithoutExtension() + "  -  " + juce::String (juce::roundToInt ((double) length / reader->sampleRate * 1000.0)) + " ms";
+    cab.setUserIR (std::move (ir), reader->sampleRate);
+
+    const juce::ScopedLock sl (irInfoLock);
+    cabIRFile = file;
+    cabIRDescription = desc;
+    return {};
+}
+
+void SwarmnessAudioProcessor::clearCabIR()
+{
+    cab.clearUserIR();
+    const juce::ScopedLock sl (irInfoLock);
+    cabIRFile = juce::File();
+    cabIRDescription.clear();
+}
+
+juce::File SwarmnessAudioProcessor::getCabIRFile() const
+{
+    const juce::ScopedLock sl (irInfoLock);
+    return cabIRFile;
+}
+
+juce::String SwarmnessAudioProcessor::getCabIRDescription() const
+{
+    const juce::ScopedLock sl (irInfoLock);
+    return cabIRDescription;
+}
+
+void SwarmnessAudioProcessor::updateCabModel (bool force)
+{
+    // the IR is rebuilt for the modelled type (IR mode keeps the last model for its cross-fade)
+    int type = juce::jlimit (0, (int) CabBlock::numTypes - 1, (int) p.cabType->load());
+    if (type == CabBlock::ir)
+        type = cabModelKey >= 0 ? cabModelKey / 10000 : CabBlock::modern4x12;
+    const int mic = juce::roundToInt (p.cabMic->load());
+    const int dist = juce::roundToInt (p.cabDist->load());
+    const int key = type * 10000 + mic * 100 + dist;
+    const double rate = cab.getSampleRate();
+    const juce::ScopedLock sl (cabModelLock);
+    if (! force && key == cabModelKey && rate == cabModelRate)
+        return;
+    cabModelKey = key;
+    cabModelRate = rate;
+    cab.setModelIR (CabBlock::designIR (type, (float) mic * 0.01f, (float) dist * 0.01f, rate), rate);
+}
+
+void SwarmnessAudioProcessor::timerCallback()
+{
+    updateCabModel();
+    amp.releaseRetired();
+}
+
+//==============================================================================
 SwarmnessAudioProcessor::~SwarmnessAudioProcessor()
 {
+    stopTimer();
     apvts.removeParameterListener (ParamIDs::scene, this);
     cancelPendingUpdate();
 }
@@ -839,6 +1030,8 @@ void SwarmnessAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
     state.setProperty ("uiScale", uiScale.load(), nullptr);
     state.setProperty ("uiMini", uiMini.load(), nullptr);
     state.setProperty ("reverbIR", getReverbIRFile().getFullPathName(), nullptr);
+    state.setProperty ("namModel", getNamModelFile().getFullPathName(), nullptr);
+    state.setProperty ("cabIR", getCabIRFile().getFullPathName(), nullptr);
     juce::StringArray bindings;
     for (const auto& b : midiBindings)
         if (const int index = b.param.load(); index >= 0 && b.kind.load() != 0)
@@ -940,6 +1133,16 @@ void SwarmnessAudioProcessor::setStateInformation (const void* data, int sizeInB
                 loadReverbIR (juce::File (irPath));
             else
                 clearReverbIR();
+            const auto namPath = tree.getProperty ("namModel").toString();
+            if (namPath.isNotEmpty() && juce::File::isAbsolutePath (namPath) && juce::File (namPath).existsAsFile())
+                loadNamModel (juce::File (namPath));
+            else
+                clearNamModel();
+            const auto cabPath = tree.getProperty ("cabIR").toString();
+            if (cabPath.isNotEmpty() && juce::File::isAbsolutePath (cabPath) && juce::File (cabPath).existsAsFile())
+                loadCabIR (juce::File (cabPath));
+            else
+                clearCabIR();
 
             presetManager->scenesFromVar (juce::JSON::parse (scenesJson),
                                           juce::roundToInt (apvts.getRawParameterValue (ParamIDs::scene)->load()));

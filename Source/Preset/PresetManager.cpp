@@ -56,7 +56,9 @@ void PresetManager::initialiseFactoryPresets()
     const auto trailFill = hivePatternLegacy;   // a ready-made TRAILS step pattern (HiveBlock::Fill), expanded below
     const juce::String recipes ("Recipes - The Noise, Slam, glitch");
     const juce::String basics ("Basics"), stingCat ("Shift - hold SHIFT A / B"), hiveCat ("Hive Voices & Trails"),
-                       texture ("Smoke, Swarm & Wings"), attack ("Swarm Attack"), space ("Chain, EQ & Crypt");
+                       texture ("Smoke, Swarm & Wings"), attack ("Swarm Attack"), space ("Chain, EQ & Crypt"),
+                       amps ("Amps & Cabs");
+    // AMP channels: 0 CLEAN, 1 CRUNCH, 2 LEAD. CAB types: 0 1x12, 1 2x12, 2 4x12 BRIT, 3 4x12 MOD
     // Chain slots (lower = earlier). Defaults: SMOKE 10, PITCH 20, SWARM 30, WINGS 40, COMB 50, CARVE 60, CRYPT 70.
     const juce::String slotCrypt (Chain::slotIds[Chain::crypt]), slotCarve (Chain::slotIds[Chain::carve]),
                        slotComb (Chain::slotIds[Chain::comb]), slotSmoke (Chain::slotIds[Chain::smoke]);
@@ -215,6 +217,42 @@ void PresetManager::initialiseFactoryPresets()
             { fuzzOn, 1 }, { fuzzVoice, 1 }, { fuzz, 85 }, { fuzzScoop, 55 },
             { swarmOn, 1 }, { swarmDepth, 65 }, { swarmMix, 50 },
             { revOn, 1 }, { revType, 2 }, { revDecay, 3.5f }, { revMix, 100 } } },
+        // ------------------------------------------------------------- amps & cabs
+        { "Glass Clean", amps, "CLEAN on the CHROME side: stiff, bright solid-state clean into an open 2x12, a little SWARM and a HALL behind it.",
+          { { ampOn, 1 }, { ampChannel, 0 }, { ampChar, 10 }, { ampGain, 6.5f }, { ampBass, 5 }, { ampMid, 6 }, { ampTreble, 6 }, { ampMaster, 6 },
+            { cabOn, 1 }, { cabType, 1 }, { cabMic, 35 }, { cabDist, 30 },
+            { swarmOn, 1 }, { swarmMix, 30 }, { swarmDepth, 40 }, { revOn, 1 }, { revType, 2 }, { revMix, 20 }, { revDecay, 2.8f } } },
+        { "Blackface Breakup", amps, "CLEAN turned to BLACKFACE and pushed: sparkly when you play soft, hair and sag when you dig in. 1x12 open back.",
+          { { ampOn, 1 }, { ampChannel, 0 }, { ampChar, 100 }, { ampGain, 7 }, { ampBass, 4.5f }, { ampMid, 5 }, { ampTreble, 6.5f }, { ampMaster, 6.5f },
+            { cabOn, 1 }, { cabType, 0 }, { cabMic, 40 }, { cabDist, 15 }, { revOn, 1 }, { revType, 0 }, { revMix, 18 } } },
+        { "Brit Crunch", amps, "CRUNCH on BRIT: bright, barking upper mids and a tight bottom - rock rhythm into the warm 4x12.",
+          { { ampOn, 1 }, { ampChannel, 1 }, { ampChar, 0 }, { ampGain, 6 }, { ampBass, 5 }, { ampMid, 7 }, { ampTreble, 6.5f }, { ampPresence, 6 }, { ampMaster, 6 },
+            { cabOn, 1 }, { cabType, 2 }, { cabMic, 30 }, { cabDist, 10 } } },
+        { "Marmalade", amps, "The CRUNCH channel's own amp: halfway between BRIT and CITRUS - the bark of one and the fat, compressed mids of the other.",
+          { { ampOn, 1 }, { ampChannel, 1 }, { ampChar, 50 }, { ampGain, 7 }, { ampBass, 5.5f }, { ampMid, 6 }, { ampTreble, 5.5f }, { ampMaster, 6 },
+            { cabOn, 1 }, { cabType, 2 }, { cabMic, 30 }, { cabDist, 20 } } },
+        { "Citrus Doom", amps, "CRUNCH on CITRUS with the gain up: thick, fuzzy low-mids for doom and stoner riffs. DEPTH for the thump, a dark ABYSS in the gaps.",
+          { { ampOn, 1 }, { ampChannel, 1 }, { ampChar, 100 }, { ampGain, 8.5f }, { ampBass, 7 }, { ampMid, 6.5f }, { ampTreble, 4 }, { ampDepth, 7 }, { ampMaster, 7 }, { ampLevel, -4 },
+            { cabOn, 1 }, { cabType, 3 }, { cabMic, 45 }, { cabDist, 25 },
+            { revOn, 1 }, { revType, 3 }, { revMix, 20 }, { revDecay, 6 }, { revDuck, 60 }, { revLowCut, 200 } } },
+        { "Steel Lead", amps, "LEAD on STEEL: tight, cutting American high gain. GATE keeps the stops clean, PRESENCE and DEPTH up for modern metal.",
+          { { ampOn, 1 }, { ampChannel, 2 }, { ampChar, 0 }, { ampGain, 7 }, { ampBass, 5.5f }, { ampMid, 6 }, { ampTreble, 6 }, { ampPresence, 6.5f }, { ampDepth, 6 },
+            { ampGate, 35 }, { ampMaster, 5.5f }, { cabOn, 1 }, { cabType, 3 }, { cabMic, 25 }, { cabDist, 10 }, { cabLowCut, 80 } } },
+        { "Ironhive", amps, "The LEAD channel's own amp: STEEL's tight attack with SLUDGE's weight and saturation. Chugs that still speak.",
+          { { ampOn, 1 }, { ampChannel, 2 }, { ampChar, 50 }, { ampGain, 7.5f }, { ampBass, 6 }, { ampMid, 4.5f }, { ampTreble, 6 }, { ampPresence, 6 }, { ampDepth, 6.5f },
+            { ampGate, 40 }, { ampMaster, 6 }, { ampLevel, -4 }, { cabOn, 1 }, { cabType, 3 }, { cabMic, 30 }, { cabDist, 15 }, { cabLowCut, 75 } } },
+        { "Sludge Wall", amps, "LEAD on SLUDGE: loose, saggy, scooped and huge. Low MID, DEPTH high, the mic backed off the grille.",
+          { { ampOn, 1 }, { ampChannel, 2 }, { ampChar, 100 }, { ampGain, 8 }, { ampBass, 7 }, { ampMid, 3 }, { ampTreble, 6 }, { ampPresence, 5.5f }, { ampDepth, 7.5f },
+            { ampGate, 30 }, { ampMaster, 6.5f }, { ampLevel, -3 }, { cabOn, 1 }, { cabType, 3 }, { cabMic, 35 }, { cabDist, 40 } } },
+        { "Octave Panic Rig", amps, "The Noise, the whole rig: SHIFT's octaves with ANGER / FRENZY / BUZZ in front of a STEEL lead amp. Hold SHIFT A / B.",
+          { { rise, 25 }, { fall, 40 }, { panic, 50 }, { chaos, 20 }, { speed, 30 },
+            { ampOn, 1 }, { ampChannel, 2 }, { ampChar, 20 }, { ampGain, 7 }, { ampMid, 6.5f }, { ampTreble, 6 }, { ampGate, 30 },
+            { cabOn, 1 }, { cabType, 3 }, { cabMic, 25 }, { cabDist, 10 } } },
+        { "Slam Rig", amps, "Slam dissonance through a real rig: a voice one semitone up (MIX 50%) into IRONHIVE and a 4x12 - the clash gets the amp's grind.",
+          { { rbOn, 1 }, { rbRaw, 0 }, { rbPitch, 1 }, { rbPrimary, 100 }, { rbTracking, 100 }, { rbMix, 50 },
+            { ampOn, 1 }, { ampChannel, 2 }, { ampChar, 50 }, { ampGain, 7 }, { ampBass, 6.5f }, { ampMid, 4 }, { ampTreble, 5.5f }, { ampGate, 45 },
+            { cabOn, 1 }, { cabType, 3 }, { cabMic, 30 }, { cabDist, 15 } } },
+
         { "Chug Room", space, "SMOKE with a tight ROOM that ducks hard while you play - space between the chugs, dry and punchy on them.",
           { { fuzzOn, 1 }, { fuzzVoice, 2 }, { fuzz, 70 }, { fuzzScoop, 45 }, { fuzzGate, 15 },
             { revOn, 1 }, { revType, 0 }, { revDecay, 1.1f }, { revMix, 35 }, { revDuck, 80 }, { revLowCut, 250 } } },
@@ -465,6 +503,14 @@ void PresetManager::migrateLegacyValues (ValueMap& values)
         values[Chain::laneIds[Chain::shift]] = get (Chain::laneIds[Chain::pitch], 0.0f);
     }
     values.erase (hiveFollowLegacy);
+
+    // v3.1: AMP and CAB join the chain right after HIVE (on the main line)
+    if (! has (Chain::slotIds[Chain::amp]) && has (Chain::slotIds[Chain::pitch]))
+    {
+        const float hiveSlot = get (Chain::slotIds[Chain::pitch], (float) Chain::defaultSlots[Chain::pitch]);
+        values[Chain::slotIds[Chain::amp]] = juce::jmin ((float) Chain::slotMax, hiveSlot + 3.0f);
+        values[Chain::slotIds[Chain::cab]] = juce::jmin ((float) Chain::slotMax, hiveSlot + 6.0f);
+    }
 
     // Beta.25-27: HIVE's ANGER / FRENZY / BUZZ -> the single MANGLE knob
     if (has (hvAngerLegacy) || has (hvFrenzyLegacy) || has (hvBuzzLegacy))

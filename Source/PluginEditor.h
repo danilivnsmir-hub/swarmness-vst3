@@ -68,6 +68,7 @@ private:
     juce::Component fxPage, pitchPage;   // FX = SMOKE / SWARM / WINGS, PITCH = HIVE + SHIFT
     EqPage eqPage;
     ReverbPage reverbPage;
+    AmpCabSection ampCab;   // on the FX page, under SMOKE / SWARM / WINGS
     int currentPage = fxPageIndex;
 
     // Header

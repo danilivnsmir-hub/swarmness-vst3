@@ -19,6 +19,7 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
       chainStrip (p.getAPVTS()),
       eqPage (p),
       reverbPage (p),
+      ampCab (p),
       presetBar (p.getPresetManager()),
       switchModeSelector (param (state, ParamIDs::switchMode), { "MOMENTARY", "LATCH" }),
       stepGrid (p.getAPVTS()),
@@ -179,6 +180,7 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     fxPage.addAndMakeVisible (flowAmountKnob);
     fxPage.addAndMakeVisible (flowSpeedKnob);
     fxPage.addChildComponent (flowDivKnob);
+    fxPage.addAndMakeVisible (ampCab);
 
     // OUTPUT
     inputKnob .attach (state, input,  "INPUT sensitivity: how hard the effects are hit (SMOKE, tracking). Aim for peaks in the green zone of the IN meter; the output level is compensated");
@@ -406,6 +408,9 @@ void MainPanel::resized()
     threeKnobs (flowArea, { &flowAmountKnob, &flowSpeedKnob });
     flowDivKnob.setBounds (flowSpeedKnob.getBounds());
 
+    // AMP + CAB under the row
+    ampCab.setBounds (16, 356, baseWidth - 32, 252);
+
 
     // Footer: footswitches centred (LINK mini switches beside the octaves), meters at the sides
     {
@@ -595,6 +600,8 @@ void MainPanel::tick()
     chainStrip.refresh();
     eqPage.tick();
     reverbPage.tick();
+    if (fxPage.isVisible())
+        ampCab.tick();
 
     // MIDI learn: the control waiting for a message pulses
     const auto learning = processor.getMidiLearnParam();

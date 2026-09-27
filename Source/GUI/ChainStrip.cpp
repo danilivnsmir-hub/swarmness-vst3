@@ -4,7 +4,7 @@ using namespace Theme;
 
 namespace
 {
-    constexpr float kInW = 34.0f, kOutW = 42.0f, kGap = 20.0f, kSplitGap = 26.0f, kMergeGap = 46.0f;
+    constexpr float kInW = 34.0f, kOutW = 42.0f, kGap = 14.0f, kSplitGap = 26.0f, kMergeGap = 46.0f;
 }
 
 ChainStrip::ChainStrip (juce::AudioProcessorValueTreeState& s) : state (s)
@@ -39,6 +39,8 @@ const char* ChainStrip::powerParamFor (int block)
         case Chain::carve: return ParamIDs::peqOn;
         case Chain::crypt: return ParamIDs::revOn;
         case Chain::shift: return ParamIDs::shOn;
+        case Chain::amp:   return ParamIDs::ampOn;
+        case Chain::cab:   return ParamIDs::cabOn;
         default:           return nullptr;
     }
 }
@@ -141,8 +143,8 @@ void ChainStrip::resized()
 juce::Rectangle<float> ChainStrip::ledRect (juce::Rectangle<float> tile) const noexcept
 {
     const bool half = isHalf (tile, (float) getHeight());
-    const float s = half ? 10.0f : 14.0f;
-    return juce::Rectangle<float> (s, s - 1.0f).withCentre ({ tile.getX() + (half ? 17.0f : 22.0f), tile.getCentreY() });
+    const float s = half ? 10.0f : 12.0f;
+    return juce::Rectangle<float> (s, s - 1.0f).withCentre ({ tile.getX() + (half ? 16.0f : 18.0f), tile.getCentreY() });
 }
 
 Chain::Layout ChainStrip::displayLayout() const
@@ -348,21 +350,22 @@ void ChainStrip::paint (juce::Graphics& g)
         }
 
         // name (+ subtitle on full-height tiles)
-        auto text = r.withTrimmedLeft (half ? 28.0f : 36.0f).withTrimmedRight (8.0f);
+        // ten blocks share the strip: names squeeze a little rather than getting cut
+        auto text = r.withTrimmedLeft (half ? 25.0f : 29.0f).withTrimmedRight (half ? 8.0f : 6.0f);
         if (half)
         {
             g.setFont (displayFont (16.0f));
             if (on || hi) g.setGradientFill (honeyGradient (text)); else g.setColour (Colours::textDim);
-            g.drawText (Chain::names[b], text.translated (0.0f, 1.0f), juce::Justification::centredLeft, false);
+            g.drawFittedText (Chain::names[b], text.translated (0.0f, 1.0f).toNearestInt(), juce::Justification::centredLeft, 1, 0.6f);
             return;
         }
         g.setFont (displayFont (19.0f));
         const auto nameArea = text.withTrimmedBottom (text.getHeight() * 0.42f).translated (0.0f, 2.0f);
         if (on || hi) g.setGradientFill (honeyGradient (nameArea)); else g.setColour (Colours::textDim);
-        g.drawText (Chain::names[b], nameArea, juce::Justification::bottomLeft, false);
-        g.setFont (font (11.0f, true));
+        g.drawFittedText (Chain::names[b], nameArea.toNearestInt(), juce::Justification::bottomLeft, 1, 0.7f);
+        g.setFont (font (10.5f, true));
         g.setColour (hi ? Colours::text.withAlpha (0.8f) : Colours::textFaint);
-        g.drawText (Chain::subtitles[b], text.withTrimmedTop (text.getHeight() * 0.58f), juce::Justification::topLeft, false);
+        g.drawFittedText (Chain::subtitles[b], text.withTrimmedTop (text.getHeight() * 0.58f).toNearestInt(), juce::Justification::topLeft, 1, 0.7f);
     };
 
     for (int b = 0; b < Chain::numBlocks; ++b)
@@ -508,7 +511,9 @@ juce::String ChainStrip::getTooltip()
         "COMB: 10-band graphic EQ",
         "CARVE: parametric EQ with low / high cut",
         "CRYPT: reverb (algorithmic or your impulse response)",
-        "SHIFT: pitch shifter. LED = on (SHIFT A all the time); the SHIFT A / B footswitches engage it while held" };
+        "SHIFT: pitch shifter. LED = on (SHIFT A all the time); the SHIFT A / B footswitches engage it while held",
+        "AMP: amplifier - CLEAN / CRUNCH / LEAD models with CHARACTER, or a NAM capture",
+        "CAB: speaker cabinet - modelled cabinets or your impulse response" };
     juce::String tip (what[hover]);
     tip << ". Click to open; drag sideways to move, up / down for parallel paths";
     if (powerParamFor (hover) != nullptr)

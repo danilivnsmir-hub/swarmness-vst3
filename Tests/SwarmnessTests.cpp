@@ -1080,13 +1080,17 @@ namespace
         setParam (p, ParamIDs::revOn, 1.0f);
         setParam (p, ParamIDs::revType, 3.0f);
         setParam (p, ParamIDs::oct1, 1.0f);
+        setParam (p, ParamIDs::ampOn, 1.0f);
+        setParam (p, ParamIDs::ampChannel, 2.0f);
+        setParam (p, ParamIDs::ampGate, 30.0f);
+        setParam (p, ParamIDs::cabOn, 1.0f);
         const double sr = 48000.0;
         auto input = makeGuitar (sr, (int) sr * 10);
         const auto t0 = std::chrono::steady_clock::now();
         auto out = render (p, input, sr, 128);
         const double secs = std::chrono::duration<double> (std::chrono::steady_clock::now() - t0).count();
         const double load = secs / 10.0 * 100.0;
-        check (load < 25.0, juce::String::formatted ("everything on: %.2f%% of one core (realtime factor %.0fx)", load, 10.0 / secs));
+        check (load < 40.0, juce::String::formatted ("everything on (AMP + CAB too): %.2f%% of one core (realtime factor %.0fx)", load, 10.0 / secs));
     }
 
     //==========================================================================
@@ -1094,10 +1098,14 @@ namespace
 
     void setOrder (SwarmnessAudioProcessor& p, std::initializer_list<int> blocks)
     {
+        // blocks not listed keep their default place relative to each other, after the listed ones
         Chain::Order order {};
         int i = 0;
         for (int b : blocks)
             order[(size_t) i++] = b;
+        for (int b : Chain::defaultOrder())
+            if (std::find (blocks.begin(), blocks.end(), b) == blocks.end())
+                order[(size_t) i++] = b;
         p.setChainOrder (order);
     }
 
@@ -1125,10 +1133,11 @@ namespace
             for (int b = 0; b < Chain::numBlocks; ++b)
                 slots[(size_t) b] = (float) Chain::defaultSlots[b];
             const auto def = Chain::orderFromSlots (slots);
-            check (def[0] == Chain::smoke && def[1] == Chain::shift && def[2] == Chain::pitch && def[7] == Chain::crypt, "default order: SMOKE, SHIFT, HIVE, ..., CRYPT");
+            check (def[0] == Chain::smoke && def[1] == Chain::shift && def[2] == Chain::pitch && def[3] == Chain::amp
+                   && def[4] == Chain::cab && def[5] == Chain::swarm && def[9] == Chain::crypt, "default order: SMOKE, SHIFT, HIVE, AMP, CAB, SWARM, ..., CRYPT");
             slots.fill (0.0f);   // all tied -> default order
             check (Chain::orderFromSlots (slots) == def, "tied slots fall back to the default order");
-            Chain::Order custom { Chain::crypt, Chain::comb, Chain::pitch, Chain::shift, Chain::wings, Chain::smoke, Chain::carve, Chain::swarm };
+            Chain::Order custom { Chain::crypt, Chain::comb, Chain::cab, Chain::pitch, Chain::shift, Chain::wings, Chain::smoke, Chain::amp, Chain::carve, Chain::swarm };
             check (Chain::orderFromSlots (Chain::slotsForOrder (custom)) == custom, "slots <-> order round trip");
         }
 
@@ -1229,23 +1238,23 @@ namespace
     {
         std::printf ("\nParallel paths (split -> A || B -> merge)\n");
         {
-            Chain::Layout l { { Chain::smoke, Chain::shift, Chain::pitch, Chain::swarm, Chain::crypt, Chain::wings, Chain::comb, Chain::carve }, {} };
+            Chain::Layout l { { Chain::smoke, Chain::shift, Chain::pitch, Chain::swarm, Chain::crypt, Chain::wings, Chain::comb, Chain::carve, Chain::amp, Chain::cab }, {} };
             l.lanes[Chain::swarm] = Chain::pathA;
             l.lanes[Chain::crypt] = Chain::pathB;
             const auto plan = Chain::planFor (l);
             const auto& split = plan.stages[3];
-            check (plan.numStages == 7 && plan.numSplits == 1 && split.parallel && split.numA == 1 && split.numB == 1
+            check (plan.numStages == 9 && plan.numSplits == 1 && split.parallel && split.numA == 1 && split.numB == 1
                    && split.a[0] == Chain::swarm && split.b[0] == Chain::crypt && plan.stages[4].block == Chain::wings,
                    "plan: SMOKE, SHIFT, HIVE -> [SWARM || CRYPT] -> WINGS, COMB, CARVE");
 
-            // two splits with a series block between: [SMOKE || PITCH] -> SWARM -> [WINGS || COMB] -> CARVE -> CRYPT
+            // two splits with series blocks between: [SMOKE, SHIFT || HIVE] -> AMP -> CAB -> SWARM -> [WINGS || COMB] -> CARVE -> CRYPT
             Chain::Layout two { Chain::defaultOrder(), {} };
             two.lanes[Chain::smoke] = Chain::pathA;  two.lanes[Chain::shift] = Chain::pathA;  two.lanes[Chain::pitch] = Chain::pathB;
             two.lanes[Chain::wings] = Chain::pathA;  two.lanes[Chain::comb]  = Chain::pathB;
             const auto p2 = Chain::planFor (two);
-            check (p2.numSplits == 2 && p2.numStages == 5 && p2.stages[0].parallel && p2.stages[0].split == 0
-                   && p2.stages[1].block == Chain::swarm && p2.stages[2].parallel && p2.stages[2].split == 1
-                   && p2.stages[2].a[0] == Chain::wings && p2.stages[2].b[0] == Chain::comb,
+            check (p2.numSplits == 2 && p2.numStages == 7 && p2.stages[0].parallel && p2.stages[0].split == 0
+                   && p2.stages[1].block == Chain::amp && p2.stages[3].block == Chain::swarm && p2.stages[4].parallel && p2.stages[4].split == 1
+                   && p2.stages[4].a[0] == Chain::wings && p2.stages[4].b[0] == Chain::comb,
                    "two splits separated by a series block, each with its own MIX");
         }
 
@@ -1886,6 +1895,374 @@ namespace
             std::printf ("  rendered %s\n", file.getFullPathName().toRawUTF8());
         }
     }
+    //==============================================================================
+    /** One AMP / CAB block on its own (no chain), 48 kHz. */
+    juce::AudioBuffer<float> renderAmp (const AmpBlock::Settings& s, const juce::AudioBuffer<float>& input, AmpBlock* use = nullptr)
+    {
+        AmpBlock local;
+        AmpBlock& a = use != nullptr ? *use : local;
+        if (use == nullptr)
+            a.prepare (48000.0, 256);
+        a.setParams (s);
+        juce::AudioBuffer<float> out (input);
+        for (int start = 0; start < out.getNumSamples(); start += 256)
+        {
+            const int n = juce::jmin (256, out.getNumSamples() - start);
+            float* ptr[2] { out.getWritePointer (0, start), out.getWritePointer (1, start) };
+            a.process (ptr, 2, n);
+        }
+        return out;
+    }
+
+    juce::File namExample (const char* name)
+    {
+       #ifdef SWARMNESS_NAM_EXAMPLES
+        return juce::File (SWARMNESS_NAM_EXAMPLES).getChildFile (name);
+       #else
+        juce::ignoreUnused (name);
+        return {};
+       #endif
+    }
+
+    void testAmp()
+    {
+        std::printf ("\nAMP: channels, CHARACTER, tone stack, gain, NAM\n");
+        const double sr = 48000.0;
+        auto guitar = makeGuitar (sr, 48000);
+
+        // FMV tone stack: the passive circuit's classic shape
+        {
+            const float lo = AmpBlock::toneStackDb (AmpBlock::clean, 1.0f, 0.5f, 0.5f, 0.5f, 100.0f);
+            const float midDip = AmpBlock::toneStackDb (AmpBlock::clean, 1.0f, 0.5f, 0.5f, 0.5f, 500.0f);
+            const float hi = AmpBlock::toneStackDb (AmpBlock::clean, 1.0f, 0.5f, 0.5f, 0.5f, 5000.0f);
+            check (midDip < lo - 3.0f && midDip < hi - 3.0f,
+                   juce::String::formatted ("BLACKFACE stack at noon: scooped mids (100 Hz %.1f, 500 Hz %.1f, 5 kHz %.1f dB)", lo, midDip, hi));
+            const float bassUp = AmpBlock::toneStackDb (AmpBlock::crunch, 0.0f, 1.0f, 0.5f, 0.5f, 80.0f)
+                               - AmpBlock::toneStackDb (AmpBlock::crunch, 0.0f, 0.0f, 0.5f, 0.5f, 80.0f);
+            const float trebleUp = AmpBlock::toneStackDb (AmpBlock::crunch, 0.0f, 0.5f, 0.5f, 1.0f, 4000.0f)
+                                 - AmpBlock::toneStackDb (AmpBlock::crunch, 0.0f, 0.5f, 0.5f, 0.0f, 4000.0f);
+            const float midUp = AmpBlock::toneStackDb (AmpBlock::lead, 0.0f, 0.5f, 1.0f, 0.5f, 600.0f)
+                              - AmpBlock::toneStackDb (AmpBlock::lead, 0.0f, 0.5f, 0.0f, 0.5f, 600.0f);
+            check (bassUp > 6.0f && trebleUp > 6.0f && midUp > 6.0f,
+                   juce::String::formatted ("BASS / TREBLE / MID ranges: %.1f / %.1f / %.1f dB", bassUp, trebleUp, midUp));
+        }
+
+        // Every model: bounded, level-matched within a sane window, more gain = more harmonics
+        double minDb = 1e9, maxDb = -1e9;
+        for (int chn = 0; chn < 3; ++chn)
+            for (float character : { 0.0f, 0.5f, 1.0f })
+            {
+                AmpBlock::Settings s;
+                s.on = true;
+                s.channel = chn;
+                s.character = character;
+                auto out = renderAmp (s, guitar);
+                const double db = juce::Decibels::gainToDecibels (out.getRMSLevel (0, 4800, 43200));
+                minDb = juce::jmin (minDb, db);
+                maxDb = juce::jmax (maxDb, db);
+                check (allFinite (out) && out.getMagnitude (0, 0, out.getNumSamples()) < 2.0f,
+                       juce::String::formatted ("%-10s: bounded, %.1f dB RMS", AmpBlock::modelName (chn, character), db));
+            }
+        check (maxDb - minDb < 12.0, juce::String::formatted ("levels at noon within %.1f dB of each other", maxDb - minDb));
+
+        auto harmonics = [&] (int chn, float gain)
+        {
+            AmpBlock::Settings s;
+            s.on = true;
+            s.channel = chn;
+            s.gain = gain;
+            auto out = renderAmp (s, makeSine (sr, 24000, 110.0, 0.1f));
+            return toneDb (out, sr, 330.0, 12000, 9600) - toneDb (out, sr, 110.0, 12000, 9600);
+        };
+        const double cleanLow = harmonics (AmpBlock::clean, 0.2f), leadHigh = harmonics (AmpBlock::lead, 0.9f);
+        check (leadHigh > cleanLow + 15.0, juce::String::formatted ("3rd harmonic: CLEAN low gain %.1f dB, LEAD high gain %.1f dB", cleanLow, leadHigh));
+
+        // The knobs act like the real circuit: PRESENCE / DEPTH take feedback away at the top / bottom,
+        // MASTER pushes the power amp, MID moves the stack's scoop
+        {
+            auto sineDb = [&] (AmpBlock::Settings st, double hz, float amp)
+            {
+                auto out = renderAmp (st, makeSine (sr, 24000, hz, amp));
+                return toneDb (out, sr, hz, 12000, 9600);
+            };
+            AmpBlock::Settings st;
+            st.on = true; st.channel = AmpBlock::lead; st.character = 0.0f; st.gain = 0.0f;
+            auto withKnob = [&] (float AmpBlock::Settings::* knob, float v) { auto t = st; t.*knob = v; return t; };
+            const double pres = sineDb (withKnob (&AmpBlock::Settings::presence, 1.0f), 5000.0, 0.02f) - sineDb (withKnob (&AmpBlock::Settings::presence, 0.0f), 5000.0, 0.02f);
+            const double depth = sineDb (withKnob (&AmpBlock::Settings::depth, 1.0f), 85.0, 0.02f) - sineDb (withKnob (&AmpBlock::Settings::depth, 0.0f), 85.0, 0.02f);
+            const double midRef = sineDb (withKnob (&AmpBlock::Settings::mid, 1.0f), 600.0, 0.02f) - sineDb (withKnob (&AmpBlock::Settings::mid, 0.0f), 600.0, 0.02f);
+            check (pres > 4.0 && depth > 4.0 && midRef > 6.0,
+                   juce::String::formatted ("STEEL: PRESENCE +%.1f dB at 5 kHz, DEPTH +%.1f dB at 85 Hz, MID +%.1f dB at 600 Hz", pres, depth, midRef));
+            // MASTER: the power amp breaks up as it goes up (clean preamp)
+            AmpBlock::Settings cl;
+            cl.on = true; cl.channel = AmpBlock::clean; cl.character = 1.0f; cl.gain = 0.35f;
+            auto h3At = [&] (float master)
+            {
+                auto t = cl; t.master = master;
+                auto out = renderAmp (t, makeSine (sr, 24000, 110.0, 0.1f));
+                return toneDb (out, sr, 330.0, 12000, 9600) - toneDb (out, sr, 110.0, 12000, 9600);
+            };
+            const double low = h3At (0.3f), high = h3At (1.0f);
+            check (high > low + 15.0, juce::String::formatted ("BLACKFACE: MASTER 3 -> 10 = power-amp breakup (3rd harmonic %.1f -> %.1f dB)", low, high));
+            // Responsive: turning the guitar down cleans a crunch amp up
+            AmpBlock::Settings cr;
+            cr.on = true; cr.channel = AmpBlock::crunch; cr.character = 0.0f; cr.gain = 0.5f;
+            auto h3In = [&] (float amp)
+            {
+                auto out = renderAmp (cr, makeSine (sr, 24000, 110.0, amp));
+                return toneDb (out, sr, 330.0, 12000, 9600) - toneDb (out, sr, 110.0, 12000, 9600);
+            };
+            const double hard = h3In (0.2f), soft = h3In (0.0125f);
+            check (soft < hard - 15.0, juce::String::formatted ("BRIT cleans up with the guitar's volume: 3rd harmonic %.1f dB at full, %.1f dB at -24 dB", hard, soft));
+        }
+
+        // CHARACTER really moves the circuit: the two ends of a channel differ
+        {
+            AmpBlock::Settings a, b;
+            a.on = b.on = true;
+            a.channel = b.channel = AmpBlock::lead;
+            a.character = 0.0f;
+            b.character = 1.0f;
+            auto oa = renderAmp (a, guitar), ob = renderAmp (b, guitar);
+            const double diff = nullDb (oa, ob, 0, 4800, 48000);
+            check (diff > -10.0, juce::String::formatted ("LEAD: STEEL vs SLUDGE differ (null %.1f dB)", diff));
+        }
+
+        // Off = untouched; on / off without clicks
+        {
+            AmpBlock::Settings s;
+            auto out = renderAmp (s, guitar);
+            check (nullDb (out, guitar, 0, 0, guitar.getNumSamples()) < -200.0, "off: bit-transparent");
+        }
+
+        // GATE silences the hiss between notes, keeps the notes
+        {
+            juce::AudioBuffer<float> in (2, 48000);
+            juce::Random rng (3);
+            for (int i = 0; i < in.getNumSamples(); ++i)
+            {
+                const float noise = 0.0005f * (rng.nextFloat() - 0.5f);
+                const float note = i < 12000 ? 0.2f * (float) std::sin (juce::MathConstants<double>::twoPi * 110.0 * i / sr) : 0.0f;
+                in.setSample (0, i, note + noise);
+                in.setSample (1, i, note + noise);
+            }
+            AmpBlock::Settings s;
+            s.on = true;
+            s.channel = AmpBlock::lead;
+            s.gain = 0.9f;
+            auto open = renderAmp (s, in);
+            s.gate = 0.5f;
+            auto gated = renderAmp (s, in);
+            const double hissOpen = juce::Decibels::gainToDecibels (open.getRMSLevel (0, 30000, 18000));
+            const double hissGated = juce::Decibels::gainToDecibels (gated.getRMSLevel (0, 30000, 18000) + 1e-9f);
+            const double noteLoss = juce::Decibels::gainToDecibels (gated.getRMSLevel (0, 2000, 8000) / open.getRMSLevel (0, 2000, 8000));
+            check (hissGated < hissOpen - 30.0 && std::abs (noteLoss) < 1.0,
+                   juce::String::formatted ("GATE: hiss %.1f -> %.1f dB, the note keeps its level (%.2f dB)", hissOpen, hissGated, noteLoss));
+        }
+
+        // NAM: the example captures load and play (48 kHz model at 44.1 kHz: resampled)
+        const auto wavenet = namExample ("wavenet.nam");
+        if (wavenet.existsAsFile())
+        {
+            for (auto* file : { "wavenet.nam", "lstm.nam", "A2.nam" })
+            {
+                std::string err;
+                auto model = NamModel::load (namExample (file).loadFileAsString().toStdString(), err);
+                check (model != nullptr, juce::String ("NAM ") + file + " loads" + (model != nullptr ? " (" + juce::String (model->getArchitecture()) + ")" : ": " + juce::String (err)));
+                if (model == nullptr) continue;
+                for (double rate : { 48000.0, 44100.0 })
+                {
+                    AmpBlock a;
+                    a.prepare (rate, 256);
+                    std::string e2;
+                    a.setNamModel (NamModel::load (namExample (file).loadFileAsString().toStdString(), e2));
+                    AmpBlock::Settings s;
+                    s.on = true;
+                    s.channel = AmpBlock::nam;
+                    auto in = makeGuitar (rate, (int) rate);
+                    auto out = renderAmp (s, in, &a);
+                    const double db = juce::Decibels::gainToDecibels (out.getRMSLevel (0, (int) (rate * 0.2), (int) (rate * 0.7)));
+                    check (allFinite (out) && db > -60.0 && db < 6.0,
+                           juce::String::formatted ("NAM %s at %.1f kHz: plays (%.1f dB RMS)", file, rate / 1000.0, db));
+                }
+            }
+            // a sine through a capture at 44.1 kHz comes out at its pitch (the resampling is right)
+            {
+                AmpBlock a;
+                a.prepare (44100.0, 256);
+                std::string e;
+                a.setNamModel (NamModel::load (wavenet.loadFileAsString().toStdString(), e));
+                AmpBlock::Settings s;
+                s.on = true;
+                s.channel = AmpBlock::nam;
+                auto out = renderAmp (s, makeSine (44100.0, 44100, 440.0, 0.1f), &a);
+                double purity = 0.0;
+                const double f = dominantFrequency (out, 44100.0, 22050, purity);
+                check (std::abs (f - 440.0) < 2.0, juce::String::formatted ("NAM at 44.1 kHz: 440 Hz in -> %.1f Hz out", f));
+            }
+            // through the processor: file, description, session round trip
+            {
+                SwarmnessAudioProcessor p;
+                resetToInit (p);
+                const auto err = p.loadNamModel (wavenet);
+                check (err.isEmpty(), "processor loads a .nam: " + (err.isEmpty() ? p.getNamModelDescription() : err));
+                juce::MemoryBlock mb;
+                p.getStateInformation (mb);
+                SwarmnessAudioProcessor q;
+                q.setStateInformation (mb.getData(), (int) mb.getSize());
+                check (q.getNamModelFile() == wavenet, "NAM capture path saved with the session");
+                check (p.loadNamModel (juce::File::createTempFile (".nam")).isNotEmpty(), "a broken .nam is refused with a message");
+            }
+        }
+        else
+        {
+            std::printf ("  (NAM example captures not found - skipped)\n");
+        }
+        for (int chn = 0; chn < 3; ++chn)
+        {
+            // the circuit models in real time at 48 kHz (LEAD at full gain = the most grid current)
+            AmpBlock a;
+            a.prepare (48000.0, 128);
+            AmpBlock::Settings s;
+            s.on = true;
+            s.channel = chn;
+            s.gain = 0.9f;
+            s.master = 0.8f;
+            a.setParams (s);
+            auto in = makeGuitar (48000.0, 48000 * 5);
+            const auto t0 = std::chrono::steady_clock::now();
+            for (int start = 0; start < in.getNumSamples(); start += 128)
+            {
+                float* ptr[2] { in.getWritePointer (0, start), in.getWritePointer (1, start) };
+                a.process (ptr, 2, 128);
+            }
+            const double load = std::chrono::duration<double> (std::chrono::steady_clock::now() - t0).count() / 5.0 * 100.0;
+            check (load < 20.0, juce::String::formatted ("%s circuit model: %.1f%% of one core", ParamChoices::ampChannels[chn].toRawUTF8(), load));
+        }
+        const auto a2 = namExample ("A2.nam");
+        if (a2.existsAsFile())
+        {
+            // a full-size current capture, in real time at 48 kHz
+            AmpBlock a;
+            a.prepare (48000.0, 128);
+            std::string e;
+            a.setNamModel (NamModel::load (a2.loadFileAsString().toStdString(), e));
+            AmpBlock::Settings s;
+            s.on = true;
+            s.channel = AmpBlock::nam;
+            a.setParams (s);
+            auto in = makeGuitar (48000.0, 48000 * 5);
+            const auto t0 = std::chrono::steady_clock::now();
+            for (int start = 0; start < in.getNumSamples(); start += 128)
+            {
+                float* ptr[2] { in.getWritePointer (0, start), in.getWritePointer (1, start) };
+                a.process (ptr, 2, 128);
+            }
+            const double load = std::chrono::duration<double> (std::chrono::steady_clock::now() - t0).count() / 5.0 * 100.0;
+            check (load < 20.0, juce::String::formatted ("NAM A2 capture: %.1f%% of one core", load));
+        }
+    }
+
+    void testCab()
+    {
+        std::printf ("\nCAB: modelled cabinets, MIC, DISTANCE, IR\n");
+        // the modelled responses: a speaker's band, the mic moves the top
+        for (int t = 0; t < (int) CabBlock::ir; ++t)
+        {
+            const float low = CabBlock::responseDb (t, 0.3f, 0.2f, 40.0f), top = CabBlock::responseDb (t, 0.3f, 0.2f, 10000.0f);
+            const float pres = CabBlock::responseDb (t, 0.3f, 0.2f, 2200.0f);
+            check (low < -8.0f && top < -20.0f && pres > -6.0f,
+                   juce::String::formatted ("%s: 40 Hz %.1f dB, 2.2 kHz %.1f dB, 10 kHz %.1f dB", ParamChoices::cabTypes[t].toRawUTF8(), low, pres, top));
+        }
+        const float cap = CabBlock::responseDb (CabBlock::modern4x12, 0.0f, 0.2f, 4000.0f);
+        const float edge = CabBlock::responseDb (CabBlock::modern4x12, 1.0f, 0.2f, 4000.0f);
+        check (edge < cap - 6.0f, juce::String::formatted ("MIC: cap %.1f dB vs edge %.1f dB at 4 kHz", cap, edge));
+        const float close = CabBlock::responseDb (CabBlock::modern4x12, 0.3f, 0.0f, 120.0f);
+        const float far = CabBlock::responseDb (CabBlock::modern4x12, 0.3f, 1.0f, 120.0f);
+        check (close > far + 3.0f, juce::String::formatted ("DISTANCE: proximity bass %.1f dB close vs %.1f dB far", close, far));
+
+        // the minimum-phase IR: energy up front, response matches the design
+        {
+            auto ir = CabBlock::designIR (CabBlock::modern4x12, 0.3f, 0.0f, 48000.0);
+            const double early = ir.getRMSLevel (0, 0, 96), late = ir.getRMSLevel (0, 960, ir.getNumSamples() - 960);
+            check (early > late * 10.0, juce::String::formatted ("IR is minimum phase (first 2 ms %.1f dB above the rest)", juce::Decibels::gainToDecibels (early / late)));
+        }
+
+        // through the processor: AMP + CAB on the default chain
+        const double sr = 48000.0;
+        {
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            setParam (p, ParamIDs::cabOn, 1.0f);
+            p.prepareToPlay (sr, 256);
+            auto noise = juce::AudioBuffer<float> (2, 48000);
+            juce::Random rng (9);
+            for (int i = 0; i < noise.getNumSamples(); ++i)
+            {
+                const float v = 0.2f * (rng.nextFloat() - 0.5f);
+                noise.setSample (0, i, v);
+                noise.setSample (1, i, v);
+            }
+            juce::AudioBuffer<float> out;
+            for (int k = 0; k < 20; ++k)   // the convolution loads the IR on its own thread
+            {
+                out = render (p, noise, sr, 256);
+                if (toneDb (out, sr, 9000.0, 24000, 16384) < toneDb (noise, sr, 9000.0, 24000, 16384) - 15.0) break;
+                juce::Thread::sleep (20);
+            }
+            const double top = toneDb (out, sr, 9000.0, 24000, 16384) - toneDb (noise, sr, 9000.0, 24000, 16384);
+            const double mid = toneDb (out, sr, 1500.0, 24000, 16384) - toneDb (noise, sr, 1500.0, 24000, 16384);
+            check (top < -15.0 && std::abs (mid) < 8.0, juce::String::formatted ("CAB on: 9 kHz %.1f dB, 1.5 kHz %.1f dB", top, mid));
+        }
+        {
+            // a loaded IR (a short decaying click) replaces the model
+            auto irFile = juce::File::createTempFile (".wav");
+            {
+                juce::AudioBuffer<float> ir (1, 2400);
+                ir.clear();
+                for (int i = 0; i < 2400; ++i)
+                    ir.setSample (0, i, (i % 7 == 0 ? 1.0f : -0.3f) * std::exp (-i / 200.0f));
+                juce::WavAudioFormat wav;
+                std::unique_ptr<juce::OutputStream> stream = irFile.createOutputStream();
+                auto w = wav.createWriterFor (stream, juce::AudioFormatWriterOptions{}.withSampleRate (48000.0).withNumChannels (1).withBitsPerSample (24));
+                w->writeFromAudioSampleBuffer (ir, 0, ir.getNumSamples());
+            }
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            const auto err = p.loadCabIR (irFile);
+            check (err.isEmpty(), "CAB IR loads: " + (err.isEmpty() ? p.getCabIRDescription() : err));
+            juce::MemoryBlock mb;
+            p.getStateInformation (mb);
+            SwarmnessAudioProcessor q;
+            q.setStateInformation (mb.getData(), (int) mb.getSize());
+            check (q.getCabIRFile() == irFile, "CAB IR path saved with the session");
+            irFile.deleteFile();
+        }
+        {
+            // the amp presets play at sane levels (the modelled cabinet IR loads on its own thread)
+            auto guitar = makeGuitar (sr, 96000);
+            double lo = 1e9, hi = -1e9;
+            for (const auto& name : SwarmnessAudioProcessor().getPresetManager().getFactoryPresetNames ("Amps & Cabs"))
+            {
+                SwarmnessAudioProcessor p;
+                p.getPresetManager().loadPreset (name);
+                p.prepareToPlay (sr, 256);
+                juce::Thread::sleep (60);
+                auto out = render (p, guitar, sr, 256);
+                const double db = juce::Decibels::gainToDecibels (out.getRMSLevel (0, 9600, 86400));
+                lo = juce::jmin (lo, db); hi = juce::jmax (hi, db);
+                std::printf ("    %-20s %6.1f dB RMS\n", name.toRawUTF8(), db);
+            }
+            check (lo > -30.0 && hi < -4.0, juce::String::formatted ("amp presets between %.1f and %.1f dB RMS", lo, hi));
+        }
+        {
+            // old sessions / presets: AMP + CAB land right after HIVE
+            PresetManager::ValueMap v { { Chain::slotIds[Chain::pitch], 50.0f } };
+            PresetManager::migrateLegacyValues (v);
+            check (v[Chain::slotIds[Chain::amp]] == 53.0f && v[Chain::slotIds[Chain::cab]] == 56.0f, "older presets: AMP and CAB follow HIVE");
+        }
+    }
+
 }
 
 int main (int argc, char** argv)
@@ -1917,6 +2294,168 @@ int main (int argc, char** argv)
         return 0;
     }
 
+    if (argc >= 2 && juce::String (argv[1]) == "--amp-dyn")
+    {
+        // AMP models: level (guitar RMS) and 3rd-harmonic ratio (110 Hz sine at -20 dBFS) vs GAIN (diagnostic)
+        const double sr = 48000.0;
+        auto guitar = makeGuitar (sr, 48000);
+        for (int chn = 0; chn < 3; ++chn)
+            for (float character : { 0.0f, 0.5f, 1.0f })
+            {
+                std::printf ("%-11s", AmpBlock::modelName (chn, character));
+                for (float gain : { 0.0f, 0.2f, 0.5f, 0.8f, 1.0f })
+                {
+                    AmpBlock::Settings s;
+                    s.on = true; s.channel = chn; s.character = character; s.gain = gain;
+                    auto out = renderAmp (s, guitar);
+                    auto sine = renderAmp (s, makeSine (sr, 24000, 110.0, 0.1f));
+                    const double rms = juce::Decibels::gainToDecibels (out.getRMSLevel (0, 4800, 43200));
+                    const double h3 = toneDb (sine, sr, 330.0, 12000, 9600) - toneDb (sine, sr, 110.0, 12000, 9600);
+                    const double h2 = toneDb (sine, sr, 220.0, 12000, 9600) - toneDb (sine, sr, 110.0, 12000, 9600);
+                    std::printf ("  g%.1f %6.1f dB (h2 %+5.1f h3 %+5.1f)", gain, rms, h2, h3);
+                }
+                std::printf ("\n");
+            }
+        return 0;
+    }
+
+    if (argc >= 6 && juce::String (argv[1]) == "--amp-spec")
+    {
+        // harmonics of a 110 Hz sine: --amp-spec channel character gain amplitude [master]
+        const double sr = 48000.0;
+        AmpBlock::Settings s;
+        s.on = true; s.channel = juce::String (argv[2]).getIntValue(); s.character = juce::String (argv[3]).getFloatValue();
+        s.gain = juce::String (argv[4]).getFloatValue();
+        if (argc >= 7) s.master = juce::String (argv[6]).getFloatValue();
+        auto out = renderAmp (s, makeSine (sr, 48000, 110.0, juce::String (argv[5]).getFloatValue()));
+        const double h1 = toneDb (out, sr, 110.0, 24000, 19200);
+        std::printf ("RMS %.1f dB, fundamental %.1f dB; harmonics re fundamental:", juce::Decibels::gainToDecibels (out.getRMSLevel (0, 24000, 19200)), h1);
+        for (int h = 2; h <= 9; ++h)
+            std::printf (" h%d %+.1f", h, toneDb (out, sr, 110.0 * h, 24000, 19200) - h1);
+        std::printf ("  | 55 Hz %+.1f, 165.7 Hz (between) %+.1f\n", toneDb (out, sr, 55.0, 24000, 19200) - h1, toneDb (out, sr, 137.0, 24000, 19200) - h1);
+        std::printf ("  other:");
+        for (double f : { 3.0, 8.0, 15.0, 30.0, 1000.0, 5000.0, 10000.0, 18000.0, 23000.0 })
+            std::printf (" %.0fHz %+.1f", f, toneDb (out, sr, f, 24000, 19200) - h1);
+        double dc = 0; for (int i = 24000; i < 43200; ++i) dc += out.getSample (0, i);
+        std::printf ("  DC %.2e\n", dc / 19200.0);
+        return 0;
+    }
+
+    if (argc >= 2 && juce::String (argv[1]) == "--amp-balance")
+    {
+        // octave-band spectrum of the guitar signal through each model at noon (dB re 1 kHz band) + aliasing check
+        const double sr = 48000.0;
+        juce::dsp::FFT fft (13);
+        const int n = 8192;
+        std::printf ("            ");
+        const double bands[] { 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000 };
+        for (double b : bands) std::printf (" %6.0f", b);
+        std::printf ("   alias(1.32k sine, g1)\n");
+        for (int chn = 0; chn < 3; ++chn)
+            for (float character : { 0.0f, 0.5f, 1.0f })
+            {
+                AmpBlock::Settings s;
+                s.on = true; s.channel = chn; s.character = character; s.gain = chn == 0 ? 0.6f : 0.6f;
+                // pink-ish noise in: the output's band levels show the amp's voicing (driven)
+                juce::AudioBuffer<float> noise (2, 96000);
+                {
+                    juce::Random rng (5);
+                    float b0 = 0, b1 = 0, b2 = 0;
+                    for (int i = 0; i < noise.getNumSamples(); ++i)
+                    {
+                        const float w = rng.nextFloat() * 2.0f - 1.0f;
+                        b0 = 0.99765f * b0 + w * 0.0990460f; b1 = 0.96300f * b1 + w * 0.2965164f; b2 = 0.57000f * b2 + w * 1.0526913f;
+                        const float v = 0.05f * (b0 + b1 + b2 + w * 0.1848f);
+                        noise.setSample (0, i, v); noise.setSample (1, i, v);
+                    }
+                }
+                auto spectrum = [&] (const juce::AudioBuffer<float>& b)
+                {
+                    std::vector<double> power ((size_t) n / 2, 0.0);
+                    for (int start = 4800; start + n <= b.getNumSamples(); start += n / 2)
+                    {
+                        std::vector<float> buf ((size_t) n * 2, 0.0f);
+                        for (int i = 0; i < n; ++i)
+                            buf[(size_t) i] = b.getSample (0, start + i) * (0.5f - 0.5f * std::cos (juce::MathConstants<float>::twoPi * i / n));
+                        fft.performFrequencyOnlyForwardTransform (buf.data());
+                        for (int k = 0; k < n / 2; ++k) power[(size_t) k] += (double) buf[(size_t) k] * buf[(size_t) k];
+                    }
+                    return power;
+                };
+                auto band = [&] (const std::vector<double>& power, double centre)
+                {
+                    double e = 0.0;
+                    for (int k = 1; k < n / 2; ++k)
+                    {
+                        const double f = k * sr / n;
+                        if (f >= centre / std::sqrt (2.0) && f < centre * std::sqrt (2.0)) e += power[(size_t) k];
+                    }
+                    return 10.0 * std::log10 (e + 1e-30);
+                };
+                const auto pin = spectrum (noise), pout = spectrum (renderAmp (s, noise));
+                const double ref = band (pout, 1000.0) - band (pin, 1000.0);
+                std::printf ("%-11s", AmpBlock::modelName (chn, character));
+                for (double b : bands) std::printf (" %+6.1f", band (pout, b) - band (pin, b) - ref);
+                // aliasing: a 3520 Hz sine at full gain; everything that is not a harmonic of it
+                s.gain = 1.0f;
+                auto sine = renderAmp (s, makeSine (sr, 48000, 1318.5, 0.1f));
+                std::vector<float> buf ((size_t) n * 2, 0.0f);
+                for (int i = 0; i < n; ++i)
+                    buf[(size_t) i] = sine.getSample (0, 24000 + i) * (0.5f - 0.5f * std::cos (juce::MathConstants<float>::twoPi * i / n));
+                fft.performFrequencyOnlyForwardTransform (buf.data());
+                double harm = 0.0, other = 0.0;
+                for (int k = 1; k < n / 2; ++k)
+                {
+                    const double f = k * sr / n;
+                    const double m = std::fmod (f, 1318.5);
+                    const bool isHarm = m < 20.0 || m > 1298.5;
+                    (isHarm ? harm : other) += (double) buf[(size_t) k] * buf[(size_t) k];
+                }
+                std::printf ("   %+6.1f dB\n", 10.0 * std::log10 (other / harm));
+            }
+        return 0;
+    }
+
+    if (argc >= 2 && juce::String (argv[1]) == "--amp-tables")
+    {
+        const auto& t = ampsim::tables();
+        for (int r = 0; r < 6; ++r)
+            for (int st = 0; st < 4; ++st)
+            {
+                std::printf ("%-10s st%d thr %5.2f :", AmpBlock::referenceName (r / 2, r % 2), st, t[(size_t) r][(size_t) st].thr);
+                for (float v : { -30.0f, -8.0f, -4.0f, -2.0f, -1.0f, -0.1f, 0.1f, 1.0f, 2.0f, 4.0f, 8.0f })
+                    std::printf (" %7.1f", t[(size_t) r][(size_t) st] (v));
+                std::printf ("\n");
+            }
+        return 0;
+    }
+
+    if (argc >= 2 && juce::String (argv[1]) == "--amp-probe")
+    {
+        // peak volts through the circuit for a 110 Hz sine (0.1 FS) - diagnostic
+        const double sr = 48000.0;
+        for (int chn = 0; chn < 3; ++chn)
+            for (float character : { 0.0f, 1.0f })
+                for (float gain : { 0.0f, 0.5f, 1.0f })
+                {
+                    AmpBlock a;
+                    a.prepare (sr, 256);
+                    AmpBlock::Settings s;
+                    s.on = true; s.channel = chn; s.character = character; s.gain = gain;
+                    a.probing = true;
+                    auto in = makeSine (sr, 24000, 110.0, 0.1f);
+                    renderAmp (s, in, &a);
+                    a.probeReset();
+                    auto out = renderAmp (s, makeSine (sr, 24000, 110.0, 0.1f), &a);
+                    const double hf = toneDb (out, sr, 21000.0, 4000, 16000);
+                    std::printf ("%-10s g%.1f  st %6.1f %6.1f %6.1f %6.1f  stack %6.1f  pa %5.2f  i %5.2f  sup %4.2f  out %5.1f dB  21k %6.1f\n",
+                                 AmpBlock::referenceName (chn, (int) character), gain, a.probe[0], a.probe[1], a.probe[2], a.probe[3],
+                                 a.probe[4], a.probe[5], a.probe[6], a.probe[7],
+                                 juce::Decibels::gainToDecibels (out.getRMSLevel (0, 4000, 16000)), hf);
+                }
+        return 0;
+    }
+
     if (argc >= 3 && juce::String (argv[1]) == "--screenshot")
     {
         // Renders the editor to PNG (useful for design review / docs).
@@ -1929,6 +2468,12 @@ int main (int argc, char** argv)
         if (argc >= 6)
             p.setUiPage (juce::String (argv[5]).getIntValue());
         const bool mini = argc >= 7 && juce::String (argv[6]) == "mini";
+        if (argc >= 7 && juce::String (argv[6]) == "nam")   // the AMP in NAM mode, with an example capture
+        {
+            p.getAPVTS().getParameter (ParamIDs::ampChannel)->setValueNotifyingHost (1.0f);
+            p.loadNamModel (namExample ("A2.nam"));
+            p.getAPVTS().getParameter (ParamIDs::cabType)->setValueNotifyingHost (1.0f);
+        }
         p.setUiMini (mini);
         std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
         editor->setSize (juce::roundToInt (MainPanel::baseWidth * scale), juce::roundToInt ((mini ? MainPanel::miniHeight : MainPanel::baseHeight) * scale));
@@ -1994,6 +2539,8 @@ int main (int argc, char** argv)
         if (which == "comb")    testGraphicEq();
         if (which == "carve")   testParametricEq();
         if (which == "reverb")  testReverb();
+        if (which == "amp")     testAmp();
+        if (which == "cab")     testCab();
         std::printf ("\n%s (%d failure%s)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures, failures == 1 ? "" : "s");
         return failures == 0 ? 0 : 1;
     }
@@ -2033,6 +2580,8 @@ int main (int argc, char** argv)
     testGraphicEq();
     testParametricEq();
     testReverb();
+    testAmp();
+    testCab();
     testPerformance();
 
     std::printf ("\n%s (%d failure%s)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures, failures == 1 ? "" : "s");

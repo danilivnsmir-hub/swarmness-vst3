@@ -251,6 +251,43 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     crypt->addChild (percent (revMod, "Crypt Mod", 30.0f));
     crypt->addChild (percent (revDuck, "Crypt Duck", 0.0f));
 
+    // ------------------------------------------------------------------ AMP
+    auto knob10 = [] (const char* id, const juce::String& name, float def)
+    {
+        return std::make_unique<juce::AudioParameterFloat> (
+            pid (id), name, juce::NormalisableRange<float> (0.0f, 10.0f, 0.01f), def,
+            Attr().withStringFromValueFunction ([] (float v, int) { return juce::String (v, 1); }));
+    };
+    auto levelParam = [&] (const char* id, const juce::String& name)
+    {
+        return std::make_unique<juce::AudioParameterFloat> (pid (id), name, juce::NormalisableRange<float> (-24.0f, 12.0f, 0.1f), 0.0f, dbAttr());
+    };
+    auto amp = std::make_unique<Group> ("amp", "Amp", "|");
+    amp->addChild (toggle (ampOn, "Amp On", false));
+    amp->addChild (std::make_unique<juce::AudioParameterChoice> (pid (ampChannel), "Amp Channel", ParamChoices::ampChannels, 1));
+    amp->addChild (percent (ampChar, "Amp Character", 50.0f));
+    amp->addChild (knob10 (ampGain, "Amp Gain", 5.0f));
+    amp->addChild (knob10 (ampBass, "Amp Bass", 5.0f));
+    amp->addChild (knob10 (ampMid, "Amp Mid", 5.0f));
+    amp->addChild (knob10 (ampTreble, "Amp Treble", 5.0f));
+    amp->addChild (knob10 (ampPresence, "Amp Presence", 5.0f));
+    amp->addChild (knob10 (ampDepth, "Amp Depth", 5.0f));
+    amp->addChild (knob10 (ampMaster, "Amp Master", 5.0f));
+    amp->addChild (percent (ampGate, "Amp Gate", 0.0f));
+    amp->addChild (levelParam (ampLevel, "Amp Level"));
+
+    // ------------------------------------------------------------------ CAB
+    auto cab = std::make_unique<Group> ("cab", "Cab", "|");
+    cab->addChild (toggle (cabOn, "Cab On", false));
+    cab->addChild (std::make_unique<juce::AudioParameterChoice> (pid (cabType), "Cab Type", ParamChoices::cabTypes, 3));
+    cab->addChild (percent (cabMic, "Cab Mic Position", 30.0f));
+    cab->addChild (percent (cabDist, "Cab Mic Distance", 20.0f));
+    cab->addChild (freqParam (cabLowCut, "Cab Low Cut", 20.0f, 400.0f, 80.0f, 60.0f));
+    cab->addChild (std::make_unique<juce::AudioParameterFloat> (
+        pid (cabHighCut), "Cab High Cut", skewedRange (2000.0f, 20000.0f, 7000.0f, 1.0f), 20000.0f,
+        Attr().withLabel ("Hz").withStringFromValueFunction ([] (float v, int) { return v >= 19900.0f ? juce::String ("Off") : formatHz (v); })));
+    cab->addChild (levelParam (cabLevel, "Cab Level"));
+
     // ------------------------------------------------------------------ CHAIN ORDER
     auto chain = std::make_unique<Group> ("chain", "Chain", "|");
     for (int b = 0; b < Chain::numBlocks; ++b)
@@ -292,6 +329,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     out->addChild (toggle (bypass, "Bypass", false));
 
     layout.add (std::move (hive), std::move (swarm), std::move (fz), std::move (flow),
-                std::move (comb), std::move (carve), std::move (crypt), std::move (chain), std::move (out));
+                std::move (comb), std::move (carve), std::move (crypt), std::move (amp), std::move (cab), std::move (chain), std::move (out));
     return layout;
 }

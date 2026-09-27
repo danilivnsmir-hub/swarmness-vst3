@@ -165,3 +165,64 @@ private:
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ReverbPage)
 };
+
+//==============================================================================
+/**
+ * CHARACTER as a wide morph bar between the channel's two reference amps:
+ *   CHROME  <----(o)---->  BLACKFACE     (the name of the amp in between shows at the middle)
+ */
+class CharacterSlider : public RightClickSafeSlider
+{
+public:
+    CharacterSlider();
+    std::function<int()> getChannel;
+    void paint (juce::Graphics&) override;
+};
+
+/** AMP + CAB, on the FX page under SMOKE / SWARM / WINGS. */
+class AmpCabSection : public juce::Component,
+                      public juce::FileDragAndDropTarget
+{
+public:
+    explicit AmpCabSection (SwarmnessAudioProcessor&);
+
+    void paint (juce::Graphics&) override;
+    void resized() override;
+    void tick();
+
+    bool isInterestedInFileDrag (const juce::StringArray&) override;
+    void fileDragMove (const juce::StringArray&, int x, int y) override;
+    void fileDragExit (const juce::StringArray&) override { dragTarget = 0; repaint(); }
+    void filesDropped (const juce::StringArray&, int x, int y) override;
+
+private:
+    void loadNam (const juce::File&);
+    void loadCabIr (const juce::File&);
+    void choose (bool nam);
+    void setChoice (const char* id, int index);
+
+    SwarmnessAudioProcessor& processor;
+    juce::AudioProcessorValueTreeState& state;
+    juce::Rectangle<float> ampArea, cabArea, morphArea, curveArea;
+
+    PowerButton ampPower, cabPower;
+    SegmentedChoice channelSelector, cabSelector;
+    Knob gainKnob { "GAIN" }, bassKnob { "BASS" }, midKnob { "MID" }, trebleKnob { "TREBLE" };
+    Knob presenceKnob { "PRESENCE" }, depthKnob { "DEPTH" }, masterKnob { "MASTER" }, gateKnob { "GATE" }, levelKnob { "LEVEL", true };
+    CharacterSlider characterSlider;
+    juce::TextButton loadNamButton { "LOAD .NAM" }, toneButton { "TONE3000" }, clearNamButton { "CLEAR" };
+    Knob micKnob { "MIC" }, distKnob { "DISTANCE" }, lowCutKnob { "LOW CUT" }, highCutKnob { "HIGH CUT" }, cabLevelKnob { "LEVEL", true };
+    juce::TextButton loadIrButton { "LOAD IR" }, clearIrButton { "CLEAR" };
+
+    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>> buttonAttachments;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> characterAttachment;
+    std::unique_ptr<juce::FileChooser> chooser;
+
+    bool ampOn = false, cabOn = false, namMode = false, cabIrMode = false;
+    int channel = -1, cabType = -1, dragTarget = 0;   // dragTarget: 1 = AMP, 2 = CAB
+    float character = -1.0f, mic = -1.0f, dist = -1.0f;
+    juce::String namDescription, cabIrDescription, message;
+    int messageTicks = 0;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AmpCabSection)
+};

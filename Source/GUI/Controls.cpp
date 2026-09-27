@@ -927,10 +927,12 @@ void InfoOverlay::paint (juce::Graphics& g)
                       "The VENOM footswitch = self-oscillation; LINK drags SHIFT A / B in." },
         { "MANGLE",   "HIVE's MANGLE is one knob: sour detuned voices first, then random pitch jumps, then buzz / AM on top. "
                       "RAW = cheap-pedal-DSP character, DETUNE = width, MIX = dry vs voices (100% = voices only)." },
-        { "SWARM",    "Stereo chorus with bucket-brigade colour. DEEP = 8 voices with feedback. MIX 50% = dry and chorus both full, 100% = vibrato." },
+        { "SWARM",    "Stereo chorus with bucket-brigade colour (DEEP = 8 voices with feedback). WINGS = rhythmic gate: HARD = stutter, off = tremolo, SYNC = host tempo." },
         { "SMOKE",    "Jumbo fuzz. VOICE: DOWN doom / MID / UP scream. SCOOP = mid cut, GLARE = gated octave-up, GATE = starved sputter, SAG = breathing "
                       "(the pick sags, the note blooms), CLEAN = clean signal under the fuzz." },
-        { "WINGS",    "Rhythmic gate: HARD = stutter, off = tremolo. SYNC locks to the host tempo (DIV)." },
+        { "AMP",      "CLEAN / CRUNCH / LEAD amp models; CHARACTER morphs each between two reference amps (the middle is an amp of its own). "
+                      "NAM = a Neural Amp Modeler capture - LOAD .NAM or drop one, find thousands on TONE3000. GATE = noise gate in front." },
+        { "CAB",      "Speaker cabinet: four modelled cabinets (MIC = cap..edge, DISTANCE = grille..room) or your own IR (LOAD IR or drop a WAV)." },
         { "CHAIN",    "The strip under the header is the signal chain. Drag a block to reorder it (fuzz before or after the pitch, reverb into the fuzz...), "
                       "click it to open its page, click its LED to switch it on / off, right-click for MIDI learn. Drag it UP / DOWN for parallel paths A / B (an empty path = dry), "
                       "the knob at the merge balances A and B. Order and paths are saved with presets." },
@@ -938,11 +940,10 @@ void InfoOverlay::paint (juce::Graphics& g)
                       "wheel = Q, double-click = reset; the output spectrum runs behind the curve." },
         { "CRYPT",    "Reverb: ROOM / PLATE / HALL / ABYSS or your own IR (LOAD IR or drop a file). DUCK dips the tail while you play, "
                       "LOW CUT keeps it out of the low end. Switching it off lets the tail ring out." },
-        { "SWITCHES", "MOMENTARY = active while held, LATCH = click on / off. Footswitches work even while bypassed." },
         { "MIDI",     "Right-click ANY control for MIDI learn: switches toggle on each press, selectors step, knobs follow the CC. "
                       "One pedal can drive several controls (e.g. ON and WINGS)." },
         { "LEVELS",   "INPUT sets how hard the effects are hit (aim for the green zone of the IN meter); it is compensated at the output. "
-                      "VOLUME = output level." },
+                      "VOLUME = output level. Footswitches: MOMENTARY = while held, LATCH = click on / off (they work even while bypassed)." },
         { "PRESETS",  "FACTORY / USER tabs pick the bank that the list and the < > arrows browse. SAVE stores your sound in USER "
                       "(an edited factory preset becomes a new user preset). Hover the name for the preset's description." },
     };

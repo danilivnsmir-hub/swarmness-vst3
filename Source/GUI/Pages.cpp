@@ -890,3 +890,356 @@ void ReverbPage::chooseFile()
                                   safe->load (fc.getResult());
                           });
 }
+
+//==============================================================================
+CharacterSlider::CharacterSlider()
+{
+    setSliderStyle (juce::Slider::LinearHorizontal);
+    setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
+    setDoubleClickReturnValue (true, 50.0);
+    setMouseCursor (juce::MouseCursor::LeftRightResizeCursor);
+}
+
+void CharacterSlider::paint (juce::Graphics& g)
+{
+    const int chn = getChannel != nullptr ? getChannel() : 0;
+    const float t = (float) valueToProportionOfLength (getValue());
+    auto r = getLocalBounds().toFloat();
+
+    // names: reference A on the left, B on the right, the amp in between in the middle
+    auto names = r.removeFromTop (22.0f);
+    g.setFont (displayFont (17.0f));
+    auto nameAlpha = [t] (float centre) { return 0.35f + 0.65f * juce::jmax (0.0f, 1.0f - std::abs (t - centre) * 2.2f); };
+    g.setColour (Colours::accent.withAlpha (nameAlpha (0.0f)));
+    g.drawText (AmpBlock::referenceName (chn, 0), names, juce::Justification::centredLeft, false);
+    g.setColour (Colours::accent.withAlpha (nameAlpha (1.0f)));
+    g.drawText (AmpBlock::referenceName (chn, 1), names, juce::Justification::centredRight, false);
+    g.setColour (Colours::accentBright.withAlpha (nameAlpha (0.5f)));
+    g.drawText (AmpBlock::modelName (chn, 0.5f), names, juce::Justification::centred, false);
+
+    // the bar: honey filling from the centre towards the side it leans to
+    auto track = r.withSizeKeepingCentre (r.getWidth() - 16.0f, 8.0f).translated (0.0f, -4.0f);
+    g.setColour (Colours::inset);
+    g.fillRoundedRectangle (track, 4.0f);
+    g.setColour (Colours::panelBorder);
+    g.drawRoundedRectangle (track, 4.0f, 1.0f);
+    const float x = track.getX() + t * track.getWidth(), cx = track.getCentreX();
+    auto fill = juce::Rectangle<float> (juce::jmin (x, cx), track.getY(), std::abs (x - cx), track.getHeight());
+    g.setGradientFill (honeyGradient (fill.expanded (0.0f, 4.0f)));
+    g.fillRoundedRectangle (fill, 4.0f);
+    for (float tick : { 0.0f, 0.3f, 0.5f, 0.7f, 1.0f })
+    {
+        const float tx = track.getX() + tick * track.getWidth();
+        g.setColour (Colours::textFaint);
+        g.fillRect (tx - 0.5f, track.getBottom() + 3.0f, 1.0f, tick == 0.5f ? 7.0f : 4.0f);
+    }
+
+    // hex thumb
+    const auto thumb = juce::Rectangle<float> (22.0f, 20.0f).withCentre ({ x, track.getCentreY() });
+    g.setColour (juce::Colours::black.withAlpha (0.6f));
+    g.fillPath (hexagon (thumb.translated (0.0f, 2.0f)));
+    g.setGradientFill (honeyGradient (thumb));
+    g.fillPath (hexagon (thumb));
+    g.setColour (Colours::accentDeep);
+    g.strokePath (hexagon (thumb), juce::PathStrokeType (1.2f));
+
+    // the blend under the bar
+    g.setFont (font (12.5f, true));
+    g.setColour (Colours::textDim);
+    const int pct = juce::roundToInt (t * 100.0f);
+    g.drawText (juce::String (100 - pct) + "% " + AmpBlock::referenceName (chn, 0) + "  /  " + juce::String (pct) + "% " + AmpBlock::referenceName (chn, 1),
+                r.removeFromBottom (16.0f), juce::Justification::centred, false);
+}
+
+//==============================================================================
+AmpCabSection::AmpCabSection (SwarmnessAudioProcessor& p)
+    : processor (p), state (p.getAPVTS()),
+      channelSelector (*p.getAPVTS().getParameter (ParamIDs::ampChannel), { "CLEAN", "CRUNCH", "LEAD", "NAM" }),
+      cabSelector (*p.getAPVTS().getParameter (ParamIDs::cabType), { "1x12 OPEN", "2x12 OPEN", "4x12 BRIT", "4x12 MOD", "IR" })
+{
+    using namespace ParamIDs;
+    setBufferedToImage (true);
+
+    auto attachButton = [this] (juce::Button& b, const char* id, const juce::String& tip)
+    {
+        addAndMakeVisible (b);
+        b.setTooltip (tip);
+        MidiLearnable::tag (b, id);
+        buttonAttachments.push_back (std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (state, id, b));
+    };
+    attachButton (ampPower, ParamIDs::ampOn, "AMP on / off");
+    attachButton (cabPower, ParamIDs::cabOn, "CAB on / off");
+
+    channelSelector.setTooltip ("CLEAN / CRUNCH / LEAD: three amp models, each morphing between two reference amps with CHARACTER. "
+                                "NAM: a Neural Amp Modeler capture (.nam) - load one below, or find thousands on TONE3000");
+    cabSelector.setTooltip ("Modelled cabinets: 1x12 / 2x12 open-back combos, 4x12 BRIT (warm, mid-forward) and 4x12 MOD (tight, aggressive upper mids). "
+                            "IR = your cabinet impulse response");
+    addAndMakeVisible (channelSelector);
+    addAndMakeVisible (cabSelector);
+
+    gainKnob    .attach (state, ampGain,     "GAIN: preamp drive (NAM: input level into the capture, 5 = its own level)");
+    bassKnob    .attach (state, ampBass,     "BASS: the amp's passive tone stack (NAM: post EQ, 5 = flat)");
+    midKnob     .attach (state, ampMid,      "MID: the tone stack's mid control - the scoop lives here (NAM: post EQ, 5 = flat)");
+    trebleKnob  .attach (state, ampTreble,   "TREBLE (NAM: post EQ, 5 = flat)");
+    presenceKnob.attach (state, ampPresence, "PRESENCE: power-amp feedback - more bite and air up top");
+    depthKnob   .attach (state, ampDepth,    "DEPTH: power-amp resonance - the low-end thump of a closed cabinet");
+    masterKnob  .attach (state, ampMaster,   "MASTER: how hard the power amp is pushed - sag, compression and power-tube grind as it goes up");
+    gateKnob    .attach (state, ampGate,     "GATE: noise gate in front of the amp - silences hiss and hum between riffs (0 = off)");
+    levelKnob   .attach (state, ampLevel,    "LEVEL: AMP output level");
+    for (auto* k : { &gainKnob, &bassKnob, &midKnob, &trebleKnob, &presenceKnob, &depthKnob, &masterKnob, &gateKnob, &levelKnob })
+        addAndMakeVisible (k);
+
+    characterSlider.getChannel = [this] { return juce::jlimit (0, 2, (int) state.getRawParameterValue (ParamIDs::ampChannel)->load()); };
+    characterSlider.setTooltip ("CHARACTER: morphs the whole amp circuit between the channel's two reference amps - the middle is an amp of its own. "
+                                "Double-click = middle");
+    characterAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (state, ampChar, characterSlider);
+    MidiLearnable::tag (characterSlider, ampChar);
+    addAndMakeVisible (characterSlider);
+
+    loadNamButton.setTooltip ("Load a Neural Amp Modeler capture (.nam). Or drop one on the AMP panel");
+    loadNamButton.onClick = [this] { choose (true); };
+    toneButton.setTooltip ("Open TONE3000 in the browser - the free library of NAM captures and cabinet IRs. Download a .nam, then load or drop it here");
+    toneButton.onClick = [] { juce::URL ("https://www.tone3000.com/search?gear=amp").launchInDefaultBrowser(); };
+    clearNamButton.setTooltip ("Forget the NAM capture");
+    clearNamButton.onClick = [this] { processor.clearNamModel(); message.clear(); };
+    for (auto* b : { &loadNamButton, &toneButton, &clearNamButton })
+        addChildComponent (b);
+
+    micKnob     .attach (state, cabMic,     "MIC: microphone position - 0 = on the dust cap (bright, aggressive), 100 = at the edge of the cone (darker, smoother)");
+    distKnob    .attach (state, cabDist,    "DISTANCE: 0 = right on the grille (proximity bass), 100 = back in the room (floor reflection, lighter bass)");
+    lowCutKnob  .attach (state, cabLowCut,  "LOW CUT: 12 dB/oct high-pass after the cabinet");
+    highCutKnob .attach (state, cabHighCut, "HIGH CUT: 12 dB/oct low-pass after the cabinet (all the way up = off)");
+    cabLevelKnob.attach (state, cabLevel,   "LEVEL: CAB output level");
+    for (auto* k : { &micKnob, &distKnob, &lowCutKnob, &highCutKnob, &cabLevelKnob })
+        addAndMakeVisible (k);
+
+    loadIrButton.setTooltip ("Load a cabinet impulse response (WAV / AIFF / FLAC). Or drop one on the CAB panel");
+    loadIrButton.onClick = [this] { choose (false); };
+    clearIrButton.setTooltip ("Forget the cabinet IR");
+    clearIrButton.onClick = [this] { processor.clearCabIR(); message.clear(); };
+    addAndMakeVisible (loadIrButton);
+    addAndMakeVisible (clearIrButton);
+}
+
+void AmpCabSection::resized()
+{
+    const float w = (float) getWidth(), h = (float) getHeight();
+    ampArea = { 0.0f, 0.0f, 690.0f, h };
+    cabArea = { 702.0f, 0.0f, w - 702.0f, h };
+
+    ampPower.setBounds ((int) ampArea.getRight() - 40, 8, 26, 26);
+    channelSelector.setBounds ((int) ampArea.getRight() - 52 - 300, 10, 300, 24);
+    {
+        const std::initializer_list<Knob*> row { &gainKnob, &bassKnob, &midKnob, &trebleKnob, &presenceKnob, &depthKnob, &masterKnob };
+        const float step = (ampArea.getWidth() - 20.0f) / (float) row.size();
+        int i = 0;
+        for (auto* k : row)
+            k->setBounds ((int) (10.0f + step * ((float) i++ + 0.5f)) - 36, 42, 72, 102);
+    }
+    morphArea = { 16.0f, 150.0f, 490.0f, h - 160.0f };
+    characterSlider.setBounds (morphArea.reduced (14.0f, 10.0f).toNearestInt());
+    {
+        auto buttons = morphArea.reduced (14.0f, 0.0f).removeFromBottom (40.0f).withTrimmedBottom (8.0f).toNearestInt();
+        loadNamButton.setBounds (buttons.removeFromLeft (130));
+        buttons.removeFromLeft (8);
+        toneButton.setBounds (buttons.removeFromLeft (120));
+        buttons.removeFromLeft (8);
+        clearNamButton.setBounds (buttons.removeFromLeft (80));
+    }
+    gateKnob .setBounds ((int) morphArea.getRight() + 20, 146, 72, 102);
+    levelKnob.setBounds (gateKnob.getRight() + 8, 146, 72, 102);
+
+    cabPower.setBounds ((int) cabArea.getRight() - 40, 8, 26, 26);
+    cabSelector.setBounds ((int) cabArea.getX() + 14, 40, (int) cabArea.getWidth() - 28, 24);
+    {
+        const std::initializer_list<Knob*> row { &micKnob, &distKnob, &lowCutKnob, &highCutKnob, &cabLevelKnob };
+        const float step = (cabArea.getWidth() - 12.0f) / (float) row.size();
+        int i = 0;
+        for (auto* k : row)
+            k->setBounds ((int) (cabArea.getX() + 6.0f + step * ((float) i++ + 0.5f)) - 34, 70, 68, 100);
+    }
+    curveArea = { cabArea.getX() + 14.0f, 176.0f, cabArea.getWidth() - 28.0f - 104.0f, h - 186.0f };
+    loadIrButton .setBounds ((int) curveArea.getRight() + 8, (int) curveArea.getY(), 96, 28);
+    clearIrButton.setBounds ((int) curveArea.getRight() + 8, (int) curveArea.getY() + 34, 96, 28);
+}
+
+void AmpCabSection::paint (juce::Graphics& g)
+{
+    drawPanel (g, ampArea);
+    drawPanel (g, cabArea);
+    const juce::String model = namMode ? juce::String ("neural capture") : juce::String (AmpBlock::modelName (juce::jmax (0, channel), character)).toLowerCase();
+    drawPanelTitle (g, ampArea, "AMP", model, ampOn);
+    drawPanelTitle (g, cabArea, "CAB", {}, cabOn);
+
+    // CHARACTER / NAM box
+    g.setColour (Colours::inset);
+    g.fillRoundedRectangle (morphArea, 6.0f);
+    g.setColour (dragTarget == 1 ? Colours::accentBright : Colours::panelBorder);
+    g.drawRoundedRectangle (morphArea, 6.0f, dragTarget == 1 ? 2.0f : 1.0f);
+    if (namMode)
+    {
+        auto t = morphArea.reduced (14.0f, 10.0f);
+        g.setFont (font (15.0f, true));
+        g.setColour (namDescription.isNotEmpty() ? Colours::text : Colours::textDim);
+        g.drawFittedText (namDescription.isNotEmpty() ? namDescription : juce::String ("no capture loaded"), t.removeFromTop (22.0f).toNearestInt(),
+                          juce::Justification::centredLeft, 1, 0.8f);
+        g.setFont (font (12.5f));
+        g.setColour (message.isNotEmpty() ? Colours::ledRed : Colours::textFaint);
+        g.drawFittedText (message.isNotEmpty() ? message
+                                               : juce::String ("Drop a .nam here or find one on TONE3000. GAIN drives it, BASS..DEPTH = post EQ."),
+                          t.removeFromTop (18.0f).toNearestInt(), juce::Justification::topLeft, 1, 0.85f);
+    }
+
+    // CAB: the response of the modelled cabinet, or the loaded IR
+    g.setColour (Colours::inset);
+    g.fillRoundedRectangle (curveArea, 5.0f);
+    g.setColour (dragTarget == 2 ? Colours::accentBright : Colours::panelBorder);
+    g.drawRoundedRectangle (curveArea, 5.0f, dragTarget == 2 ? 2.0f : 1.0f);
+    if (cabIrMode)
+    {
+        auto t = curveArea.reduced (10.0f, 6.0f);
+        g.setFont (font (13.5f, true));
+        g.setColour (cabIrDescription.isNotEmpty() ? Colours::text : Colours::textDim);
+        g.drawFittedText (cabIrDescription.isNotEmpty() ? cabIrDescription : juce::String ("no IR loaded"), t.removeFromTop (20.0f).toNearestInt(),
+                          juce::Justification::centredLeft, 1, 0.8f);
+        g.setFont (font (12.0f));
+        g.setColour (message.isNotEmpty() && dragTarget == 0 ? Colours::ledRed : Colours::textFaint);
+        g.drawFittedText (cabIrDescription.isEmpty() ? juce::String ("Load or drop a cabinet IR") : juce::String ("MIC / DISTANCE shape the modelled cabinets only"),
+                          t.toNearestInt(), juce::Justification::topLeft, 2, 1.0f);
+    }
+    else if (cabType >= 0)
+    {
+        juce::Path curve;
+        const auto a = curveArea.reduced (4.0f, 6.0f);
+        for (int i = 0; i <= 80; ++i)
+        {
+            const double hz = 50.0 * std::pow (12000.0 / 50.0, i / 80.0);
+            const float db = juce::jlimit (-36.0f, 12.0f, CabBlock::responseDb (cabType, mic, dist, (float) hz));
+            const float x = a.getX() + a.getWidth() * (float) i / 80.0f;
+            const float y = a.getY() + a.getHeight() * (12.0f - db) / 48.0f;
+            if (i == 0) curve.startNewSubPath (x, y); else curve.lineTo (x, y);
+        }
+        g.setColour (Colours::accent.withAlpha (cabOn ? 0.9f : 0.4f));
+        g.strokePath (curve, juce::PathStrokeType (1.6f));
+        g.setFont (font (11.0f));
+        g.setColour (Colours::textFaint);
+        g.drawText ("50", a.withTrimmedBottom (0.0f), juce::Justification::bottomLeft, false);
+        g.drawText ("12k", a, juce::Justification::bottomRight, false);
+    }
+}
+
+void AmpCabSection::tick()
+{
+    const bool nowAmp = ampPower.getToggleState(), nowCab = cabPower.getToggleState();
+    const int nowChannel = juce::roundToInt (state.getRawParameterValue (ParamIDs::ampChannel)->load());
+    const float nowChar = state.getRawParameterValue (ParamIDs::ampChar)->load() * 0.01f;
+    const int nowType = juce::roundToInt (state.getRawParameterValue (ParamIDs::cabType)->load());
+    const float nowMic = state.getRawParameterValue (ParamIDs::cabMic)->load() * 0.01f;
+    const float nowDist = state.getRawParameterValue (ParamIDs::cabDist)->load() * 0.01f;
+    const auto nowNam = processor.getNamModelDescription(), nowIr = processor.getCabIRDescription();
+    if (messageTicks > 0 && --messageTicks == 0)
+    {
+        message.clear();
+        repaint();
+    }
+    if (nowAmp != ampOn || nowCab != cabOn || nowChannel != channel || std::abs (nowChar - character) > 0.001f || nowType != cabType
+        || std::abs (nowMic - mic) > 0.001f || std::abs (nowDist - dist) > 0.001f || nowNam != namDescription || nowIr != cabIrDescription)
+    {
+        const bool channelChanged = nowChannel != channel;
+        ampOn = nowAmp; cabOn = nowCab; channel = nowChannel; character = nowChar;
+        cabType = nowType; mic = nowMic; dist = nowDist; namDescription = nowNam; cabIrDescription = nowIr;
+        namMode = channel == AmpBlock::nam;
+        cabIrMode = cabType == CabBlock::ir;
+        characterSlider.setVisible (! namMode);
+        for (auto* b : { &loadNamButton, &toneButton, &clearNamButton })
+            b->setVisible (namMode);
+        clearNamButton.setEnabled (namDescription.isNotEmpty());
+        clearIrButton.setEnabled (cabIrDescription.isNotEmpty());
+        masterKnob.setAlpha (namMode ? 0.35f : 1.0f);
+        if (channelChanged)
+            characterSlider.repaint();
+        for (auto* k : { &micKnob, &distKnob })
+            k->setAlpha (cabIrMode ? 0.35f : 1.0f);
+        repaint();
+    }
+}
+
+bool AmpCabSection::isInterestedInFileDrag (const juce::StringArray& files)
+{
+    for (const auto& f : files)
+        if (juce::File (f).hasFileExtension ("nam;wav;aif;aiff;flac;ogg"))
+            return true;
+    return false;
+}
+
+void AmpCabSection::fileDragMove (const juce::StringArray& files, int x, int)
+{
+    // a .nam always goes to the AMP, an audio file to the CAB
+    int target = 0;
+    for (const auto& f : files)
+        target = juce::File (f).hasFileExtension ("nam") ? 1 : 2;
+    juce::ignoreUnused (x);
+    if (target != dragTarget)
+    {
+        dragTarget = target;
+        repaint();
+    }
+}
+
+void AmpCabSection::filesDropped (const juce::StringArray& files, int, int)
+{
+    dragTarget = 0;
+    for (const auto& f : files)
+    {
+        const juce::File file (f);
+        if (file.hasFileExtension ("nam")) { loadNam (file); break; }
+        if (file.hasFileExtension ("wav;aif;aiff;flac;ogg")) { loadCabIr (file); break; }
+    }
+    repaint();
+}
+
+void AmpCabSection::setChoice (const char* id, int index)
+{
+    if (auto* param = state.getParameter (id))
+    {
+        param->beginChangeGesture();
+        param->setValueNotifyingHost (param->convertTo0to1 ((float) index));
+        param->endChangeGesture();
+    }
+}
+
+void AmpCabSection::loadNam (const juce::File& file)
+{
+    message = processor.loadNamModel (file);
+    messageTicks = message.isNotEmpty() ? 150 : 0;
+    if (message.isEmpty())
+        setChoice (ParamIDs::ampChannel, AmpBlock::nam);   // loading a capture means you want to hear it
+    repaint();
+}
+
+void AmpCabSection::loadCabIr (const juce::File& file)
+{
+    message = processor.loadCabIR (file);
+    messageTicks = message.isNotEmpty() ? 150 : 0;
+    if (message.isEmpty())
+        setChoice (ParamIDs::cabType, CabBlock::ir);
+    repaint();
+}
+
+void AmpCabSection::choose (bool nam)
+{
+    const auto current = nam ? processor.getNamModelFile() : processor.getCabIRFile();
+    chooser = std::make_unique<juce::FileChooser> (nam ? "Load a NAM capture" : "Load a cabinet impulse response",
+                                                   current.existsAsFile() ? current.getParentDirectory()
+                                                                          : juce::File::getSpecialLocation (juce::File::userHomeDirectory),
+                                                   nam ? "*.nam" : "*.wav;*.aif;*.aiff;*.flac;*.ogg");
+    juce::Component::SafePointer<AmpCabSection> safe (this);
+    chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+                          [safe, nam] (const juce::FileChooser& fc)
+                          {
+                              if (safe == nullptr || ! fc.getResult().existsAsFile())
+                                  return;
+                              if (nam) safe->loadNam (fc.getResult());
+                              else     safe->loadCabIr (fc.getResult());
+                          });
+}

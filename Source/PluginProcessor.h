@@ -9,6 +9,8 @@
 #include "DSP/FlowGate.h"
 #include "DSP/Equalisers.h"
 #include "DSP/ReverbStage.h"
+#include "DSP/AmpBlock.h"
+#include "DSP/CabBlock.h"
 #include "DSP/SpectrumTap.h"
 #include "Preset/PresetManager.h"
 
@@ -18,7 +20,8 @@
 
 class SwarmnessAudioProcessor : public juce::AudioProcessor,
                                 private juce::AudioProcessorValueTreeState::Listener,
-                                private juce::AsyncUpdater
+                                private juce::AsyncUpdater,
+                                private juce::Timer
 {
 public:
     SwarmnessAudioProcessor();
@@ -94,6 +97,20 @@ public:
     std::vector<float> getReverbIREnvelope() const; // peak envelope (0..1) for the editor, empty = none
     double getReverbIRSeconds() const;
 
+    /** AMP: a Neural Amp Modeler capture (.nam), message thread. Returns an error message, empty on success. */
+    juce::String loadNamModel (const juce::File&);
+    void clearNamModel();
+    juce::File getNamModelFile() const;
+    juce::String getNamModelDescription() const;   // "name - WaveNet, 48 kHz" (empty = none)
+
+    /** CAB: a loaded cabinet impulse response (message thread). */
+    juce::String loadCabIR (const juce::File&);
+    void clearCabIR();
+    juce::File getCabIRFile() const;
+    juce::String getCabIRDescription() const;
+    /** Rebuilds the modelled cabinet IR when its settings changed (message thread; also run by a timer). */
+    void updateCabModel (bool force = false);
+
     /** Editor scale factor, persisted with the plug-in state. */
     float getUiScale() const noexcept     { return uiScale.load(); }
     void setUiScale (float scale) noexcept { uiScale = scale; }
@@ -139,6 +156,7 @@ private:
     // scene on the message thread
     void parameterChanged (const juce::String& parameterID, float newValue) override;
     void handleAsyncUpdate() override;
+    void timerCallback() override;
     std::atomic<int> pendingScene { 0 };
     bool restoringState = false;
     juce::Array<juce::RangedAudioParameter*> learnableParams;   // index = binding param
@@ -179,6 +197,11 @@ private:
         std::atomic<float>* revOn {};      std::atomic<float>* revType {};     std::atomic<float>* revMix {};
         std::atomic<float>* revDecay {};   std::atomic<float>* revSize {};     std::atomic<float>* revPreDelay {};
         std::atomic<float>* revTone {};    std::atomic<float>* revLowCut {};   std::atomic<float>* revMod {};     std::atomic<float>* revDuck {};
+        std::atomic<float>* ampOn {};      std::atomic<float>* ampChannel {};  std::atomic<float>* ampChar {};     std::atomic<float>* ampGain {};
+        std::atomic<float>* ampBass {};    std::atomic<float>* ampMid {};      std::atomic<float>* ampTreble {};   std::atomic<float>* ampPresence {};
+        std::atomic<float>* ampDepth {};   std::atomic<float>* ampMaster {};   std::atomic<float>* ampGate {};     std::atomic<float>* ampLevel {};
+        std::atomic<float>* cabOn {};      std::atomic<float>* cabType {};     std::atomic<float>* cabMic {};      std::atomic<float>* cabDist {};
+        std::atomic<float>* cabLowCut {};  std::atomic<float>* cabHighCut {};  std::atomic<float>* cabLevel {};
         std::array<std::atomic<float>*, Chain::numBlocks> chainSlots {}, chainLanes {};
         std::array<std::atomic<float>*, Chain::maxSplits> parMix {};
     } p;
@@ -208,6 +231,8 @@ private:
     swarm::GraphicEq    comb;
     swarm::ParametricEq carve;
     ReverbStage        crypt;
+    AmpBlock           amp;
+    CabBlock           cab;
 
     Chain::Layout activeLayout { Chain::defaultOrder(), {} };
     juce::SmoothedValue<float> chainFade;   // dips the chain output while the order / routing changes
@@ -222,6 +247,11 @@ private:
     std::vector<float> reverbIREnvelope;
     double reverbIRSeconds = 0.0;
     juce::CriticalSection irInfoLock;
+    juce::File namFile, cabIRFile;
+    juce::String namDescription, cabIRDescription;
+    int cabModelKey = -1;   // type / mic / distance / rate the modelled cabinet IR was built for
+    double cabModelRate = 0.0;
+    juce::CriticalSection cabModelLock;
 
     juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::None> dryDelay { 1 };
     juce::AudioBuffer<float> dryBuffer;
