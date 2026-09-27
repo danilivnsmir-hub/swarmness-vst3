@@ -74,6 +74,9 @@ SwarmnessAudioProcessor::SwarmnessAudioProcessor()
         p.parMix[(size_t) sp] = get (Chain::parallelMixIds[sp]);
 
     bypassParam = dynamic_cast<juce::AudioParameterBool*> (apvts.getParameter (id::bypass));
+    for (auto* param : getParameters())
+        if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (param))
+            learnableParams.add (ranged);
     jassert (bypassParam != nullptr);
 
     presetManager = std::make_unique<PresetManager> (apvts);
@@ -657,15 +660,53 @@ juce::String SwarmnessAudioProcessor::getReverbIRDescription() const
 }
 
 //==============================================================================
-static const char* midiTargetParam (int target)
+int SwarmnessAudioProcessor::indexOfParam (const juce::String& paramID) const noexcept
 {
-    switch (target)
+    for (int i = 0; i < learnableParams.size(); ++i)
+        if (learnableParams.getUnchecked (i)->paramID == paramID)
+            return i;
+    return -1;
+}
+
+void SwarmnessAudioProcessor::startMidiLearn (const juce::String& paramID) noexcept
+{
+    midiLearnParam.store (indexOfParam (paramID));
+}
+
+juce::String SwarmnessAudioProcessor::getMidiLearnParam() const
+{
+    const int i = midiLearnParam.load();
+    return juce::isPositiveAndBelow (i, learnableParams.size()) ? learnableParams.getUnchecked (i)->paramID : juce::String();
+}
+
+void SwarmnessAudioProcessor::clearMidiBindings (const juce::String& paramID) noexcept
+{
+    const int index = indexOfParam (paramID);
+    for (auto& b : midiBindings)
+        if (index >= 0 && b.param.load() == index)
+        {
+            b.kind.store (0);
+            b.param.store (-1);
+        }
+}
+
+juce::String SwarmnessAudioProcessor::describeMidiBinding (const juce::String& paramID) const
+{
+    const int index = indexOfParam (paramID);
+    juce::StringArray parts;
+    for (const auto& b : midiBindings)
     {
-        case 0:  return ParamIDs::oct1;
-        case 1:  return ParamIDs::oct2;
-        case 2:  return ParamIDs::magicHold;
-        default: return ParamIDs::bypass;
+        if (index < 0 || b.param.load() != index)
+            continue;
+        const int n = b.number.load();
+        switch ((MidiKind) b.kind.load())
+        {
+            case MidiKind::cc:   parts.add ("CC " + juce::String (n)); break;
+            case MidiKind::note: parts.add ("Note " + juce::MidiMessage::getMidiNoteName (n, true, true, 3)); break;
+            case MidiKind::none: break;
+        }
     }
+    return parts.joinIntoString (", ");
 }
 
 void SwarmnessAudioProcessor::handleMidi (const juce::MidiBuffer& midi)
@@ -679,55 +720,72 @@ void SwarmnessAudioProcessor::handleMidi (const juce::MidiBuffer& midi)
 
         const int number = isCC ? msg.getControllerNumber() : msg.getNoteNumber();
         const int kind   = isCC ? (int) MidiKind::cc : (int) MidiKind::note;
-        const bool pressed = isCC ? msg.getControllerValue() >= 64 : msg.isNoteOn();
+        const int ccValue = isCC ? msg.getControllerValue() : (msg.isNoteOn() ? 127 : 0);
+        const bool pressed = isCC ? ccValue >= 64 : msg.isNoteOn();
 
-        // Learn: the first CC / note-on after "MIDI Learn" becomes the binding
-        const int learn = midiLearnTarget.load();
+        // Learn: the first CC / note-on after "MIDI Learn" becomes a binding (added to any others)
+        const int learn = midiLearnParam.load();
         if (learn >= 0 && (isCC || msg.isNoteOn()))
         {
-            midiMap[(size_t) learn].kind.store (kind);
-            midiMap[(size_t) learn].number.store (number);
-            midiMap[(size_t) learn].down.store (false);
-            midiLearnTarget.store (-1);
+            MidiBinding* slot = nullptr;
+            for (auto& b : midiBindings)
+                if (b.param.load() == learn && b.kind.load() == kind && b.number.load() == number)
+                    slot = &b;                                    // already bound
+            for (auto& b : midiBindings)
+                if (slot == nullptr && b.param.load() < 0)
+                    slot = &b;
+            if (slot != nullptr)
+            {
+                slot->kind.store (kind);
+                slot->number.store (number);
+                slot->down.store (pressed);                        // the learning press does not also switch
+                slot->param.store (learn);
+            }
+            midiLearnParam.store (-1);
             continue;
         }
 
-        for (int t = 0; t < kNumMidiTargets; ++t)
+        for (auto& b : midiBindings)
         {
-            auto& b = midiMap[(size_t) t];
-            if (b.kind.load() == kind && b.number.load() == number && b.down.load() != pressed)
+            const int index = b.param.load();
+            if (index < 0 || b.kind.load() != kind || b.number.load() != number)
+                continue;
+            if (auto* param = learnableParams[index])
             {
-                b.down.store (pressed);
-                applyFootswitch (t, pressed);
+                const bool wasDown = b.down.exchange (pressed);
+                const bool continuous = dynamic_cast<juce::AudioParameterBool*> (param) == nullptr
+                                     && dynamic_cast<juce::AudioParameterChoice*> (param) == nullptr;
+                if (continuous ? isCC : wasDown != pressed)
+                    applyMidi (*param, isCC, ccValue, pressed);
             }
         }
     }
 }
 
-void SwarmnessAudioProcessor::applyFootswitch (int target, bool pressed)
+void SwarmnessAudioProcessor::applyMidi (juce::RangedAudioParameter& param, bool isCC, int ccValue, bool pressed)
 {
-    auto* param = apvts.getParameter (midiTargetParam (target));
-    if (param == nullptr)
-        return;
-
-    const bool momentary = apvts.getRawParameterValue (ParamIDs::switchMode)->load() < 0.5f;
-    if (target < 3 && momentary)
-        param->setValueNotifyingHost (pressed ? 1.0f : 0.0f);      // held = on
-    else if (pressed)
-        param->setValueNotifyingHost (param->getValue() >= 0.5f ? 0.0f : 1.0f);   // latch / ON: toggle per press
-}
-
-juce::String SwarmnessAudioProcessor::describeMidiBinding (int target) const
-{
-    const auto& b = midiMap[(size_t) juce::jlimit (0, kNumMidiTargets - 1, target)];
-    const int n = b.number.load();
-    switch ((MidiKind) b.kind.load())
+    if (dynamic_cast<juce::AudioParameterBool*> (&param) != nullptr)
     {
-        case MidiKind::cc:   return "CC " + juce::String (n);
-        case MidiKind::note: return "Note " + juce::MidiMessage::getMidiNoteName (n, true, true, 3);
-        case MidiKind::none: break;
+        const auto& id = param.paramID;
+        const bool footswitch = id == ParamIDs::oct1 || id == ParamIDs::oct2 || id == ParamIDs::magicHold;
+        const bool momentary = apvts.getRawParameterValue (ParamIDs::switchMode)->load() < 0.5f;
+        if (footswitch && momentary)
+            param.setValueNotifyingHost (pressed ? 1.0f : 0.0f);                           // held = on
+        else if (pressed)
+            param.setValueNotifyingHost (param.getValue() >= 0.5f ? 0.0f : 1.0f);          // toggle per press
+        return;
     }
-    return {};
+    if (auto* choice = dynamic_cast<juce::AudioParameterChoice*> (&param))
+    {
+        if (pressed)
+        {
+            const int n = choice->choices.size();
+            param.setValueNotifyingHost (param.convertTo0to1 ((float) ((choice->getIndex() + 1) % juce::jmax (1, n))));
+        }
+        return;
+    }
+    if (isCC)
+        param.setValueNotifyingHost ((float) ccValue / 127.0f);
 }
 
 //==============================================================================
@@ -743,9 +801,11 @@ void SwarmnessAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
     state.setProperty ("pluginVersion", JucePlugin_VersionString, nullptr);
     state.setProperty ("uiScale", uiScale.load(), nullptr);
     state.setProperty ("reverbIR", getReverbIRFile().getFullPathName(), nullptr);
-    for (int t = 0; t < kNumMidiTargets; ++t)
-        state.setProperty ("midi" + juce::String (t),
-                           juce::String (midiMap[(size_t) t].kind.load()) + ":" + juce::String (midiMap[(size_t) t].number.load()), nullptr);
+    juce::StringArray bindings;
+    for (const auto& b : midiBindings)
+        if (const int index = b.param.load(); index >= 0 && b.kind.load() != 0)
+            bindings.add (learnableParams[index]->paramID + ":" + juce::String (b.kind.load()) + ":" + juce::String (b.number.load()));
+    state.setProperty ("midiBindings", bindings.joinIntoString (";"), nullptr);
 
     if (auto xml = state.createXml())
         copyXmlToBinary (*xml, destData);
@@ -759,13 +819,42 @@ void SwarmnessAudioProcessor::setStateInformation (const void* data, int sizeInB
         {
             auto tree = juce::ValueTree::fromXml (*xml);
             uiScale = juce::jlimit (0.7f, 2.0f, (float) tree.getProperty ("uiScale", 1.0f));
-            for (int t = 0; t < kNumMidiTargets; ++t)
+            // MIDI bindings ("paramID:kind:number;..."); up to beta.24 only the footswitches ("midi0".."midi3")
+            for (auto& b : midiBindings)
             {
-                const auto v = tree.getProperty ("midi" + juce::String (t), "0:-1").toString();
-                midiMap[(size_t) t].kind.store (juce::jlimit (0, 2, v.upToFirstOccurrenceOf (":", false, false).getIntValue()));
-                midiMap[(size_t) t].number.store (v.fromFirstOccurrenceOf (":", false, false).getIntValue());
-                midiMap[(size_t) t].down.store (false);
+                b.param.store (-1);
+                b.kind.store (0);
+                b.down.store (false);
             }
+            size_t next = 0;
+            auto addBinding = [&] (const juce::String& paramID, int kind, int number)
+            {
+                const int index = indexOfParam (paramID);
+                if (index < 0 || kind <= 0 || kind > 2 || number < 0 || next >= midiBindings.size())
+                    return;
+                auto& b = midiBindings[next++];
+                b.kind.store (kind);
+                b.number.store (number);
+                b.param.store (index);
+            };
+            for (const auto& entry : juce::StringArray::fromTokens (tree.getProperty ("midiBindings").toString(), ";", ""))
+            {
+                const auto parts = juce::StringArray::fromTokens (entry, ":", "");
+                if (parts.size() == 3)
+                    addBinding (parts[0], parts[1].getIntValue(), parts[2].getIntValue());
+            }
+            static const char* legacyTargets[] { ParamIDs::oct1, ParamIDs::oct2, ParamIDs::magicHold, ParamIDs::bypass };
+            for (int t = 0; t < 4; ++t)
+            {
+                const auto v = tree.getProperty ("midi" + juce::String (t)).toString();
+                if (v.isNotEmpty())
+                    addBinding (legacyTargets[t], v.upToFirstOccurrenceOf (":", false, false).getIntValue(),
+                                v.fromFirstOccurrenceOf (":", false, false).getIntValue());
+            }
+            tree.removeProperty ("midiBindings", nullptr);
+            for (int t = 0; t < 4; ++t)
+                tree.removeProperty ("midi" + juce::String (t), nullptr);
+
             // Sessions from older betas: STING + HIVE became one HIVE block (DIVE, separate RAW / DETUNE).
             std::map<juce::String, float> legacyValues;
             for (const auto& child : tree)

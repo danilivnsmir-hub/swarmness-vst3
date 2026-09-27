@@ -49,6 +49,13 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     chainStrip.getLayout = [this] { return processor.getRequestedLayout(); };
     chainStrip.setLayout = [this] (const Chain::Layout& l) { processor.setChainLayout (l); };
     chainStrip.onBlockClicked = [this] (int block) { showPage (pageForBlock (block)); };
+    chainStrip.onBlockRightClick = [this] (int block)
+    {
+        if (auto* id = ChainStrip::powerParamFor (block))
+            showMidiMenu (id, &chainStrip);
+        else if (block == Chain::shift)
+            showMidiMenu (ParamIDs::oct1, &oct1Switch);   // SHIFT has no on / off: its footswitches are the controls
+    };
     chainStrip.isBlockActive = [this] (int block)
     {
         return (block == Chain::shift && processor.getMeters().noiseEngaged.load())
@@ -160,31 +167,14 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     oct2Switch  .setTooltip ("SHIFT B: transposes by the SHIFT B interval (wins over A, or adds to it with STACK) - works even while the plug-in is bypassed. Right-click: MIDI learn");
     magicSwitch .setTooltip ("VENOM: switches HIVE on and slams its trails into self-oscillation while held - works even with HIVE or the plug-in off. LINK switches bring SHIFT A / B along. Right-click: MIDI learn");
     bypassSwitch.setTooltip ("Plug-in on / bypass. The octave and VENOM footswitches still work while bypassed, like momentary pedals. Right-click: MIDI learn");
-    // MIDI learn: right-click a footswitch
-    {
-        int t = 0;
-        for (auto* f : { &oct1Switch, &oct2Switch, &magicSwitch, &bypassSwitch })
-        {
-            const int target = t++;
-            f->onRightClick = [this, target, f]
-            {
-                auto& proc = processor;
-                juce::PopupMenu menu;
-                const auto bound = proc.describeMidiBinding (target);
-                menu.addSectionHeader (bound.isNotEmpty() ? "MIDI: " + bound : juce::String ("MIDI: not assigned"));
-                if (proc.getMidiLearnTarget() == target)
-                    menu.addItem ("Cancel MIDI Learn", [&proc] { proc.cancelMidiLearn(); });
-                else
-                    menu.addItem ("MIDI Learn (press a pedal / key / CC)", [&proc, target] { proc.startMidiLearn (target); });
-                menu.addItem ("Clear MIDI", bound.isNotEmpty(), false, [&proc, target] { proc.clearMidiBinding (target); });
-                menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (f));
-            };
-        }
-    }
     attachButton (*this, link1Switch, linkOct1, "LINK: pressing VENOM also engages SHIFT A");
     attachButton (*this, link2Switch, linkOct2, "LINK: pressing VENOM also engages SHIFT B");
     for (auto* c : std::initializer_list<juce::Component*> { &oct1Switch, &oct2Switch, &magicSwitch, &bypassSwitch, &inMeter, &outMeter })
         addAndMakeVisible (c);
+
+    learnMarker.setInterceptsMouseClicks (false, false);
+    addChildComponent (learnMarker);
+    addMouseListener (this, true);   // right-clicks anywhere -> MIDI menu of the control under the mouse
 
     addChildComponent (infoOverlay);
 
@@ -197,6 +187,7 @@ void MainPanel::attachButton (juce::Component& parent, juce::Button& b, const ju
 {
     parent.addAndMakeVisible (b);
     b.setTooltip (tooltip);
+    MidiLearnable::tag (b, id);
     buttonAttachments.push_back (std::make_unique<APVTS::ButtonAttachment> (state, id, b));
 }
 
@@ -546,10 +537,23 @@ void MainPanel::tick()
     eqPage.tick();
     reverbPage.tick();
 
-    const int learning = processor.getMidiLearnTarget();
-    int t = 0;
+    // MIDI learn: the control waiting for a message pulses
+    const auto learning = processor.getMidiLearnParam();
     for (auto* f : { &oct1Switch, &oct2Switch, &magicSwitch, &bypassSwitch })
-        f->setLearning (learning == t++);
+        f->setLearning (learning.isNotEmpty() && MidiLearnable::paramOf (*f) == learning);
+    auto* target = learning.isNotEmpty() ? findLearnable (learning) : nullptr;
+    if (target != nullptr && dynamic_cast<Footswitch*> (target) == nullptr)
+    {
+        learnMarker.setBounds (getLocalArea (target, target->getLocalBounds()).expanded (4));
+        learnMarker.phase += 0.12f;
+        learnMarker.setVisible (true);
+        learnMarker.toFront (false);
+        learnMarker.repaint();
+    }
+    else
+    {
+        learnMarker.setVisible (false);
+    }
 
     const bool synced = paramOn (ParamIDs::flowSync);
     flowSpeedKnob.setVisible (! synced);
@@ -617,4 +621,69 @@ void SwarmnessAudioProcessorEditor::resized()
     panel.setTransform (juce::AffineTransform::scale (scale));
     panel.setBounds (0, 0, MainPanel::baseWidth, MainPanel::baseHeight);
     swarmProcessor.setUiScale (scale);
+}
+
+//==============================================================================
+void MainPanel::mouseDown (const juce::MouseEvent& e)
+{
+    if (! e.mods.isPopupMenu())
+        return;
+    for (auto* c = e.originalComponent; c != nullptr && c != this; c = c->getParentComponent())
+    {
+        const auto id = MidiLearnable::paramOf (*c);
+        if (id.isNotEmpty())
+        {
+            showMidiMenu (id, c);
+            return;
+        }
+    }
+}
+
+juce::Component* MainPanel::findLearnable (const juce::String& paramID)
+{
+    std::function<juce::Component* (juce::Component&)> search = [&] (juce::Component& parent) -> juce::Component*
+    {
+        for (auto* child : parent.getChildren())
+        {
+            if (MidiLearnable::paramOf (*child) == paramID && child->isShowing())
+                return child;
+            if (auto* found = search (*child))
+                return found;
+        }
+        return nullptr;
+    };
+    return search (*this);
+}
+
+void MainPanel::showMidiMenu (const juce::String& paramID, juce::Component* target)
+{
+    auto* param = state.getParameter (paramID);
+    if (param == nullptr)
+        return;
+    auto& proc = processor;
+    const auto bound = proc.describeMidiBinding (paramID);
+    juce::PopupMenu menu;
+    menu.addSectionHeader (param->getName (40) + (bound.isNotEmpty() ? "  -  MIDI: " + bound : juce::String ("  -  MIDI: not assigned")));
+    if (proc.getMidiLearnParam() == paramID)
+        menu.addItem ("Cancel MIDI Learn", [&proc] { proc.cancelMidiLearn(); });
+    else
+        menu.addItem (bound.isNotEmpty() ? "MIDI Learn another pedal / key / CC" : "MIDI Learn (press a pedal / key or move a CC)",
+                      [&proc, paramID] { proc.startMidiLearn (paramID); });
+    menu.addItem ("Clear MIDI", bound.isNotEmpty(), false, [&proc, paramID] { proc.clearMidiBindings (paramID); });
+    menu.addSeparator();
+    const bool isSwitch = dynamic_cast<juce::AudioParameterBool*> (param) != nullptr;
+    const bool isChoice = dynamic_cast<juce::AudioParameterChoice*> (param) != nullptr;
+    const bool isFootswitch = paramID == ParamIDs::oct1 || paramID == ParamIDs::oct2 || paramID == ParamIDs::magicHold;
+    menu.addItem (isFootswitch ? "Footswitch: follows MOMENTARY (held = on) / LATCH (press = on / off)"
+                  : isSwitch   ? "Switch: every press toggles it - one pedal can drive several switches"
+                  : isChoice   ? "Selector: every press steps to the next option"
+                               : "Knob: follows the CC value (0..127)", false, false, nullptr);
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (target));
+}
+
+void MainPanel::LearnMarker::paint (juce::Graphics& g)
+{
+    const float a = 0.45f + 0.4f * std::sin (phase);
+    g.setColour (Colours::accentBright.withAlpha (a));
+    g.drawRoundedRectangle (getLocalBounds().toFloat().reduced (1.5f), 8.0f, 2.5f);
 }

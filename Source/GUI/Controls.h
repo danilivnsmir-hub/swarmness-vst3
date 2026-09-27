@@ -6,6 +6,28 @@
 #include <vector>
 
 //==============================================================================
+/** MIDI learn: controls carry the ID of their parameter; right-clicking one opens the MIDI menu. */
+namespace MidiLearnable
+{
+    inline const juce::Identifier property { "midiParam" };
+    inline void tag (juce::Component& c, const juce::String& paramID) { c.getProperties().set (property, paramID); }
+    inline juce::String paramOf (const juce::Component& c) { return c.getProperties()[property].toString(); }
+}
+
+/** A slider that leaves the right mouse button to the MIDI menu. */
+struct RightClickSafeSlider : public juce::Slider
+{
+    void mouseDown (const juce::MouseEvent& e) override  { if (! e.mods.isPopupMenu()) juce::Slider::mouseDown (e); }
+    void mouseDrag (const juce::MouseEvent& e) override  { if (! e.mods.isPopupMenu()) juce::Slider::mouseDrag (e); }
+    void mouseUp (const juce::MouseEvent& e) override    { if (! e.mods.isPopupMenu()) juce::Slider::mouseUp (e); }
+};
+
+/** Toggle buttons: the right mouse button opens the MIDI menu instead of switching. */
+#define SWARM_RIGHT_CLICK_SAFE_BUTTON \
+    void mouseDown (const juce::MouseEvent& e) override { if (! e.mods.isPopupMenu()) juce::ToggleButton::mouseDown (e); } \
+    void mouseUp (const juce::MouseEvent& e) override   { if (! e.mods.isPopupMenu()) juce::ToggleButton::mouseUp (e); }
+
+//==============================================================================
 /** Rotary knob with caption above and live value readout below. */
 class Knob : public juce::Component
 {
@@ -23,7 +45,7 @@ public:
     void mouseDown (const juce::MouseEvent&) override;     // click the value to type an exact number
 
 private:
-    struct SnappingSlider : public juce::Slider
+    struct SnappingSlider : public RightClickSafeSlider
     {
         std::function<double (double)> snapper;
         double snapValue (double v, DragMode) override { return snapper != nullptr ? snapper (v) : v; }
@@ -57,7 +79,7 @@ public:
 
 private:
     juce::String caption;
-    juce::Slider slider;
+    RightClickSafeSlider slider;
     bool compact = false;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;
 
@@ -71,6 +93,7 @@ class PowerButton : public juce::ToggleButton
 public:
     PowerButton();
     void paintButton (juce::Graphics&, bool isMouseOver, bool isDown) override;
+    SWARM_RIGHT_CLICK_SAFE_BUTTON
 };
 
 //==============================================================================
@@ -80,6 +103,7 @@ class PillToggle : public juce::ToggleButton
 public:
     explicit PillToggle (const juce::String& label);
     void paintButton (juce::Graphics&, bool isMouseOver, bool isDown) override;
+    SWARM_RIGHT_CLICK_SAFE_BUTTON
 };
 
 //==============================================================================
@@ -189,8 +213,6 @@ public:
 
     /** Pulsing ring while waiting for a MIDI message to learn. */
     void setLearning (bool isLearning);
-    /** Called on right-click (MIDI learn menu). */
-    std::function<void()> onRightClick;
 
 private:
     juce::String caption;
@@ -209,6 +231,7 @@ class MiniSwitch : public juce::ToggleButton
 public:
     explicit MiniSwitch (const juce::String& caption);
     void paintButton (juce::Graphics&, bool isMouseOver, bool isDown) override;
+    SWARM_RIGHT_CLICK_SAFE_BUTTON
 };
 
 //==============================================================================

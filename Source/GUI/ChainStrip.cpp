@@ -407,6 +407,14 @@ void ChainStrip::mouseExit (const juce::MouseEvent&)
 
 void ChainStrip::mouseDown (const juce::MouseEvent& e)
 {
+    if (e.mods.isPopupMenu())
+    {
+        pressed = -1;
+        const int block = blockAt (e.position);
+        if (block >= 0 && onBlockRightClick != nullptr)
+            onBlockRightClick (block);
+        return;
+    }
     pressed = blockAt (e.position);
     dragging = false;
     if (pressed < 0)
@@ -503,6 +511,6 @@ juce::String ChainStrip::getTooltip()
     juce::String tip (what[hover]);
     tip << ". Click to open; drag sideways to move, up / down for parallel paths";
     if (powerParamFor (hover) != nullptr)
-        tip << "; LED = on / off";
+        tip << "; LED = on / off; right-click = MIDI learn for on / off";
     return tip;
 }

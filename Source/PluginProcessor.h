@@ -100,22 +100,34 @@ private:
 
 public:
     //==============================================================================
-    /** MIDI learn for the footswitches: 0 = +1 OCT, 1 = +2 OCT, 2 = VENOM, 3 = ON. */
-    static constexpr int kNumMidiTargets = 4;
+    /**
+     * MIDI learn for any parameter (right-click a control). One CC / note can drive several
+     * parameters, and a parameter can have several bindings.
+     *  - on / off switches toggle on every press (CC >= 64 or note-on); the SHIFT A / B and VENOM
+     *    footswitches follow MOMENTARY / LATCH (held = on)
+     *  - choices step to the next option on every press
+     *  - knobs follow the CC value
+     */
+    static constexpr int kMaxMidiBindings = 64;
     enum class MidiKind : int { none = 0, cc = 1, note = 2 };
 
-    void startMidiLearn (int target) noexcept     { midiLearnTarget.store (target); }
-    void cancelMidiLearn() noexcept               { midiLearnTarget.store (-1); }
-    void clearMidiBinding (int target) noexcept   { midiMap[(size_t) target].kind.store (0); }
-    int  getMidiLearnTarget() const noexcept      { return midiLearnTarget.load(); }
-    juce::String describeMidiBinding (int target) const;
+    void startMidiLearn (const juce::String& paramID) noexcept;
+    void cancelMidiLearn() noexcept               { midiLearnParam.store (-1); }
+    void clearMidiBindings (const juce::String& paramID) noexcept;
+    /** The parameter waiting for a MIDI message, empty when not learning. */
+    juce::String getMidiLearnParam() const;
+    /** "CC 64, Note C1" - empty when not assigned. */
+    juce::String describeMidiBinding (const juce::String& paramID) const;
 
 private:
-    struct MidiBinding { std::atomic<int> kind { 0 }, number { -1 }; std::atomic<bool> down { false }; };
-    std::array<MidiBinding, kNumMidiTargets> midiMap;
-    std::atomic<int> midiLearnTarget { -1 };
+    struct MidiBinding { std::atomic<int> param { -1 }, kind { 0 }, number { -1 }; std::atomic<bool> down { false }; };
+    std::array<MidiBinding, kMaxMidiBindings> midiBindings;
+    std::atomic<int> midiLearnParam { -1 };
+    juce::Array<juce::RangedAudioParameter*> learnableParams;   // index = binding param
+    int indexOfParam (const juce::String& paramID) const noexcept;
     void handleMidi (const juce::MidiBuffer&);
-    void applyFootswitch (int target, bool pressed);
+    void applyMidi (juce::RangedAudioParameter&, bool isCC, int ccValue, bool pressed);
+
 
     // Parameters (cached raw pointers - lock-free reads on the audio thread)
     struct Params

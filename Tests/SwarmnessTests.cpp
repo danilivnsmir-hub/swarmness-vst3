@@ -800,27 +800,67 @@ namespace
         };
         auto value = [&] (const char* id) { return p.getAPVTS().getRawParameterValue (id)->load(); };
 
-        p.startMidiLearn (0);                                           // +1 OCT
+        using namespace ParamIDs;
+        p.startMidiLearn (oct1);                                        // SHIFT A footswitch
         send (juce::MidiMessage::controllerEvent (1, 80, 127));
-        check (p.getMidiLearnTarget() == -1 && p.describeMidiBinding (0) == "CC 80", "learned CC 80 for +1 OCT");
+        check (p.getMidiLearnParam().isEmpty() && p.describeMidiBinding (oct1) == "CC 80", "learned CC 80 for SHIFT A");
         send (juce::MidiMessage::controllerEvent (1, 80, 0));
         send (juce::MidiMessage::controllerEvent (1, 80, 127));
-        const bool held = value (ParamIDs::oct1) > 0.5f;
+        const bool held = value (oct1) > 0.5f;
         send (juce::MidiMessage::controllerEvent (1, 80, 0));
-        check (held && value (ParamIDs::oct1) < 0.5f, "MOMENTARY: pedal down = on, up = off");
+        check (held && value (oct1) < 0.5f, "MOMENTARY: pedal down = on, up = off");
 
-        p.startMidiLearn (3);                                           // ON (bypass)
+        p.startMidiLearn (bypass);                                      // ON
         send (juce::MidiMessage::noteOn (1, 36, (juce::uint8) 100));
-        const float before = value (ParamIDs::bypass);
+        const float before = value (bypass);
         send (juce::MidiMessage::noteOff (1, 36));
         send (juce::MidiMessage::noteOn (1, 36, (juce::uint8) 100));
-        check (std::abs (value (ParamIDs::bypass) - before) > 0.5f, "ON toggles on each note press (" + p.describeMidiBinding (3) + ")");
+        check (std::abs (value (bypass) - before) > 0.5f, "ON toggles on each note press (" + p.describeMidiBinding (bypass) + ")");
+
+        // One pedal (127 on press, 0 on release) for ON and WINGS together: every press toggles both
+        p.startMidiLearn (bypass);
+        send (juce::MidiMessage::controllerEvent (1, 70, 127));
+        send (juce::MidiMessage::controllerEvent (1, 70, 0));
+        p.startMidiLearn (flowOn);
+        send (juce::MidiMessage::controllerEvent (1, 70, 127));
+        send (juce::MidiMessage::controllerEvent (1, 70, 0));
+        const float on0 = value (bypass), wings0 = value (flowOn);
+        send (juce::MidiMessage::controllerEvent (1, 70, 127));
+        const float on1 = value (bypass), wings1 = value (flowOn);
+        send (juce::MidiMessage::controllerEvent (1, 70, 0));
+        check (std::abs (on1 - on0) > 0.5f && std::abs (wings1 - wings0) > 0.5f && std::abs (value (bypass) - on1) < 0.5f,
+               "one CC drives ON and WINGS: one press toggles both, the release changes nothing");
+
+        // A knob follows the CC value; a selector steps on each press
+        p.startMidiLearn (fuzz);
+        send (juce::MidiMessage::controllerEvent (1, 21, 10));
+        send (juce::MidiMessage::controllerEvent (1, 21, 127));
+        const float fuzzTop = value (fuzz);
+        send (juce::MidiMessage::controllerEvent (1, 21, 0));
+        check (fuzzTop > 99.0f && value (fuzz) < 1.0f, "a knob follows the CC (0..127 -> full range)");
+        p.startMidiLearn (fuzzVoice);
+        send (juce::MidiMessage::noteOn (1, 40, (juce::uint8) 100));
+        const float v0 = value (fuzzVoice);
+        send (juce::MidiMessage::noteOff (1, 40));
+        send (juce::MidiMessage::noteOn (1, 40, (juce::uint8) 100));
+        check (juce::roundToInt (value (fuzzVoice)) == (juce::roundToInt (v0) + 1) % 3, "a selector steps to the next option on each press");
 
         juce::MemoryBlock mb;
         p.getStateInformation (mb);
         SwarmnessAudioProcessor q;
         q.setStateInformation (mb.getData(), (int) mb.getSize());
-        check (q.describeMidiBinding (0) == "CC 80" && q.describeMidiBinding (3).startsWith ("Note"), "bindings saved with the session");
+        check (q.describeMidiBinding (oct1) == "CC 80" && q.describeMidiBinding (bypass).contains ("Note") && q.describeMidiBinding (bypass).contains ("CC 70")
+               && q.describeMidiBinding (flowOn) == "CC 70", "bindings saved with the session (" + q.describeMidiBinding (bypass) + ")");
+
+        // Sessions up to beta.24: footswitch bindings as midi0..midi3
+        auto xml = juce::AudioProcessor::getXmlFromBinary (mb.getData(), (int) mb.getSize());
+        xml->removeAttribute ("midiBindings");
+        xml->setAttribute ("midi2", "1:64");
+        juce::MemoryBlock old;
+        juce::AudioProcessor::copyXmlToBinary (*xml, old);
+        SwarmnessAudioProcessor r;
+        r.setStateInformation (old.getData(), (int) old.getSize());
+        check (r.describeMidiBinding (magicHold) == "CC 64", "old session: VENOM footswitch binding kept");
     }
 
     void testMonoToStereo()

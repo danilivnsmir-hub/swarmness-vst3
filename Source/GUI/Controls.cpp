@@ -39,11 +39,12 @@ void Knob::attach (juce::AudioProcessorValueTreeState& state, const juce::String
 {
     attachSlider (slider, state, id, attachment);
     slider.setTooltip (tip);
+    MidiLearnable::tag (*this, id);
 }
 
 void Knob::mouseDown (const juce::MouseEvent& e)
 {
-    if (e.y >= getHeight() - 20 && isEnabled())
+    if (e.y >= getHeight() - 20 && isEnabled() && ! e.mods.isPopupMenu())
         showValueEditor();
 }
 
@@ -117,6 +118,7 @@ void Fader::attach (juce::AudioProcessorValueTreeState& state, const juce::Strin
 {
     attachSlider (slider, state, id, attachment);
     slider.setTooltip (tip);
+    MidiLearnable::tag (*this, id);
 }
 
 void Fader::resized()
@@ -226,6 +228,7 @@ SegmentedChoice::SegmentedChoice (juce::RangedAudioParameter& param, juce::Strin
 {
     attachment = std::make_unique<juce::ParameterAttachment> (param, [this] (float v) { setSelectedIndex (juce::roundToInt (v)); }, nullptr);
     attachment->sendInitialUpdate();
+    MidiLearnable::tag (*this, param.paramID);
 }
 
 SegmentedChoice::SegmentedChoice (juce::StringArray l) : labels (std::move (l))
@@ -251,7 +254,7 @@ int SegmentedChoice::indexAt (juce::Point<float> p) const
 
 void SegmentedChoice::mouseDown (const juce::MouseEvent& e)
 {
-    if (! isEnabled()) return;
+    if (! isEnabled() || e.mods.isPopupMenu()) return;
     const int index = indexAt (e.position);
     if (attachment != nullptr)
         attachment->setValueAsCompleteGesture ((float) index);
@@ -324,16 +327,13 @@ Footswitch::Footswitch (juce::RangedAudioParameter& param, const juce::String& c
 {
     attachment.sendInitialUpdate();
     setMouseCursor (juce::MouseCursor::PointingHandCursor);
+    MidiLearnable::tag (*this, param.paramID);
 }
 
 void Footswitch::mouseDown (const juce::MouseEvent& e)
 {
     if (e.mods.isPopupMenu())
-    {
-        if (onRightClick != nullptr)
-            onRightClick();
-        return;
-    }
+        return;   // MIDI menu (the editor)
     pressed = true;
     if (momentary && momentary())
     {

@@ -23,6 +23,7 @@ public:
     std::function<Chain::Layout()> getLayout;
     std::function<void (const Chain::Layout&)> setLayout;
     std::function<void (int block)> onBlockClicked;
+    std::function<void (int block)> onBlockRightClick;   // MIDI learn for the block's on / off
     /** Extra activity (e.g. STING engaged by a footswitch) that lights a tile without its power param. */
     std::function<bool (int block)> isBlockActive;
 

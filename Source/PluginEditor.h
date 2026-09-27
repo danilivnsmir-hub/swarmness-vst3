@@ -40,6 +40,17 @@ private:
     bool footswitchesMomentary() const;
     void setSectionDimmed (std::initializer_list<juce::Component*>, bool dimmed);
 
+    // MIDI learn: right-click any control (or a chain tile) for its menu
+    void mouseDown (const juce::MouseEvent&) override;
+    void showMidiMenu (const juce::String& paramID, juce::Component* target);
+    juce::Component* findLearnable (const juce::String& paramID);
+    struct LearnMarker : juce::Component
+    {
+        float phase = 0.0f;
+        void paint (juce::Graphics&) override;
+    };
+    LearnMarker learnMarker;
+
     SwarmnessAudioProcessor& processor;
     APVTS& state;
 
