@@ -2263,6 +2263,75 @@ namespace
         }
     }
 
+    void testBadImpulseResponses()
+    {
+        std::printf ("\nCRYPT / CAB: broken impulse responses\n");
+        const double sr = 48000.0;
+        auto write = [&] (std::function<float (int)> gen, bool isFloat)
+        {
+            auto f = juce::File::createTempFile (".wav");
+            juce::AudioBuffer<float> ir (2, 48000);
+            for (int ch = 0; ch < 2; ++ch)
+                for (int i = 0; i < 48000; ++i)
+                    ir.setSample (ch, i, gen (i));
+            juce::WavAudioFormat wav;
+            std::unique_ptr<juce::OutputStream> stream = f.createOutputStream();
+            auto w = wav.createWriterFor (stream, juce::AudioFormatWriterOptions{}.withSampleRate (sr).withNumChannels (2).withBitsPerSample (isFloat ? 32 : 24)
+                                                     .withSampleFormat (isFloat ? juce::AudioFormatWriterOptions::SampleFormat::floatingPoint
+                                                                                : juce::AudioFormatWriterOptions::SampleFormat::integral));
+            w->writeFromAudioSampleBuffer (ir, 0, ir.getNumSamples());
+            return f;
+        };
+        juce::Random rng (8);
+        std::vector<float> noise (48000);
+        for (auto& v : noise) v = rng.nextFloat() * 2.0f - 1.0f;
+        auto decay = [&] (int i) { return noise[(size_t) i] * std::exp (-i / 6000.0f); };
+
+        auto silent = write ([] (int) { return 0.0f; }, false);
+        auto tiny = write ([&] (int i) { return 1.0e-9f * decay (i); }, true);
+        {
+            SwarmnessAudioProcessor p;
+            check (p.loadReverbIR (silent).contains ("silent") && p.loadReverbIR (tiny).contains ("silent")
+                   && p.loadCabIR (silent).contains ("silent"), "a silent / near-silent IR is refused with a message");
+        }
+        for (auto [name, gen] : { std::pair<const char*, std::function<float (int)>> { "NaN / inf samples", [&] (int i) { return i == 300 ? std::numeric_limits<float>::quiet_NaN() : (i == 301 ? std::numeric_limits<float>::infinity() : decay (i)); } },
+                                  { "huge float values", [&] (int i) { return 5000.0f * decay (i); } },
+                                  { "DC offset", [&] (int i) { return 0.4f + 0.3f * decay (i); } } })
+        {
+            auto f = write (gen, true);
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            const auto err = p.loadReverbIR (f);
+            setParam (p, ParamIDs::revOn, 1.0f);
+            setParam (p, ParamIDs::revType, 4.0f);
+            setParam (p, ParamIDs::revMix, 50.0f);
+            p.prepareToPlay (sr, 256);
+            juce::AudioBuffer<float> in (2, 256 * 940);   // a whole number of blocks
+            in.clear();
+            auto g = makeGuitar (sr, 48000);
+            for (int ch = 0; ch < 2; ++ch) in.copyFrom (ch, 0, g, ch, 0, 48000);
+            juce::MidiBuffer midi;
+            float playing = 0.0f, after = 0.0f;
+            bool finite = true;
+            for (int start = 0; start < in.getNumSamples(); start += 256)
+            {
+                if (start == 0) juce::Thread::sleep (200);   // the convolution loads on its own thread
+                if (start == 48000 * 3) setParam (p, ParamIDs::revOn, 0.0f);
+                juce::AudioBuffer<float> view (in.getArrayOfWritePointers(), 2, start, 256);
+                p.processBlock (view, midi);
+                const float m = view.getMagnitude (0, 0, 256);
+                finite = finite && std::isfinite (m);
+                if (start < 48000 * 2) playing = juce::jmax (playing, m);
+                if (start > 48000 * 4) after = juce::jmax (after, m);
+            }
+            check (err.isEmpty() && finite && playing < 1.5f && after < 1.0e-4f,
+                   juce::String::formatted ("IR with %s: loads, peak %.2f while playing, silent after (%.1e)", name, playing, after));
+            f.deleteFile();
+        }
+        silent.deleteFile();
+        tiny.deleteFile();
+    }
+
 }
 
 int main (int argc, char** argv)
@@ -2416,6 +2485,71 @@ int main (int argc, char** argv)
         return 0;
     }
 
+    if (argc >= 2 && juce::String (argv[1]) == "--bad-irs")
+    {
+        // CRYPT with pathological impulse responses: after the playing stops, the wet must die away
+        const double sr = 48000.0;
+        struct Case { const char* name; std::function<float (int, juce::Random&)> gen; int len; bool isFloat; };
+        std::vector<Case> cases {
+            { "normal decay", [] (int i, juce::Random& r) { return (r.nextFloat() * 2 - 1) * std::exp (-i / 9600.0f); }, 96000, false },
+            { "NaN inside", [] (int i, juce::Random& r) { return i == 500 ? std::numeric_limits<float>::quiet_NaN() : (r.nextFloat() * 2 - 1) * std::exp (-i / 9600.0f); }, 96000, true },
+            { "inf inside", [] (int i, juce::Random& r) { return i == 500 ? std::numeric_limits<float>::infinity() : (r.nextFloat() * 2 - 1) * std::exp (-i / 9600.0f); }, 96000, true },
+            { "almost silent", [] (int i, juce::Random& r) { return 1.0e-9f * (r.nextFloat() * 2 - 1) * std::exp (-i / 9600.0f); }, 96000, true },
+            { "huge float", [] (int i, juce::Random& r) { return 5000.0f * (r.nextFloat() * 2 - 1) * std::exp (-i / 9600.0f); }, 96000, true },
+            { "DC block", [] (int, juce::Random&) { return 0.5f; }, 96000, false },
+            { "silence", [] (int, juce::Random&) { return 0.0f; }, 96000, false },
+            { "12 s noise", [] (int, juce::Random& r) { return 0.3f * (r.nextFloat() * 2 - 1); }, 48000 * 14, false },
+        };
+        for (auto& c : cases)
+        {
+            auto irFile = juce::File::createTempFile (".wav");
+            {
+                juce::AudioBuffer<float> ir (2, c.len);
+                juce::Random rng (3);
+                for (int ch = 0; ch < 2; ++ch)
+                    for (int i = 0; i < c.len; ++i)
+                        ir.setSample (ch, i, c.gen (i, rng));
+                juce::WavAudioFormat wav;
+                std::unique_ptr<juce::OutputStream> stream = irFile.createOutputStream();
+                auto w = wav.createWriterFor (stream, juce::AudioFormatWriterOptions{}.withSampleRate (sr).withNumChannels (2)
+                                                          .withBitsPerSample (c.isFloat ? 32 : 24)
+                                                          .withSampleFormat (c.isFloat ? juce::AudioFormatWriterOptions::SampleFormat::floatingPoint
+                                                                                       : juce::AudioFormatWriterOptions::SampleFormat::integral));
+                w->writeFromAudioSampleBuffer (ir, 0, ir.getNumSamples());
+            }
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            const auto err = p.loadReverbIR (irFile);
+            setParam (p, ParamIDs::revOn, 1.0f);
+            setParam (p, ParamIDs::revType, 4.0f);
+            setParam (p, ParamIDs::revMix, 50.0f);
+            p.prepareToPlay (sr, 256);
+            juce::Thread::sleep (300);
+            juce::AudioBuffer<float> in (2, 48000 * 16);
+            in.clear();
+            auto g = makeGuitar (sr, 48000);
+            for (int ch = 0; ch < 2; ++ch) in.copyFrom (ch, 0, g, ch, 0, 48000);
+            juce::MidiBuffer midi;
+            float lateOn = 0.0f, lateOff = 0.0f, playing = 0.0f;
+            bool finite = true;
+            for (int start = 0; start < in.getNumSamples(); start += 256)
+            {
+                if (start == 48000 * 14) setParam (p, ParamIDs::revOn, 0.0f);
+                juce::AudioBuffer<float> view (in.getArrayOfWritePointers(), 2, start, 256);
+                p.processBlock (view, midi);
+                const float m = view.getMagnitude (0, 0, 256);
+                finite = finite && std::isfinite (m);
+                if (start < 48000) playing = juce::jmax (playing, m);
+                else if (start > 48000 * 13 && start < 48000 * 14) lateOn = juce::jmax (lateOn, m);
+                else if (start > 48000 * 15) lateOff = juce::jmax (lateOff, m);
+            }
+            std::printf ("%-14s load: %-28s playing peak %.3f  12 s after: %.2e  after OFF: %.2e  %s\n", c.name,
+                         err.isEmpty() ? "ok" : err.substring (0, 28).toRawUTF8(), playing, lateOn, lateOff, finite ? "" : "NON-FINITE");
+            irFile.deleteFile();
+        }
+        return 0;
+    }
+
     if (argc >= 2 && juce::String (argv[1]) == "--amp-tables")
     {
         const auto& t = ampsim::tables();
@@ -2538,7 +2672,7 @@ int main (int argc, char** argv)
         if (which == "parallel") testParallelRouting();
         if (which == "comb")    testGraphicEq();
         if (which == "carve")   testParametricEq();
-        if (which == "reverb")  testReverb();
+        if (which == "reverb")  { testReverb(); testBadImpulseResponses(); }
         if (which == "amp")     testAmp();
         if (which == "cab")     testCab();
         std::printf ("\n%s (%d failure%s)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures, failures == 1 ? "" : "s");
@@ -2580,6 +2714,7 @@ int main (int argc, char** argv)
     testGraphicEq();
     testParametricEq();
     testReverb();
+    testBadImpulseResponses();
     testAmp();
     testCab();
     testPerformance();

@@ -549,8 +549,22 @@ private:
         }
         juce::dsp::AudioBlock<float> block (wet.getArrayOfWritePointers(), 2, (size_t) numSamples);
         convolution.process (juce::dsp::ProcessContextReplacing<float> (block));
-        juce::FloatVectorOperations::multiply (wet.getWritePointer (0), kIrScale, numSamples);
-        juce::FloatVectorOperations::multiply (wet.getWritePointer (1), kIrScale, numSamples);
+        // Self-healing: a convolution that ever produces garbage is reset instead of hissing forever
+        bool bad = false;
+        for (int ch = 0; ch < 2 && ! bad; ++ch)
+        {
+            const float* w = wet.getReadPointer (ch);
+            for (int i = 0; i < numSamples; ++i)
+                if (! (std::abs (w[i]) < 32.0f)) { bad = true; break; }
+        }
+        if (bad)
+        {
+            convolution.reset();
+            wet.clear (0, numSamples);
+            for (auto& ch : outFilters)
+                for (auto& f : ch)
+                    f = {};
+        }
     }
 
     void pickUpImpulseResponse() noexcept
@@ -561,8 +575,9 @@ private:
         if (irPending)
         {
             // wait-free hand-over (the convolution prepares the IR on its own background thread)
+            // (cleaned and levelled on the message thread: irtools::sanitise + a fixed energy)
             convolution.loadImpulseResponse (std::move (pendingIR), pendingIRRate, juce::dsp::Convolution::Stereo::yes,
-                                             juce::dsp::Convolution::Trim::yes, juce::dsp::Convolution::Normalise::yes);
+                                             juce::dsp::Convolution::Trim::no, juce::dsp::Convolution::Normalise::no);
             irPending = false;
             irLoaded = true;
         }
@@ -575,7 +590,10 @@ private:
 
     static constexpr float kOutScale = 0.3f;    // FDN wet level
     static constexpr float kInject   = 0.35f;   // input into each line
-    static constexpr float kIrScale  = 5.0f;    // juce normalises IR energy to 0.125 (-18 dB)
+public:
+    /** Loaded IRs are levelled to this energy (sqrt of the sum of squares over both channels). */
+    static constexpr float kIrLevel  = 0.87f;
+private:
 
     double sampleRate = 44100.0;
     int maxBlockSize = 512;

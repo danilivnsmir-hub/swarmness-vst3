@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "DSP/IrTools.h"
 
 namespace
 {
@@ -660,33 +661,38 @@ juce::String SwarmnessAudioProcessor::loadReverbIR (const juce::File& file)
 
     const int channels = reader->numChannels > 1 ? 2 : 1;
     juce::AudioBuffer<float> ir (2, length);
+    ir.clear();
     reader->read (&ir, 0, length, 0, true, channels > 1);
     if (channels == 1)
         ir.copyFrom (1, 0, ir, 0, 0, length);
+    if (const auto problem = irtools::sanitise (ir, reader->sampleRate); problem.isNotEmpty())
+        return "\"" + file.getFileName() + "\": " + problem;
+    ir.applyGain ((float) (ReverbStage::kIrLevel / std::sqrt (irtools::energy (ir))));
 
+    const int irLength = ir.getNumSamples();
     // Envelope for the editor (peak per slice, normalised)
     std::vector<float> envelope (256, 0.0f);
-    const int slice = juce::jmax (1, length / (int) envelope.size());
+    const int slice = juce::jmax (1, irLength / (int) envelope.size());
     float maxPeak = 1.0e-9f;
     for (size_t k = 0; k < envelope.size(); ++k)
     {
         const int from = (int) k * slice;
-        if (from >= length) break;
-        const int n = juce::jmin (slice, length - from);
+        if (from >= irLength) break;
+        const int n = juce::jmin (slice, irLength - from);
         envelope[k] = juce::jmax (ir.getMagnitude (0, from, n), ir.getMagnitude (1, from, n));
         maxPeak = juce::jmax (maxPeak, envelope[k]);
     }
     for (auto& v : envelope)
         v /= maxPeak;
 
-    const double seconds = (double) length / reader->sampleRate;
+    const double seconds = (double) irLength / reader->sampleRate;
     crypt.setImpulseResponse (std::move (ir), reader->sampleRate);
 
     const juce::ScopedLock sl (irInfoLock);
     reverbIREnvelope = std::move (envelope);
     reverbIRSeconds = seconds;
     reverbIRFile = file;
-    reverbIRDescription = file.getFileNameWithoutExtension() + "  -  " + juce::String ((double) length / reader->sampleRate, 1) + " s, "
+    reverbIRDescription = file.getFileNameWithoutExtension() + "  -  " + juce::String ((double) irLength / reader->sampleRate, 1) + " s, "
                         + (channels > 1 ? "stereo" : "mono");
     return {};
 }
@@ -789,6 +795,7 @@ juce::String SwarmnessAudioProcessor::loadCabIR (const juce::File& file)
         return "\"" + file.getFileName() + "\" is too short";
 
     juce::AudioBuffer<float> ir (1, length);
+    ir.clear();
     if (reader->numChannels > 1)
     {
         juce::AudioBuffer<float> both (2, length);
@@ -801,8 +808,10 @@ juce::String SwarmnessAudioProcessor::loadCabIR (const juce::File& file)
     {
         reader->read (&ir, 0, length, 0, true, false);
     }
+    if (const auto problem = irtools::sanitise (ir, reader->sampleRate); problem.isNotEmpty())
+        return "\"" + file.getFileName() + "\": " + problem;
     CabBlock::levelIR (ir, reader->sampleRate);
-    const auto desc = file.getFileNameWithoutExtension() + "  -  " + juce::String (juce::roundToInt ((double) length / reader->sampleRate * 1000.0)) + " ms";
+    const auto desc = file.getFileNameWithoutExtension() + "  -  " + juce::String (juce::roundToInt ((double) ir.getNumSamples() / reader->sampleRate * 1000.0)) + " ms";
     cab.setUserIR (std::move (ir), reader->sampleRate);
 
     const juce::ScopedLock sl (irInfoLock);
