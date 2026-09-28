@@ -19,7 +19,7 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
       chainStrip (p.getAPVTS()),
       eqPage (p),
       reverbPage (p),
-      wasp (p.getAPVTS()),
+      wasp (p),
       ampCab (p),
       presetBar (p.getPresetManager()),
       switchModeSelector (param (state, ParamIDs::switchMode), { "MOMENTARY", "LATCH" }),

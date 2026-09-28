@@ -1,7 +1,7 @@
 #pragma once
 
 #include <JuceHeader.h>
-#include "../Amp/NamModel.h"
+#include "NamRunner.h"
 #include "AmpCircuit.h"
 
 #include <array>
@@ -79,10 +79,8 @@ public:
         maxBlock = juce::jmax (1, maxBlockSize);
         // the amp models run at ~350-400 kHz (hard-clipping stages alias less), NAM at ~176-192 kHz
         osLog2 = sampleRate < 60000.0 ? 3 : (sampleRate < 120000.0 ? 2 : 1);
-        namOsLog2 = sampleRate < 60000.0 ? 2 : (sampleRate < 120000.0 ? 1 : 0);
         osFactor = 1 << osLog2;
         fsOs = fs * osFactor;
-        fsNamOs = fs * (1 << namOsLog2);
         auto make = [this] (int log2, int channels) -> std::unique_ptr<juce::dsp::Oversampling<float>>
         {
             if (log2 <= 0) return nullptr;
@@ -91,17 +89,11 @@ public:
             return o;
         };
         oversampler = make (osLog2, 1);
-        namOversampler = make (namOsLog2, 2);
         monoBuffer.setSize (1, maxBlock, false, false, true);
         dryCopy.setSize (2, maxBlock, false, false, true);
         namCopy.setSize (2, maxBlock, false, false, true);
 
-        prepareNamBuffers();
-        {
-            const juce::SpinLock::ScopedLockType sl (namLock);
-            if (active != nullptr) active->reset (maxModelBlock (active->getSampleRate()));
-            if (pending != nullptr) pending->reset (maxModelBlock (pending->getSampleRate()));
-        }
+        namRunner.prepare (sampleRate, maxBlock);
         reset();
     }
 
@@ -111,14 +103,13 @@ public:
             c = {};
         for (auto& e : namEq) e.reset();
         if (oversampler != nullptr) oversampler->reset();
-        if (namOversampler != nullptr) namOversampler->reset();
         gateEnv = 0.0f; gateGain = 1.0f; gateHold = 0;
         firstUpdate = true;
         coeffsDirty = true;
         blendReady = false;
         switchGain = 1.0f;
         activeChannel = juce::jlimit (0, 2, settings.channel == nam ? activeChannel : settings.channel);
-        resetNamStream();
+        namRunner.reset();
         onGain.reset (fs, 0.02);
         onGain.setCurrentAndTargetValue (settings.on ? 1.0f : 0.0f);
         namMix.reset (fs, 0.03);
@@ -131,44 +122,18 @@ public:
 
     //==============================================================================
     /** Hands over a NAM capture (message thread; nullptr clears). The old one is freed on the next call. */
-    void setNamModel (std::unique_ptr<NamModel> model)
-    {
-        if (model != nullptr)
-        {
-            model->setSize (namSize.load());
-            model->reset (maxModelBlock (model->getSampleRate()));
-        }
-        const juce::SpinLock::ScopedLockType sl (namLock);
-        retired.reset();
-        pending = std::move (model);
-        pendingSet = true;
-    }
-    bool hasNamModel() const noexcept { return namLoaded.load(); }
+    void setNamModel (std::unique_ptr<NamModel> model) { namRunner.setModel (std::move (model)); }
+    bool hasNamModel() const noexcept { return namRunner.hasModel(); }
     /** A2 captures: Full (1) or Lite (0). Off the audio thread (the housekeeping thread calls it). */
-    void setNamSize (double size01)
-    {
-        if (std::abs (namSize.exchange (size01) - size01) < 1.0e-9)
-            return;
-        const juce::SpinLock::ScopedLockType sl (namLock);
-        for (auto* m : { active.get(), pending.get() })
-            if (m != nullptr)
-                m->setSize (size01);
-    }
-    /** 0 dBFS at the plug-in's input in dBu (a sine at full scale: 2.5 V peak), for captures that
-        carry their reamp level (input calibration, as the NAM plug-in does). */
-    static constexpr double kInputDbu = 7.17;
+    void setNamSize (double size01) { namRunner.setSize (size01); }
     /** Frees a model the audio thread swapped out (message thread). */
-    void releaseRetired()
-    {
-        const juce::SpinLock::ScopedLockType sl (namLock);
-        retired.reset();
-    }
+    void releaseRetired() { namRunner.releaseRetired(); }
 
     //==============================================================================
     void process (float* const* audio, int numCh, int numSamples) noexcept
     {
         numCh = juce::jmin (numCh, 2);
-        takePendingModel();
+        namRunner.pickUp();
 
         onGain.setTargetValue (settings.on ? 1.0f : 0.0f);
         if (! settings.on && ! onGain.isSmoothing())
@@ -180,7 +145,7 @@ public:
         for (int c = 0; c < numCh; ++c)
             dryCopy.copyFrom (c, 0, audio[c], numSamples);
 
-        const bool useNam = settings.channel == nam && active != nullptr;
+        const bool useNam = settings.channel == nam && namRunner.isActive();
         namMix.setTargetValue (useNam ? 1.0f : 0.0f);
         const bool runNam = useNam || namMix.isSmoothing();
         const bool runModel = ! useNam || namMix.isSmoothing();
@@ -649,144 +614,18 @@ private:
     }
 
     //==============================================================================
-    // NAM: the capture runs at its own rate (48 kHz) on the mono sum. Inside the oversampled
-    // domain the signal is smooth enough for cubic resampling both ways; the oversampler's
-    // decimation filter removes the resampling images.
-    struct PushResampler
-    {
-        double step = 1.0, pos = 0.0;   // input samples per output sample
-        float h[4] {};
-        void reset() noexcept { pos = 0.0; for (auto& v : h) v = 0.0f; }
-        template <typename Emit>
-        inline void push (float x, Emit&& emit) noexcept
-        {
-            h[0] = h[1]; h[1] = h[2]; h[2] = h[3]; h[3] = x;
-            while (pos < 1.0)
-            {
-                const float t = (float) pos;
-                // Catmull-Rom between h[1] and h[2]
-                const float c0 = h[1], c1 = 0.5f * (h[2] - h[0]);
-                const float c2 = h[0] - 2.5f * h[1] + 2.0f * h[2] - 0.5f * h[3];
-                const float c3 = 0.5f * (h[3] - h[0]) + 1.5f * (h[1] - h[2]);
-                emit (((c3 * t + c2) * t + c1) * t + c0);
-                pos += step;
-            }
-            pos -= 1.0;
-        }
-    };
-
-    int maxModelBlock (double modelRate = 48000.0) const noexcept
-    {
-        return (int) std::ceil ((double) maxBlock * modelRate / fs) + 16;
-    }
-
-    void prepareNamBuffers()
-    {
-        const int maxOs = maxBlock * osFactor;
-        // any rate up to 192 kHz captures
-        modelIn.assign ((size_t) (maxModelBlock (192000.0) + 16), 0.0f);
-        modelOut.assign (modelIn.size(), 0.0f);
-        outQueue.assign ((size_t) (maxOs * 2 + 1024), 0.0f);
-    }
-
-    void resetNamStream() noexcept
-    {
-        down.reset();
-        upRs.reset();
-        std::fill (outQueue.begin(), outQueue.end(), 0.0f);
-        qRead = 0;
-        qCount = 0;
-        const double modelRate = active != nullptr ? active->getSampleRate() : 48000.0;
-        down.step = fsNamOs / modelRate;
-        upRs.step = modelRate / fsNamOs;
-        // a little prefill absorbs the +-1 sample jitter of the rate conversion
-        const int prefill = (int) std::ceil (fsNamOs / modelRate) * 3 + 4;
-        qCount = juce::jmin (prefill, (int) outQueue.size());
-        namGain = 1.0f;
-        namCal = 1.0f;
-        if (active != nullptr && active->hasInputLevel())
-            namCal = juce::Decibels::decibelsToGain ((float) juce::jlimit (-24.0, 24.0, kInputDbu - active->getInputLevelDbu()));
-        if (active != nullptr && active->hasLoudness())
-            namGain = juce::Decibels::decibelsToGain (juce::jlimit (-12.0f, 24.0f, -18.0f - (float) active->getLoudnessDb()));
-    }
-
-    void takePendingModel() noexcept
-    {
-        if (! pendingSet)
-            return;
-        if (namLock.tryEnter())
-        {
-            retired = std::move (active);
-            active = std::move (pending);
-            pendingSet = false;
-            namLock.exit();
-            namLoaded.store (active != nullptr);
-            resetNamStream();
-        }
-    }
 
     /** A NAM knob (0..1) in dB: 0 at noon, +-range at the ends. */
     static float namKnobDb (float knob, float range) noexcept { return (knob - 0.5f) * 2.0f * range; }
 
     void processNam (float* const* audio, int numCh, int numSamples) noexcept
     {
-        if (active == nullptr)
-        {
-            for (int c = 0; c < numCh; ++c)
-                juce::FloatVectorOperations::clear (audio[c], numSamples);
-            return;
-        }
-
         // its own knobs, 5 = neutral: INPUT +-18 dB into the capture, BASS..DEPTH post EQ, OUTPUT +-18 dB
-        const float inGain = namCal * juce::Decibels::decibelsToGain (namKnobDb (settings.namInput, 18.0f));
-        const float outGain = namGain * juce::Decibels::decibelsToGain (namKnobDb (settings.namOutput, 18.0f));
-        juce::dsp::AudioBlock<float> block (audio, (size_t) numCh, (size_t) numSamples);
-        juce::dsp::AudioBlock<float> up;
-        float* os[2] { audio[0], numCh > 1 ? audio[1] : nullptr };
-        int nOs = numSamples;
-        if (namOversampler != nullptr)
-        {
-            up = namOversampler->processSamplesUp (block);
-            nOs = (int) up.getNumSamples();
-            for (int c = 0; c < numCh; ++c)
-                os[c] = up.getChannelPointer ((size_t) c);
-        }
-
-        int nModel = 0;
-        const int capacity = (int) modelIn.size();
-        for (int i = 0; i < nOs; ++i)
-        {
-            const float x = (numCh > 1 ? 0.5f * (os[0][i] + os[1][i]) : os[0][i]) * inGain;
-            down.push (x, [&] (float v) { if (nModel < capacity) modelIn[(size_t) nModel++] = v; });
-        }
-        if (nModel > 0)
-            active->process (modelIn.data(), modelOut.data(), nModel);
-
-        const int qSize = (int) outQueue.size();
-        for (int k = 0; k < nModel; ++k)
-            upRs.push (modelOut[(size_t) k] * outGain, [&] (float v)
-            {
-                if (qCount < qSize)
-                {
-                    outQueue[(size_t) ((qRead + qCount) % qSize)] = v;
-                    ++qCount;
-                }
-            });
-        for (int i = 0; i < nOs; ++i)
-        {
-            float v = 0.0f;
-            if (qCount > 0)
-            {
-                v = outQueue[(size_t) qRead];
-                qRead = (qRead + 1) % qSize;
-                --qCount;
-            }
-            for (int c = 0; c < numCh; ++c)
-                os[c][i] = v;
-        }
-
-        if (namOversampler != nullptr)
-            namOversampler->processSamplesDown (block);
+        namRunner.process (audio, numCh, numSamples,
+                           juce::Decibels::decibelsToGain (namKnobDb (settings.namInput, 18.0f)),
+                           juce::Decibels::decibelsToGain (namKnobDb (settings.namOutput, 18.0f)));
+        if (! namRunner.isActive())
+            return;
 
         // post EQ at the host rate
         namEq[0].setShelf (false, 110.0, namKnobDb (settings.namBass, 12.0f), fs);
@@ -841,10 +680,10 @@ private:
 
     //==============================================================================
     Settings settings;
-    double fs = 44100.0, fsOs = 352800.0, fsNamOs = 176400.0;
-    int maxBlock = 512, osLog2 = 3, namOsLog2 = 2, osFactor = 8;
+    double fs = 44100.0, fsOs = 352800.0;
+    int maxBlock = 512, osLog2 = 3, osFactor = 8;
 
-    std::unique_ptr<juce::dsp::Oversampling<float>> oversampler, namOversampler;
+    std::unique_ptr<juce::dsp::Oversampling<float>> oversampler;
     juce::AudioBuffer<float> dryCopy, namCopy, monoBuffer;
 
     Coeffs co;
@@ -866,15 +705,7 @@ private:
 
     juce::SmoothedValue<float> onGain, namMix, level;
 
-    // NAM
-    juce::SpinLock namLock;
-    std::unique_ptr<NamModel> active, pending, retired;
-    bool pendingSet = false;
-    std::atomic<bool> namLoaded { false };
-    PushResampler down, upRs;
-    std::vector<float> modelIn, modelOut, outQueue;
-    int qRead = 0, qCount = 0;
-    float namGain = 1.0f, namCal = 1.0f;
-    std::atomic<double> namSize { 1.0 };
+    // NAM (amp captures are levelled to a common loudness)
+    NamRunner namRunner { true };
     std::array<EqBand, 5> namEq;
 };

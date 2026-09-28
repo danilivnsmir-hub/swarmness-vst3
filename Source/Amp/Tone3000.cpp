@@ -98,15 +98,16 @@ juce::String Tone3000::getStatus() const
 }
 
 //==============================================================================
-void Tone3000::start (Target t)
+void Tone3000::start (Target t, Architecture arch)
 {
     if (! isConfigured())
     {
-        juce::URL (kApi + (t == Target::amp ? "/search?gears=amp" : "/search?format=ir")).launchInDefaultBrowser();
+        juce::URL (kApi + (t == Target::cab ? "/search?format=ir" : t == Target::pedal ? "/search?gears=pedal" : "/search?gears=amp")).launchInDefaultBrowser();
         return;
     }
     cancel();
     target = t;
+    architecture = arch;
     verifier = randomToken (32);
     state = randomToken (16);
 
@@ -127,10 +128,12 @@ void Tone3000::start (Target t)
              .withParameter ("state", state)
              .withParameter ("prompt", "select_tone")
              .withParameter ("preview", "true");
-    if (t == Target::amp)
-        url = url.withParameter ("gears", "amp_full-rig").withParameter ("format", "nam");
-    else
+    if (t == Target::cab)
         url = url.withParameter ("format", "ir");
+    else
+        url = url.withParameter ("gears", t == Target::pedal ? "pedal" : "amp_full-rig").withParameter ("format", "nam");
+    if (t != Target::cab && arch == Architecture::a2)
+        url = url.withParameter ("architecture", "2");
 
     setStatus ("Pick a tone on TONE3000 in your browser...");
     startThread (juce::Thread::Priority::low);
@@ -273,9 +276,28 @@ void Tone3000::run()
     const juce::String title = tone["title"].toString().isNotEmpty() ? tone["title"].toString() : "Tone " + toneId;
     const bool isIr = tone["format"].toString() == "ir" || target == Target::cab;
 
-    const auto models = apiGet ("/api/v1/models?tone_id=" + juce::URL::addEscapeChars (toneId, true) + "&page_size=50", token, httpStatus);
-    const auto* list = models["data"].getArray();
-    if (list == nullptr || list->isEmpty())
+    // the model list comes one architecture at a time (default: A1): the chosen one first, then the other
+    juce::Array<juce::var> all;
+    juce::StringArray seen;
+    juce::StringArray archs { "", "2" };
+    if (isIr)
+        archs = { "" };
+    else if (architecture == Architecture::a2)
+        archs = { "2", "" };
+    for (const auto& a : archs)
+    {
+        const auto models = apiGet ("/api/v1/models?tone_id=" + juce::URL::addEscapeChars (toneId, true) + "&page_size=50"
+                                        + (a.isNotEmpty() ? "&architecture=" + a : juce::String()), token, httpStatus);
+        if (const auto* page = models["data"].getArray())
+            for (const auto& m : *page)
+                if (! seen.contains (m["id"].toString()))
+                {
+                    seen.add (m["id"].toString());
+                    all.add (m);
+                }
+    }
+    const auto* list = &all;
+    if (list->isEmpty())
     {
         setStatus ("TONE3000: \"" + title + "\" has no files to download (" + juce::String (httpStatus) + ")");
         return;
@@ -283,7 +305,7 @@ void Tone3000::run()
 
     const auto folder = downloadFolder().getChildFile (safeName (title) + " (" + toneId + ")");
     Download result;
-    result.target = isIr ? Target::cab : Target::amp;
+    result.target = isIr ? Target::cab : (target == Target::pedal ? Target::pedal : Target::amp);
     result.toneTitle = title;
     int n = 0;
     for (const auto& m : *list)
@@ -291,7 +313,9 @@ void Tone3000::run()
         if (threadShouldExit())
             return;
         setStatus ("TONE3000: downloading \"" + title + "\" (" + juce::String (++n) + " / " + juce::String (list->size()) + ")...");
-        const auto name = safeName (m["name"].toString().isNotEmpty() ? m["name"].toString() : "model " + juce::String (n));
+        auto name = safeName (m["name"].toString().isNotEmpty() ? m["name"].toString() : "model " + juce::String (n));
+        if (m["architecture_version"].toString() == "2" && ! name.containsIgnoreCase ("A2"))
+            name << " A2";
         const auto dest = folder.getChildFile (name + (isIr ? ".wav" : ".nam"));
         if (downloadTo (m["model_url"].toString(), token, dest))
             result.files.add (dest);

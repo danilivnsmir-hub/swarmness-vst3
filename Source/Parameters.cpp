@@ -291,6 +291,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     drv->addChild (knob10 (drvBright, "Wasp Bright", 5.0f));
     drv->addChild (knob10 (drvAttack, "Wasp Attack", 5.0f));
     drv->addChild (percent (drvGate, "Wasp Gate", 0.0f));
+    drv->addChild (toggle (drvNam, "Wasp NAM Mode", false));
+    drv->addChild (knob10 (drvNamInput, "Wasp NAM Input", 5.0f));
+    drv->addChild (knob10 (drvNamOutput, "Wasp NAM Output", 5.0f));
+    drv->addChild (toggle (drvNamLite, "Wasp NAM A2 Lite", false));
 
     // ------------------------------------------------------------------ CAB
     auto cab = std::make_unique<Group> ("cab", "Cab", "|");

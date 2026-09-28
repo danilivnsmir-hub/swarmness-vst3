@@ -20,6 +20,28 @@ namespace
     {
         return f >= 1000.0 ? juce::String (f / 1000.0, 0) + "k" : juce::String ((int) f);
     }
+
+    /** TONE3000 scopes a pick to one NAM architecture: ask which (the last one is ticked). */
+    void tone3000Menu (SwarmnessAudioProcessor& processor, juce::Component& button, Tone3000::Target target)
+    {
+        if (! Tone3000::isConfigured())
+        {
+            processor.browseTone3000 (target);
+            return;
+        }
+        const bool a2 = processor.lastTone3000Architecture == Tone3000::Architecture::a2;
+        juce::PopupMenu menu;
+        menu.addSectionHeader ("TONE3000: which captures?");
+        menu.addItem (1, "A2 captures - the new NAM standard (with LITE)", true, a2);
+        menu.addItem (2, "A1 captures - the classic ones", true, ! a2);
+        juce::Component::SafePointer<juce::Component> safe (&button);
+        menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&button),
+                            [&processor, safe, target] (int r)
+                            {
+                                if (r == 0 || safe == nullptr) return;
+                                processor.browseTone3000 (target, r == 1 ? Tone3000::Architecture::a2 : Tone3000::Architecture::a1);
+                            });
+    }
 }
 
 //==============================================================================
@@ -948,7 +970,7 @@ AmpCabSection::AmpCabSection (SwarmnessAudioProcessor& p)
                                ? "TONE3000: browse thousands of free NAM captures in your browser - pick one and it downloads and loads here "
                                  "(all models of the tone; step through them with < >)"
                                : "Open TONE3000 in the browser - the free library of NAM captures and cabinet IRs. Download a .nam, then load or drop it here");
-    toneButton.onClick = [this] { processor.browseTone3000 (false); };
+    toneButton.onClick = [this] { tone3000Menu (processor, toneButton, Tone3000::Target::amp); };
     namPrev.setTooltip ("Previous capture in the same folder (e.g. the other models of a TONE3000 tone)");
     namNext.setTooltip ("Next capture in the same folder");
     namLiteToggle.setTooltip ("A2 captures hold two sizes of the same model: Full (best) and Lite (a fraction of the CPU, close in sound). "
@@ -979,7 +1001,7 @@ AmpCabSection::AmpCabSection (SwarmnessAudioProcessor& p)
     clearIrButton.onClick = [this] { processor.clearCabIR(); message.clear(); };
     irToneButton.setTooltip (Tone3000::isConfigured() ? "TONE3000: pick a cabinet IR in your browser - it downloads and loads here"
                                                       : "Open TONE3000 in the browser - thousands of free cabinet IRs");
-    irToneButton.onClick = [this] { processor.browseTone3000 (true); };
+    irToneButton.onClick = [this] { processor.browseTone3000 (Tone3000::Target::cab); };
     irPrev.setTooltip ("Previous IR in the same folder");
     irNext.setTooltip ("Next IR in the same folder");
     irPrev.onClick = [this] { processor.stepCabIR (-1); };
@@ -1250,7 +1272,9 @@ void AmpCabSection::choose (bool nam)
 }
 
 //==============================================================================
-WaspSection::WaspSection (juce::AudioProcessorValueTreeState& s) : state (s)
+WaspSection::WaspSection (SwarmnessAudioProcessor& p)
+    : processor (p), state (p.getAPVTS()),
+      modeSelector (*p.getAPVTS().getParameter (ParamIDs::drvNam), { "WASP", "NAM" })
 {
     using namespace ParamIDs;
     setBufferedToImage (true);
@@ -1258,14 +1282,47 @@ WaspSection::WaspSection (juce::AudioProcessorValueTreeState& s) : state (s)
     power.setTooltip ("WASP on / off");
     MidiLearnable::tag (power, drvOn);
     powerAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (state, drvOn, power);
+    modeSelector.setTooltip ("WASP: the built-in tight overdrive.  NAM: a pedal capture (.nam) - any overdrive, boost or fuzz from TONE3000");
+    addAndMakeVisible (modeSelector);
 
     volumeKnob.attach (state, drvVolume, "VOLUME: output level - 5 is about unity at a medium DRIVE; crank it to slam the amp's input");
     driveKnob .attach (state, drvDrive,  "DRIVE: from a clean boost to a thick, compressed overdrive (two silicon diodes in the op-amp feedback)");
     brightKnob.attach (state, drvBright, "BRIGHT: output voicing - darker and smoother down, more bite and pick attack up");
     attackKnob.attach (state, drvAttack, "ATTACK: tightens the low end in front of the clipping - up for chugs that stay tight on a high-gain amp, down for a full-range boost");
     gateKnob  .attach (state, drvGate,   "GATE: noise gate keyed from your guitar (0 = off) - silences the hiss of the drive and the amp behind it");
+    namInputKnob .attach (state, drvNamInput,  "INPUT: level into the pedal capture, 5 = as captured (+-18 dB) - more = the pedal's DRIVE");
+    namOutputKnob.attach (state, drvNamOutput, "OUTPUT: level after the capture, 5 = as captured (+-18 dB) - the pedal's LEVEL");
     for (auto* k : { &volumeKnob, &driveKnob, &brightKnob, &attackKnob, &gateKnob })
         addAndMakeVisible (k);
+    for (auto* k : { &namInputKnob, &namOutputKnob })
+        addChildComponent (k);
+
+    loadButton.setTooltip ("Load a pedal capture (.nam). Or drop one on the WASP panel");
+    loadButton.onClick = [this]
+    {
+        const auto cur = processor.getNamModelFile (true);
+        chooser = std::make_unique<juce::FileChooser> ("Load a pedal capture", cur.existsAsFile() ? cur.getParentDirectory()
+                                                                                              : juce::File::getSpecialLocation (juce::File::userHomeDirectory), "*.nam");
+        juce::Component::SafePointer<WaspSection> safe (this);
+        chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+                              [safe] (const juce::FileChooser& fc)
+                              {
+                                  if (safe != nullptr && fc.getResult().existsAsFile())
+                                      safe->loadNam (fc.getResult());
+                              });
+    };
+    toneButton.setTooltip ("TONE3000: pick a pedal capture in your browser - it downloads and loads here");
+    toneButton.onClick = [this] { tone3000Menu (processor, toneButton, Tone3000::Target::pedal); };
+    clearButton.setTooltip ("Forget the pedal capture");
+    clearButton.onClick = [this] { processor.clearNamModel (true); message.clear(); };
+    prevButton.onClick = [this] { processor.stepNamModel (-1, true); };
+    nextButton.onClick = [this] { processor.stepNamModel (1, true); };
+    liteToggle.setTooltip ("A2 captures hold two sizes of the same model: Full (best) and Lite (a fraction of the CPU)");
+    MidiLearnable::tag (liteToggle, drvNamLite);
+    liteAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (state, drvNamLite, liteToggle);
+    for (juce::Component* c : { (juce::Component*) &loadButton, (juce::Component*) &toneButton, (juce::Component*) &clearButton,
+                                (juce::Component*) &prevButton, (juce::Component*) &nextButton, (juce::Component*) &liteToggle })
+        addChildComponent (c);
 }
 
 DriveBlock::Settings WaspSection::current() const
@@ -1278,6 +1335,9 @@ DriveBlock::Settings WaspSection::current() const
     s.bright = get (ParamIDs::drvBright) * 0.1f;
     s.attack = get (ParamIDs::drvAttack) * 0.1f;
     s.gate = get (ParamIDs::drvGate) * 0.01f;
+    s.nam = get (ParamIDs::drvNam) > 0.5f;
+    s.namInput = get (ParamIDs::drvNamInput) * 0.1f;
+    s.namOutput = get (ParamIDs::drvNamOutput) * 0.1f;
     return s;
 }
 
@@ -1285,6 +1345,7 @@ void WaspSection::resized()
 {
     panelArea = getLocalBounds().toFloat();
     power.setBounds ((int) panelArea.getRight() - 40, 8, 26, 26);
+    modeSelector.setBounds ((int) panelArea.getRight() - 40 - 12 - 150, 9, 150, 24);
     const float knobsW = 470.0f;
     {
         const std::initializer_list<Knob*> row { &driveKnob, &volumeKnob, &brightKnob, &attackKnob, &gateKnob };
@@ -1292,17 +1353,99 @@ void WaspSection::resized()
         int i = 0;
         for (auto* k : row)
             k->setBounds ((int) (10.0f + step * ((float) i++ + 0.5f)) - 36, 58, 72, 104);
+        // NAM mode: INPUT / OUTPUT where DRIVE / VOLUME are, GATE stays
+        namInputKnob.setBounds (driveKnob.getBounds());
+        namOutputKnob.setBounds (volumeKnob.getBounds());
     }
     auto displays = juce::Rectangle<float> (knobsW + 10.0f, 44.0f, panelArea.getWidth() - knobsW - 26.0f, panelArea.getHeight() - 56.0f);
+    cardArea = displays;
     clipArea = displays.removeFromRight (displays.getHeight() * 1.25f);
     displays.removeFromRight (12.0f);
     responseArea = displays;
+
+    auto buttons = cardArea.reduced (14.0f, 0.0f).removeFromBottom (44.0f).withTrimmedBottom (10.0f).toNearestInt();
+    loadButton.setBounds (buttons.removeFromLeft (130));
+    buttons.removeFromLeft (8);
+    toneButton.setBounds (buttons.removeFromLeft (120));
+    buttons.removeFromLeft (8);
+    clearButton.setBounds (buttons.removeFromLeft (80));
+    nextButton.setBounds ((int) cardArea.getRight() - 14 - 26, (int) cardArea.getY() + 10, 22, 20);
+    prevButton.setBounds (nextButton.getX() - 24, (int) cardArea.getY() + 10, 22, 20);
+    liteToggle.setBounds (prevButton.getX() - 8 - 56, (int) cardArea.getY() + 9, 56, 22);
+}
+
+void WaspSection::updateVisibility()
+{
+    for (auto* k : { &volumeKnob, &driveKnob, &brightKnob, &attackKnob })
+        k->setVisible (! namMode);
+    for (auto* k : { &namInputKnob, &namOutputKnob })
+        k->setVisible (namMode);
+    for (auto* b : { &loadButton, &toneButton, &clearButton })
+        b->setVisible (namMode);
+    clearButton.setEnabled (description.isNotEmpty());
+    prevButton.setVisible (namMode && description.isNotEmpty());
+    nextButton.setVisible (namMode && description.isNotEmpty());
+    liteToggle.setVisible (namMode && description.contains (" A2,"));
+}
+
+bool WaspSection::isInterestedInFileDrag (const juce::StringArray& files)
+{
+    for (const auto& f : files)
+        if (juce::File (f).hasFileExtension ("nam"))
+            return true;
+    return false;
+}
+
+void WaspSection::filesDropped (const juce::StringArray& files, int, int)
+{
+    dragOver = false;
+    for (const auto& f : files)
+        if (juce::File (f).hasFileExtension ("nam"))
+        {
+            loadNam (juce::File (f));
+            break;
+        }
+    repaint();
+}
+
+void WaspSection::loadNam (const juce::File& file)
+{
+    message = processor.loadNamModel (file, true);
+    messageTicks = message.isNotEmpty() ? 150 : 0;
+    if (message.isEmpty())
+        for (auto id : { ParamIDs::drvNam, ParamIDs::drvOn })   // loading a capture means you want to hear it
+            if (auto* param = state.getParameter (id))
+            {
+                param->beginChangeGesture();
+                param->setValueNotifyingHost (1.0f);
+                param->endChangeGesture();
+            }
+    repaint();
 }
 
 void WaspSection::paint (juce::Graphics& g)
 {
     const auto s = current();
     drawPanel (g, panelArea);
+    if (s.nam)
+    {
+        drawPanelTitle (g, panelArea, "WASP", "pedal capture  -  any overdrive, boost or fuzz as a NAM capture, in front of the AMP", s.on);
+        g.setColour (Colours::inset);
+        g.fillRoundedRectangle (cardArea, 6.0f);
+        g.setColour (dragOver ? Colours::accentBright : Colours::panelBorder);
+        g.drawRoundedRectangle (cardArea, 6.0f, dragOver ? 2.0f : 1.0f);
+        auto t = cardArea.reduced (14.0f, 10.0f);
+        g.setFont (font (15.0f, true));
+        g.setColour (description.isNotEmpty() ? Colours::text : Colours::textDim);
+        g.drawFittedText (description.isNotEmpty() ? description : juce::String ("no pedal capture loaded"),
+                          t.removeFromTop (22.0f).withTrimmedRight (126.0f).toNearestInt(), juce::Justification::centredLeft, 1, 0.8f);
+        g.setFont (font (12.5f));
+        g.setColour (message.isNotEmpty() ? Colours::ledRed : (toneStatus.isNotEmpty() ? Colours::accent : Colours::textFaint));
+        g.drawFittedText (message.isNotEmpty() ? message : toneStatus.isNotEmpty() ? toneStatus
+                              : juce::String ("Drop a pedal .nam here or find one on TONE3000. INPUT and OUTPUT at 5 = the pedal as captured."),
+                          t.removeFromTop (36.0f).toNearestInt(), juce::Justification::topLeft, 2, 0.85f);
+        return;
+    }
     drawPanelTitle (g, panelArea, "WASP", "tight overdrive  -  in front of the AMP it tightens and pushes it, on its own it is a TS-style drive", s.on);
 
     const auto curveColour = Colours::accent.withAlpha (s.on ? 0.95f : 0.4f);
@@ -1370,13 +1513,31 @@ void WaspSection::paint (juce::Graphics& g)
 void WaspSection::tick()
 {
     const auto s = current();
-    if (! shownValid || s.on != shown.on || s.volume != shown.volume || s.drive != shown.drive || s.bright != shown.bright
-        || s.attack != shown.attack)
+    bool changed = false;
+    if (const auto st = processor.getTone3000Status(); st != toneStatus)
+    {
+        toneStatus = st;
+        changed = true;
+    }
+    if (messageTicks > 0 && --messageTicks == 0)
+    {
+        message.clear();
+        changed = true;
+    }
+    if (const auto d = processor.getNamModelDescription (true); d != description)
+    {
+        description = d;
+        changed = true;
+    }
+    if (changed || ! shownValid || s.on != shown.on || s.volume != shown.volume || s.drive != shown.drive || s.bright != shown.bright
+        || s.attack != shown.attack || s.nam != shown.nam)
     {
         shown = s;
         shownValid = true;
-        for (auto* k : { &volumeKnob, &driveKnob, &brightKnob, &attackKnob, &gateKnob })
+        namMode = s.nam;
+        for (auto* k : { &volumeKnob, &driveKnob, &brightKnob, &attackKnob, &gateKnob, &namInputKnob, &namOutputKnob })
             k->setAlpha (s.on ? 1.0f : 0.38f);
+        updateVisibility();
         repaint();
     }
 }

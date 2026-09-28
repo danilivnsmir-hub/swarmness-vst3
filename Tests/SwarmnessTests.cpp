@@ -2423,6 +2423,47 @@ namespace
         std::printf ("\nWASP: overdrive (TS-style clipper, ATTACK, BRIGHT, GATE)\n");
         const double sr = 48000.0;
         auto guitar = makeGuitar (sr, 48000);
+       #ifdef SWARMNESS_NAM_EXAMPLES
+        {
+            // NAM mode: a pedal capture instead of the circuit, its own gain kept, INPUT / OUTPUT trims
+            auto renderNam = [&] (DriveBlock::Settings s)
+            {
+                std::string e;
+                DriveBlock d;
+                d.prepare (sr, 256);
+                d.setNamModel (NamModel::load (namExample ("A2.nam").loadFileAsString().toStdString(), e));
+                d.setParams (s);
+                d.reset();
+                juce::AudioBuffer<float> out (guitar);
+                for (int start = 0; start < out.getNumSamples(); start += 256)
+                {
+                    const int n = juce::jmin (256, out.getNumSamples() - start);
+                    float* ptr[2] { out.getWritePointer (0, start), out.getWritePointer (1, start) };
+                    d.process (ptr, 2, n);
+                }
+                return out;
+            };
+            DriveBlock::Settings s;
+            s.on = true;
+            s.nam = true;
+            const auto base = renderNam (s);
+            auto t = s; t.namOutput = 0.5f + 6.0f / 36.0f;
+            const double outDb = juce::Decibels::gainToDecibels (renderNam (t).getRMSLevel (0, 9600, 38400) / base.getRMSLevel (0, 9600, 38400));
+            auto w = s; w.nam = false;
+            const double vsWasp = nullDb (base, renderWasp (w, guitar), 0, 9600, 38400);
+            check (allFinite (base) && base.getRMSLevel (0, 9600, 38400) > 1.0e-3 && std::abs (outDb - 6.0) < 0.05 && vsWasp > -10.0,
+                   juce::String::formatted ("NAM mode: the capture plays (%.1f dB), OUTPUT +6 dB = %+.2f dB, not the WASP circuit",
+                                            juce::Decibels::gainToDecibels (base.getRMSLevel (0, 9600, 38400)), outDb));
+            SwarmnessAudioProcessor p;
+            const auto err = p.loadNamModel (namExample ("A2.nam"), true);
+            juce::MemoryBlock mb;
+            p.getStateInformation (mb);
+            SwarmnessAudioProcessor q;
+            q.setStateInformation (mb.getData(), (int) mb.getSize());
+            check (err.isEmpty() && q.getNamModelFile (true) == namExample ("A2.nam") && q.getNamModelFile (false) == juce::File(),
+                   "NAM mode: the pedal capture is saved with the session (apart from the AMP's)");
+        }
+       #endif
         {
             DriveBlock::Settings s;
             auto out = renderWasp (s, guitar);
@@ -2966,6 +3007,10 @@ int main (int argc, char** argv)
             p.getAPVTS().getParameter (ParamIDs::ampChannel)->setValueNotifyingHost (1.0f);
             p.loadNamModel (namExample ("A2.nam"));
             p.getAPVTS().getParameter (ParamIDs::cabType)->setValueNotifyingHost (1.0f);
+            // and WASP in NAM mode with a capture
+            p.getAPVTS().getParameter (ParamIDs::drvNam)->setValueNotifyingHost (1.0f);
+            p.getAPVTS().getParameter (ParamIDs::drvOn)->setValueNotifyingHost (1.0f);
+            p.loadNamModel (namExample ("A2.nam"), true);
         }
         p.setUiMini (mini);
         std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());

@@ -18,13 +18,20 @@
  *   5. the tone's models are listed (GET /api/v1/models?tone_id=...) and downloaded with the Bearer
  *      token into Documents/Swarmness/TONE3000/<tone>/, and the first one is loaded
  *
+ * TONE3000 scopes a flow to ONE architecture: without `architecture` the catalog and the model list
+ * are A1 (+ custom) only and A2 tones show "Not supported"; architecture=2 is A2 only. So the user
+ * picks A2 or A1 when starting, and the model list is fetched for each architecture.
+ *
  * Only the publishable key (t3k_pub_...) is built in: per TONE3000 it is an OAuth client id, not a
  * secret. The network work runs on this object's own thread; results come back on the message thread.
  */
 class Tone3000 : private juce::Thread
 {
 public:
-    enum class Target { amp, cab };
+    enum class Target { amp, cab, pedal };
+
+    /** NAM architecture the catalog is scoped to: TONE3000 takes a single one (none = A1 + custom). */
+    enum class Architecture { a1, a2 };
 
     struct Download
     {
@@ -41,7 +48,7 @@ public:
     static juce::String redirectUri();
 
     /** Starts a Select flow (message thread). A flow already running is cancelled. */
-    void start (Target);
+    void start (Target, Architecture = Architecture::a1);
     void cancel();
 
     /** "Waiting for TONE3000 in your browser...", "Downloading 3 models...", errors (message thread). */
@@ -67,6 +74,7 @@ private:
     bool downloadTo (const juce::String& url, const juce::String& token, const juce::File& dest);
 
     Target target = Target::amp;
+    Architecture architecture = Architecture::a1;
     juce::String verifier, state;
     std::unique_ptr<juce::StreamingSocket> listener;
     mutable juce::CriticalSection statusLock;

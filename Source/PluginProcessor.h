@@ -99,10 +99,11 @@ public:
     double getReverbIRSeconds() const;
 
     /** AMP: a Neural Amp Modeler capture (.nam), message thread. Returns an error message, empty on success. */
-    juce::String loadNamModel (const juce::File&);
-    void clearNamModel();
-    juce::File getNamModelFile() const;
-    juce::String getNamModelDescription() const;   // "name - WaveNet, 48 kHz" (empty = none)
+    // NAM captures: the AMP's (pedal = false) and WASP's pedal capture (pedal = true)
+    juce::String loadNamModel (const juce::File&, bool pedal = false);
+    void clearNamModel (bool pedal = false);
+    juce::File getNamModelFile (bool pedal = false) const;
+    juce::String getNamModelDescription (bool pedal = false) const;   // "name - WaveNet, 48 kHz" (empty = none)
 
     /** CAB: a loaded cabinet impulse response (message thread). */
     juce::String loadCabIR (const juce::File&);
@@ -110,10 +111,12 @@ public:
     juce::File getCabIRFile() const;
     juce::String getCabIRDescription() const;
     /** TONE3000: pick a NAM capture (AMP) or a cabinet IR (CAB) on tone3000.com; it downloads and loads. */
-    void browseTone3000 (bool forCab);
+    void browseTone3000 (Tone3000::Target, Tone3000::Architecture = Tone3000::Architecture::a1);
+    /** TONE3000 takes one NAM architecture per flow: the one picked last (the menu ticks it). */
+    Tone3000::Architecture lastTone3000Architecture = Tone3000::Architecture::a2;
     juce::String getTone3000Status() const { return tone3000.getStatus(); }
     /** The previous / next capture (or IR) in the folder of the loaded one - e.g. the other models of a TONE3000 tone. */
-    void stepNamModel (int direction);
+    void stepNamModel (int direction, bool pedal = false);
     void stepCabIR (int direction);
 
     /** Rebuilds the modelled cabinet IR when its settings changed (message thread; also run by a timer). */
@@ -177,6 +180,8 @@ private:
                 owner.updateCabModel();   // modelled cabinet IR rebuilds
                 owner.amp.releaseRetired();   // frees NAM captures the audio thread swapped out
                 owner.amp.setNamSize (owner.p.namLite->load() > 0.5f ? 0.0 : 1.0);   // A2 Full / Lite
+                owner.wasp.releaseRetired();
+                owner.wasp.setNamSize (owner.p.drvNamLite->load() > 0.5f ? 0.0 : 1.0);
                 wait (100);
             }
         }
@@ -232,6 +237,7 @@ private:
         std::atomic<float>* namLite {};
         std::atomic<float>* drvOn {};      std::atomic<float>* drvVolume {};   std::atomic<float>* drvDrive {};    std::atomic<float>* drvBright {};
         std::atomic<float>* drvAttack {};  std::atomic<float>* drvGate {};
+        std::atomic<float>* drvNam {};     std::atomic<float>* drvNamInput {}; std::atomic<float>* drvNamOutput {}; std::atomic<float>* drvNamLite {};
         std::atomic<float>* cabOn {};      std::atomic<float>* cabType {};     std::atomic<float>* cabMic {};      std::atomic<float>* cabDist {};
         std::atomic<float>* cabLowCut {};  std::atomic<float>* cabHighCut {};  std::atomic<float>* cabLevel {};
         std::array<std::atomic<float>*, Chain::numBlocks> chainSlots {}, chainLanes {};
@@ -280,8 +286,10 @@ private:
     std::vector<float> reverbIREnvelope;
     double reverbIRSeconds = 0.0;
     juce::CriticalSection irInfoLock;
-    juce::File namFile, cabIRFile;
-    juce::String namDescription, cabIRDescription;
+    std::array<juce::File, 2> namFile;
+    juce::File cabIRFile;
+    std::array<juce::String, 2> namDescription;
+    juce::String cabIRDescription;
     int cabModelKey = -1;   // type / mic / distance / rate the modelled cabinet IR was built for
     double cabModelRate = 0.0;
     juce::CriticalSection cabModelLock;

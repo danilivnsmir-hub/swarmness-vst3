@@ -169,6 +169,11 @@ namespace ParamIDs
     inline constexpr const char* drvBright   = "drvBright";
     inline constexpr const char* drvAttack   = "drvAttack";
     inline constexpr const char* drvGate     = "drvGate";
+    // WASP's NAM mode: a pedal capture instead of the WASP circuit (5 = the capture as it is)
+    inline constexpr const char* drvNam       = "drvNam";
+    inline constexpr const char* drvNamInput  = "drvNamInput";
+    inline constexpr const char* drvNamOutput = "drvNamOutput";
+    inline constexpr const char* drvNamLite   = "drvNamLite";
 
     // CAB (modelled cabinets or a loaded IR)
     inline constexpr const char* cabOn       = "cabOn";

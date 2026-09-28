@@ -1,6 +1,7 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include "NamRunner.h"
 
 #include <array>
 #include <cmath>
@@ -20,6 +21,9 @@
  *   - the 51 pF feedback cap rolls the clipped part off (more DRIVE = darker fizz, like the real one).
  * ATTACK tightens the low end in front of the clipper (20 Hz .. 500 Hz), BRIGHT tilts the output
  * filter, GATE is a noise gate keyed from the input, VOLUME the output level (5 = about unity).
+ *
+ * NAM mode runs a loaded pedal capture (.nam) instead, with its own INPUT / OUTPUT trims (5 = the
+ * capture as it is: its own gain is the pedal's) and the same GATE.
  */
 class DriveBlock
 {
@@ -29,6 +33,8 @@ public:
         bool on = false;
         float volume = 0.5f, drive = 0.3f, bright = 0.5f, attack = 0.5f;   // 0..1 (knob 0..10)
         float gate = 0.0f;                                                  // 0..1, 0 = off
+        bool nam = false;                                                   // a pedal capture instead of WASP
+        float namInput = 0.5f, namOutput = 0.5f;                            // 0..1, 5 = as captured (+-18 dB)
     };
 
     //==============================================================================
@@ -46,6 +52,8 @@ public:
             oversampler->initProcessing ((size_t) maxBlock);
         }
         dryCopy.setSize (2, maxBlock, false, false, true);
+        namCopy.setSize (2, maxBlock, false, false, true);
+        namRunner.prepare (sampleRate, maxBlock);
         gateCurve.assign ((size_t) maxBlock, 1.0f);
         reset();
     }
@@ -61,14 +69,25 @@ public:
         onGain.setCurrentAndTargetValue (settings.on ? 1.0f : 0.0f);
         volume.reset (fs, 0.03);
         volume.setCurrentAndTargetValue (volumeGain (settings.volume));
+        namRunner.reset();
+        namMix.reset (fs, 0.03);
+        namMix.setCurrentAndTargetValue (settings.nam && namRunner.hasModel() ? 1.0f : 0.0f);
     }
 
     void setParams (const Settings& s) noexcept { settings = s; }
+
+    /** NAM mode: a pedal capture (message thread; nullptr clears). */
+    void setNamModel (std::unique_ptr<NamModel> model) { namRunner.setModel (std::move (model)); }
+    bool hasNamModel() const noexcept { return namRunner.hasModel(); }
+    void setNamSize (double size01) { namRunner.setSize (size01); }
+    void releaseRetired() { namRunner.releaseRetired(); }
+    static float namKnobDb (float knob) noexcept { return (knob - 0.5f) * 36.0f; }
 
     //==============================================================================
     void process (float* const* audio, int numCh, int numSamples) noexcept
     {
         numCh = juce::jmin (numCh, 2);
+        namRunner.pickUp();
         onGain.setTargetValue (settings.on ? 1.0f : 0.0f);
         if (! settings.on && ! onGain.isSmoothing())
         {
@@ -79,41 +98,65 @@ public:
             dryCopy.copyFrom (c, 0, audio[c], numSamples);
 
         updateGate (audio, numCh, numSamples);   // keyed from the input, applied after the drive
-        updateCoefficients (numSamples);
 
-        juce::dsp::AudioBlock<float> block (audio, (size_t) numCh, (size_t) numSamples);
-        float* os[2] { audio[0], numCh > 1 ? audio[1] : nullptr };
-        int nOs = numSamples;
-        if (oversampler != nullptr)
+        const bool useNam = settings.nam && namRunner.isActive();
+        namMix.setTargetValue (useNam ? 1.0f : 0.0f);
+        const bool runNam = useNam || namMix.isSmoothing();
+        const bool runWasp = ! useNam || namMix.isSmoothing();
+        if (runNam)
         {
-            auto up = oversampler->processSamplesUp (block);
-            nOs = (int) up.getNumSamples();
             for (int c = 0; c < numCh; ++c)
-                os[c] = up.getChannelPointer ((size_t) c);
+                namCopy.copyFrom (c, 0, audio[c], numSamples);
+            float* n[2] { namCopy.getWritePointer (0), namCopy.getWritePointer (1) };
+            namRunner.process (n, numCh, numSamples, juce::Decibels::decibelsToGain (namKnobDb (settings.namInput)),
+                               juce::Decibels::decibelsToGain (namKnobDb (settings.namOutput)));
         }
-        for (int c = 0; c < numCh; ++c)
+
+        if (runWasp)
         {
-            auto& st = ch[(size_t) c];
-            for (int i = 0; i < nOs; ++i)
-                os[c][i] = processSample (st, os[c][i]);
+            updateCoefficients (numSamples);
+            juce::dsp::AudioBlock<float> block (audio, (size_t) numCh, (size_t) numSamples);
+            float* os[2] { audio[0], numCh > 1 ? audio[1] : nullptr };
+            int nOs = numSamples;
+            if (oversampler != nullptr)
+            {
+                auto up = oversampler->processSamplesUp (block);
+                nOs = (int) up.getNumSamples();
+                for (int c = 0; c < numCh; ++c)
+                    os[c] = up.getChannelPointer ((size_t) c);
+            }
+            for (int c = 0; c < numCh; ++c)
+            {
+                auto& st = ch[(size_t) c];
+                for (int i = 0; i < nOs; ++i)
+                    os[c][i] = processSample (st, os[c][i]);
+            }
+            if (oversampler != nullptr)
+                oversampler->processSamplesDown (block);
         }
-        if (oversampler != nullptr)
-            oversampler->processSamplesDown (block);
 
         volume.setTargetValue (volumeGain (settings.volume));
         for (int i = 0; i < numSamples; ++i)
         {
-            const float g = volume.getNextValue() * gateCurve[(size_t) juce::jmin (i, (int) gateCurve.size() - 1)];
+            const float g = volume.getNextValue();
+            const float gate = gateCurve[(size_t) juce::jmin (i, (int) gateCurve.size() - 1)];
             const float on = onGain.getNextValue();
+            const float m = namMix.getNextValue();
             for (int c = 0; c < numCh; ++c)
             {
-                auto& st = ch[(size_t) c];
-                // DC blocker (the clipper is symmetric, but the ATTACK filter sweep can leave a step)
-                const float x = audio[c][i];
-                const float y = x - st.dcX + dcR * st.dcY;
-                st.dcX = x; st.dcY = y;
-                const float wet = y * g;
-                audio[c][i] = dryCopy.getSample (c, i) + on * (wet - dryCopy.getSample (c, i));
+                float wet = 0.0f;
+                if (runWasp)
+                {
+                    auto& st = ch[(size_t) c];
+                    // DC blocker (the clipper is symmetric, but the ATTACK filter sweep can leave a step)
+                    const float x = audio[c][i];
+                    const float y = x - st.dcX + dcR * st.dcY;
+                    st.dcX = x; st.dcY = y;
+                    wet = y * g;
+                }
+                if (runNam)
+                    wet = runWasp ? wet + m * (namCopy.getSample (c, i) - wet) : namCopy.getSample (c, i);
+                audio[c][i] = dryCopy.getSample (c, i) + on * (wet * gate - dryCopy.getSample (c, i));
             }
         }
     }
@@ -292,7 +335,8 @@ private:
     double fs = 44100.0, fsOs = 176400.0;
     int maxBlock = 512, osLog2 = 2;
     std::unique_ptr<juce::dsp::Oversampling<float>> oversampler;
-    juce::AudioBuffer<float> dryCopy;
+    juce::AudioBuffer<float> dryCopy, namCopy;
+    NamRunner namRunner { false };   // a pedal's capture keeps its own gain
     std::array<ChannelState, 2> ch {};
     float attackHz = 150.0f;
     float hb0 = 1.0f, hb1 = 0.0f, hb2 = 0.0f, ha1 = 0.0f, ha2 = 0.0f;
@@ -300,5 +344,5 @@ private:
     float gateEnv = 0.0f, gateGain = 1.0f;
     int gateHold = 0;
     std::vector<float> gateCurve;
-    juce::SmoothedValue<float> onGain, volume;
+    juce::SmoothedValue<float> onGain, volume, namMix;
 };

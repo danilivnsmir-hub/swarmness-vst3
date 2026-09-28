@@ -221,27 +221,44 @@ private:
 //==============================================================================
 /**
  * WASP (overdrive): VOLUME / DRIVE / BRIGHT / ATTACK / GATE, with the pedal's frequency response
- * and its clipping curve drawn live.
+ * and its clipping curve drawn live. NAM mode runs a pedal capture (.nam) instead: INPUT / OUTPUT /
+ * GATE and the capture card (load, TONE3000, < >, LITE for A2).
  */
-class WaspSection : public juce::Component
+class WaspSection : public juce::Component,
+                    public juce::FileDragAndDropTarget
 {
 public:
-    explicit WaspSection (juce::AudioProcessorValueTreeState&);
+    explicit WaspSection (SwarmnessAudioProcessor&);
 
     void paint (juce::Graphics&) override;
     void resized() override;
     void tick();
 
+    bool isInterestedInFileDrag (const juce::StringArray&) override;
+    void fileDragEnter (const juce::StringArray&, int, int) override { dragOver = true; repaint(); }
+    void fileDragExit (const juce::StringArray&) override { dragOver = false; repaint(); }
+    void filesDropped (const juce::StringArray&, int, int) override;
+
 private:
     DriveBlock::Settings current() const;
+    void loadNam (const juce::File&);
+    void updateVisibility();
 
+    SwarmnessAudioProcessor& processor;
     juce::AudioProcessorValueTreeState& state;
-    juce::Rectangle<float> panelArea, responseArea, clipArea;
+    juce::Rectangle<float> panelArea, responseArea, clipArea, cardArea;
     PowerButton power;
+    SegmentedChoice modeSelector;
     Knob volumeKnob { "VOLUME" }, driveKnob { "DRIVE" }, brightKnob { "BRIGHT" }, attackKnob { "ATTACK" }, gateKnob { "GATE" };
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> powerAttachment;
+    Knob namInputKnob { "INPUT" }, namOutputKnob { "OUTPUT" };
+    juce::TextButton loadButton { "LOAD .NAM" }, toneButton { "TONE3000" }, clearButton { "CLEAR" }, prevButton { "<" }, nextButton { ">" };
+    PillToggle liteToggle { "LITE" };
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> powerAttachment, liteAttachment;
+    std::unique_ptr<juce::FileChooser> chooser;
     DriveBlock::Settings shown;
-    bool shownValid = false;
+    bool shownValid = false, namMode = false, dragOver = false;
+    juce::String description, message, toneStatus;
+    int messageTicks = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WaspSection)
 };
