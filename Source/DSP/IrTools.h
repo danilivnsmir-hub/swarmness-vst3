@@ -64,6 +64,7 @@ namespace irtools
         first = juce::jmax (0, first - (int) (0.001 * sampleRate));
         const int newLength = juce::jmax (16, last + 1 - first);
         juce::AudioBuffer<float> trimmed (channels, newLength);
+        trimmed.clear();
         for (int c = 0; c < channels; ++c)
             trimmed.copyFrom (c, 0, ir, c, first, juce::jmin (newLength, length - first));
         // short fade at the very end

@@ -185,21 +185,26 @@ private:
             {
                 owner.updateCabModel();   // modelled cabinet IR rebuilds
                 owner.amp.releaseRetired();   // frees NAM captures the audio thread swapped out
-                owner.amp.setNamSize (owner.p.namLite->load() > 0.5f ? 0.0 : 1.0);   // A2 Full / Lite
                 owner.wasp.releaseRetired();
-                owner.cab.setUserMix (owner.p.cabIrMix->load() * 0.01f, owner.p.cabIrInvB->load() > 0.5f);
-                owner.wasp.setNamSize (owner.p.drvNamLite->load() > 0.5f ? 0.0 : 1.0);
+                owner.applySlowSettings();
                 wait (100);
             }
         }
         SwarmnessAudioProcessor& owner;
     };
     std::unique_ptr<Housekeeper> housekeeper;
+    /** Settings that rebuild something (IR MIX / INV B, A2 Full / Lite): off the audio thread. */
+    void applySlowSettings()
+    {
+        amp.setNamSize (p.namLite->load() > 0.5f ? 0.0 : 1.0);
+        wasp.setNamSize (p.drvNamLite->load() > 0.5f ? 0.0 : 1.0);
+        cab.setUserMix (p.cabIrMix->load() * 0.01f, p.cabIrInvB->load() > 0.5f);
+    }
     Tone3000 tone3000;
     TunerTap tunerTap;
     juce::SmoothedValue<float> tunerGain;
     std::atomic<int> pendingScene { 0 };
-    bool restoringState = false;
+    std::atomic<bool> restoringState { false };
     juce::Array<juce::RangedAudioParameter*> learnableParams;   // index = binding param
     int indexOfParam (const juce::String& paramID) const noexcept;
     void handleMidi (const juce::MidiBuffer&);

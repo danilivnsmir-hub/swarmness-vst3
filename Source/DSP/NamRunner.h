@@ -59,6 +59,9 @@ public:
     {
         if (oversampler != nullptr) oversampler->reset();
         resetStream();
+        // stopped: a waiting capture comes in at once (with a short fade-in), no fade-out needed
+        fade = pendingSet.load() ? 0.0f : 1.0f;
+        fadeDir = 0;
     }
 
     /** Hands over a capture (message thread; nullptr clears). The old one is freed later. */
@@ -72,7 +75,7 @@ public:
         const juce::SpinLock::ScopedLockType sl (lock);
         retired.reset();
         pending = std::move (model);
-        pendingSet = true;
+        pendingSet.store (true, std::memory_order_release);
     }
 
     /** A2 captures: Full (1) or Lite (0). Off the audio thread. */
@@ -98,16 +101,24 @@ public:
     /** Audio thread: takes a pending capture over. Call at the top of every block. */
     void pickUp() noexcept
     {
-        if (! pendingSet)
+        if (! pendingSet.load (std::memory_order_acquire))
             return;
+        // a running capture fades out first (a few ms), so stepping through captures doesn't click
+        if (active != nullptr && fade > 0.0f)
+        {
+            fadeDir = -1;
+            return;
+        }
         if (lock.tryEnter())
         {
             retired = std::move (active);
             active = std::move (pending);
-            pendingSet = false;
+            pendingSet.store (false, std::memory_order_relaxed);
             lock.exit();
             loaded.store (active != nullptr);
             resetStream();
+            fade = 0.0f;
+            fadeDir = 1;
         }
     }
 
@@ -158,6 +169,7 @@ public:
                     ++qCount;
                 }
             });
+        const float fadeStep = (float) fadeDir / (float) (0.008 * fsOs);
         for (int i = 0; i < nOs; ++i)
         {
             float v = 0.0f;
@@ -167,9 +179,16 @@ public:
                 qRead = (qRead + 1) % qSize;
                 --qCount;
             }
+            if (fadeDir != 0)
+            {
+                fade = juce::jlimit (0.0f, 1.0f, fade + fadeStep);
+                v *= fade;
+            }
             for (int c = 0; c < numCh; ++c)
                 os[c][i] = v;
         }
+        if (fade >= 1.0f && fadeDir > 0)
+            fadeDir = 0;
 
         if (oversampler != nullptr)
             oversampler->processSamplesDown (block);
@@ -232,11 +251,13 @@ private:
 
     juce::SpinLock lock;
     std::unique_ptr<NamModel> active, pending, retired;
-    bool pendingSet = false;
+    std::atomic<bool> pendingSet { false };
     std::atomic<bool> loaded { false };
     std::atomic<double> size { 1.0 };
     PushResampler down, upRs;
     std::vector<float> modelIn, modelOut, outQueue;
     int qRead = 0, qCount = 0;
+    float fade = 1.0f;   // swap fade (audio thread)
+    int fadeDir = 0;
     float calGain = 1.0f, loudGain = 1.0f;
 };

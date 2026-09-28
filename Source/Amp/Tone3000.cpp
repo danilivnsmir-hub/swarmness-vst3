@@ -194,6 +194,7 @@ juce::var Tone3000::apiGet (const juce::String& path, const juce::String& token,
         juce::URL::InputStreamOptions (juce::URL::ParameterHandling::inAddress)
             .withExtraHeaders ("Authorization: Bearer " + token + "\r\nAccept: application/json")
             .withConnectionTimeoutMs (15000)
+            .withProgressCallback ([this] (int, int) { return ! threadShouldExit(); })
             .withStatusCode (&httpStatus));
     if (stream == nullptr)
         return {};
@@ -207,15 +208,23 @@ bool Tone3000::downloadTo (const juce::String& url, const juce::String& token, c
         juce::URL::InputStreamOptions (juce::URL::ParameterHandling::inAddress)
             .withExtraHeaders ("Authorization: Bearer " + token)
             .withConnectionTimeoutMs (30000)
+            .withProgressCallback ([this] (int, int) { return ! threadShouldExit(); })
             .withStatusCode (&httpStatus));
     if (stream == nullptr || httpStatus >= 400)
         return false;
-    juce::MemoryBlock data;
-    stream->readIntoMemoryBlock (data, 64 * 1024 * 1024);
-    if (data.getSize() < 16)
+    // in small chunks, so closing the plug-in (or a new browse) never waits on a big download
+    juce::MemoryOutputStream data;
+    char chunk[16384];
+    while (! threadShouldExit() && ! stream->isExhausted() && data.getDataSize() < (size_t) 64 * 1024 * 1024)
+    {
+        const int n = stream->read (chunk, (int) sizeof (chunk));
+        if (n <= 0) break;
+        data.write (chunk, (size_t) n);
+    }
+    if (threadShouldExit() || data.getDataSize() < 16)
         return false;
     dest.getParentDirectory().createDirectory();
-    return dest.replaceWithData (data.getData(), data.getSize());
+    return dest.replaceWithData (data.getData(), data.getDataSize());
 }
 
 void Tone3000::run()

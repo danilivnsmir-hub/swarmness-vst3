@@ -186,10 +186,14 @@ void SwarmnessAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBl
     carve.prepare (sampleRate);
     crypt.prepare (sampleRate, maxBlockSize);
     amp.prepare (sampleRate, maxBlockSize);
-    cab.prepare (sampleRate, maxBlockSize);
+    {
+        const juce::ScopedLock sl (cabModelLock);
+        cab.prepare (sampleRate, maxBlockSize);
+    }
     wasp.prepare (sampleRate, maxBlockSize);
     tunerTap.prepare (sampleRate);
     updateCabModel (true);
+    applySlowSettings();   // a restored IR MIX / Lite size is in place before the first block
     cab.commitPending();   // the cabinet is running from the first block (an offline bounce starts right away)
 
     // Only SMOKE (oversampling) adds latency, and it is there wherever SMOKE sits in the chain.
@@ -972,6 +976,7 @@ void SwarmnessAudioProcessor::stepCabIR (int direction, int slot)
 
 void SwarmnessAudioProcessor::updateCabModel (bool force)
 {
+    const juce::ScopedLock sl (cabModelLock);   // prepareToPlay changes the rate under it too
     // the IR is rebuilt for the modelled type (IR mode keeps the last model for its cross-fade)
     int type = juce::jlimit (0, (int) CabBlock::numTypes - 1, (int) p.cabType->load());
     if (type == CabBlock::ir)
@@ -980,7 +985,6 @@ void SwarmnessAudioProcessor::updateCabModel (bool force)
     const int dist = juce::roundToInt (p.cabDist->load());
     const int key = type * 10000 + mic * 100 + dist;
     const double rate = cab.getSampleRate();
-    const juce::ScopedLock sl (cabModelLock);
     if (! force && key == cabModelKey && rate == cabModelRate)
         return;
     cabModelKey = key;
@@ -1296,6 +1300,7 @@ void SwarmnessAudioProcessor::setStateInformation (const void* data, int sizeInB
             presetManager->restoreFromState (tree.getProperty ("presetName").toString());
             pendingScene.store (presetManager->getCurrentScene());
             restoringState = false;
+            applySlowSettings();
 
             // Momentary footswitches must never come back "stuck down" after reloading a session.
             if (apvts.getRawParameterValue (ParamIDs::switchMode)->load() < 0.5f)

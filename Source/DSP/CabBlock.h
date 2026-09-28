@@ -80,6 +80,9 @@ public:
         const juce::dsp::ProcessSpec spec { fs, (juce::uint32) maxBlock, 2 };
         modelConv.prepare (spec);
         userConv.prepare (spec);
+        // prepare() installs the IR at once, without a cross-fade from the empty engine
+        userSettle = 0;
+        userEngineReady = userLoaded && userConv.getCurrentIRSize() == userSize;
     }
 
     void setParams (const Settings& s) noexcept { settings = s; }
@@ -180,8 +183,20 @@ public:
         if (numCh == 1)
             dryCopy.clear (1, 0, numSamples);
 
-        // a real IR is running (JUCE cross-fades from one IR to the next itself); before the first one: the model
-        const bool userReady = userLoaded && userConv.getCurrentIRSize() >= 16;
+        // a real IR is running (JUCE cross-fades from one IR to the next itself); before the first one: the model.
+        // A fresh engine starts as a unit impulse and JUCE fades from it to the IR over 50 ms - that fade
+        // would be the raw amp, so the IR counts as ready only once it is installed and the fade is over.
+        if (! userEngineReady)
+        {
+            if (userLoaded && userConv.getCurrentIRSize() == userSize)
+            {
+                userSettle += numSamples;
+                userEngineReady = userSettle >= (int) (0.06 * fs);
+            }
+            else
+                userSettle = 0;
+        }
+        const bool userReady = userLoaded && userEngineReady;
         userMix.setTargetValue (settings.type == ir && userReady ? 1.0f : 0.0f);
         // a new IR only takes over inside process(): keep the engine running until it has (silently)
         const bool userInstalling = userLoaded && ! userReady;
@@ -624,6 +639,9 @@ private:
         {
             userCleared = false;
             userLoaded = false;
+            // the engine still holds the cleared IR: the next one has to finish its fade before it plays
+            userEngineReady = false;
+            userSettle = 0;
         }
     }
 
@@ -644,7 +662,8 @@ private:
     std::array<double, 2> userSourceRate { 44100.0, 44100.0 };
     float irMix = 0.5f;
     bool irInvertB = false;
-    int userSize = -1;
+    int userSize = -1, userSettle = 0;
+    bool userEngineReady = false;
     double pendingModelRate = 44100.0, pendingUserRate = 44100.0;
     bool modelPending = false, userPending = false, userCleared = false;
     bool modelLoaded = false, userLoaded = false;

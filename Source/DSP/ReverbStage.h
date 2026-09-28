@@ -58,7 +58,10 @@ public:
         dryCopy.setSize (2, maxBlockSize, false, false, true);
 
         convolution.reset();
+        pickUpImpulseResponse();   // prepare() installs a pending IR at once: an offline render starts with it
         convolution.prepare ({ sr, (juce::uint32) maxBlockSize, 2 });
+        irSettle = 0;
+        irEngineReady = irLoaded && std::abs (convolution.getCurrentIRSize() - expectedIRSize()) <= 1;
 
         feedGain.reset (sr, 0.03);
         dryGain.reset (sr, 0.03);
@@ -555,6 +558,20 @@ private:
         }
         juce::dsp::AudioBlock<float> block (wet.getArrayOfWritePointers(), 2, (size_t) numSamples);
         convolution.process (juce::dsp::ProcessContextReplacing<float> (block));
+        // a fresh engine is a unit impulse that JUCE fades into the IR (built on its own thread): that
+        // would put the dry signal on the wet path - silent until the IR is in and the fade is over
+        if (! irEngineReady)
+        {
+            if (std::abs (convolution.getCurrentIRSize() - expectedIRSize()) <= 1)
+            {
+                irSettle += numSamples;
+                irEngineReady = irSettle >= (int) (0.06 * sampleRate);
+            }
+            else
+                irSettle = 0;
+            wet.clear (0, numSamples);
+            return;
+        }
         // Self-healing: a convolution that ever produces garbage is reset instead of hissing forever
         bool bad = false;
         for (int ch = 0; ch < 2 && ! bad; ++ch)
@@ -582,6 +599,8 @@ private:
         {
             // wait-free hand-over (the convolution prepares the IR on its own background thread)
             // (cleaned and levelled on the message thread: irtools::sanitise + a fixed energy)
+            irSize = pendingIR.getNumSamples();
+            irRate = pendingIRRate;
             convolution.loadImpulseResponse (std::move (pendingIR), pendingIRRate, juce::dsp::Convolution::Stereo::yes,
                                              juce::dsp::Convolution::Trim::no, juce::dsp::Convolution::Normalise::no);
             irPending = false;
@@ -591,6 +610,8 @@ private:
         {
             irCleared = false;
             irLoaded = false;
+            irEngineReady = false;
+            irSettle = 0;
         }
     }
 
@@ -628,7 +649,14 @@ private:
     juce::SpinLock irLock;
     juce::AudioBuffer<float> pendingIR;
     double pendingIRRate = 44100.0;
-    bool irPending = false, irCleared = false, irLoaded = false;
+    bool irPending = false, irCleared = false, irLoaded = false, irEngineReady = false;
+    int irSize = -1, irSettle = 0;
+    double irRate = 44100.0;
+    /** The IR's length as JUCE runs it (it resamples to the host rate itself). */
+    int expectedIRSize() const noexcept
+    {
+        return irRate == sampleRate ? irSize : juce::roundToInt (juce::jmax (1.0, irSize / (irRate / sampleRate)));
+    }
 
     int silentSamples = 0;
     bool idle = true;
