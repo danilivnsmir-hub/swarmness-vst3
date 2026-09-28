@@ -156,8 +156,16 @@ target_include_directories(Swarmness PRIVATE Source)
 
 # TONE3000 publishable key (an OAuth client id, not a secret): -DSWARMNESS_TONE3000_KEY=t3k_pub_...
 set(SWARMNESS_TONE3000_KEY "" CACHE STRING "TONE3000 publishable API key")
+# Swarmness's own publishable key (public by design: it only identifies the app in the OAuth flow)
+set(SWARMNESS_TONE3000_DEFAULT_KEY "t3k_pub_B-IROxQkngaGrrOH8wIVo7ms_FvrO6pa")
 if(SWARMNESS_TONE3000_KEY STREQUAL "" AND DEFINED ENV{SWARMNESS_TONE3000_KEY})
     set(SWARMNESS_TONE3000_KEY $ENV{SWARMNESS_TONE3000_KEY})
+endif()
+if(SWARMNESS_TONE3000_KEY STREQUAL "")
+    set(SWARMNESS_TONE3000_KEY "${SWARMNESS_TONE3000_DEFAULT_KEY}")
+endif()
+if(NOT SWARMNESS_TONE3000_KEY MATCHES "^t3k_pub_")
+    message(FATAL_ERROR "SWARMNESS_TONE3000_KEY must be a publishable key (t3k_pub_...), never the secret key")
 endif()
 
 # HTTPS for TONE3000: native on macOS / Windows, libcurl on Linux
