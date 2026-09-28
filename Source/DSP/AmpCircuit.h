@@ -137,6 +137,17 @@ namespace ampsim
                 a.presenceHz = 2500.0f; a.presenceMax = 0.85f; a.depthHz = 100.0f; a.depthMax = 0.6f;
                 a.spkHz = 90.0f; a.spkQ = 1.5f; a.spkDb = 8.0f; a.coilHz = 2000.0f; a.coilDb = 6.0f;
                 a.xfHp = 40.0f; a.xfLp = 12000.0f; a.paRef = 27.80f; a.outDb = 4.0f;
+                // fitted to captures of the real amps (SwarmnessAmpLab, JCM2000 / JVM / JCM900 crunch)
+                a.gridKg = 6.567e-6f; a.inDb = 29.26f; a.bias = 0.6964f; a.satKnee = 1.246f; a.nfb = 1.868f; a.piMax = 1.283f;
+                a.sag = 0.3238f; a.R1 = 1.594e5f; a.R2 = 1.929e6f; a.R3 = 2.144e4f; a.R4 = 3.877e4f; a.C1 = 1.825e-10f;
+                a.C2 = 1.54e-8f; a.C3 = 7.252e-8f; a.voiceHz = 389.9f; a.voiceDb = -7.273f; a.voiceQ = 0.5008f;
+                a.brightDb = 2.983f; a.brightHz = 4030.0f; a.presenceHz = 1639.0f; a.depthHz = 123.0f; a.spkHz = 79.42f;
+                a.spkQ = 2.996f; a.spkDb = 0.5765f; a.coilHz = 3801.0f; a.coilDb = 0.8165f; a.xfHp = 27.9f; a.xfLp = 1.091e4f;
+                a.st[0].Rk = 473.4f; a.st[0].fb = 0.1747f; a.st[0].Rs = 1.501e4f; a.st[0].cathDb = -13.61f; a.st[0].cathHz = 71.61f; a.st[0].lpHz = 2.197e4f; a.st[0].div = 0.3688f;
+                a.st[1].Rk = 8818.0f; a.st[1].fb = 0.7286f; a.st[1].Rs = 4.699e5f; a.st[1].cathDb = -5.523f; a.st[1].cathHz = 38.55f; a.st[1].lpHz = 1.8e4f; a.st[1].C = 2.24e-9f; a.st[1].div = 0.8015f;
+                a.st[2].Rk = 1433.0f; a.st[2].fb = 0.06965f; a.st[2].Rs = 4.632e5f; a.st[2].cathDb = -11.26f; a.st[2].cathHz = 381.8f; a.st[2].lpHz = 8116.0f; a.st[2].C = 1.108e-8f; a.st[2].div = 0.02234f;
+                a.st[3].Rk = 3660.0f; a.st[3].fb = 0.578f; a.st[3].Rs = 9.092e4f; a.st[3].cathDb = -0.6461f; a.st[3].cathHz = 138.9f; a.st[3].lpHz = 2501.0f; a.st[3].C = 3.738e-9f;
+                a.outDb += 15.2f;   // level-matched to the other models at noon
                 break;
             }
             case 3: // CITRUS - thick British fuzz-crunch: four hot stages, big coupling caps, dark, low feedback
@@ -154,6 +165,17 @@ namespace ampsim
                 a.presenceHz = 3000.0f; a.presenceMax = 0.4f; a.depthHz = 110.0f; a.depthMax = 0.5f;
                 a.spkHz = 95.0f; a.spkQ = 1.4f; a.spkDb = 9.0f; a.coilHz = 1800.0f; a.coilDb = 6.0f;
                 a.xfHp = 35.0f; a.xfLp = 10500.0f; a.paRef = 9.40f; a.outDb = -2.5f;
+                // fitted to captures of the real amps (SwarmnessAmpLab, Orange Rockerverb)
+                a.gridKg = 7.468e-6f; a.inDb = 28.66f; a.bias = 0.3435f; a.satKnee = 1.682f; a.nfb = 1.377f; a.piMax = 1.048f;
+                a.sag = 0.2854f; a.R1 = 3.031e4f; a.R2 = 5.817e5f; a.R3 = 2.549e4f; a.R4 = 1.373e5f; a.C1 = 2.23e-10f;
+                a.C2 = 3.623e-8f; a.C3 = 1.079e-8f; a.voiceHz = 315.5f; a.voiceDb = 6.035f; a.voiceQ = 0.4475f;
+                a.brightDb = 3.439f; a.brightHz = 4773.0f; a.presenceHz = 5114.0f; a.depthHz = 114.3f; a.spkHz = 93.52f;
+                a.spkQ = 1.806f; a.spkDb = 6.476f; a.coilHz = 1710.0f; a.coilDb = 6.483f; a.xfHp = 30.01f; a.xfLp = 1.008e4f;
+                a.st[0].Rk = 1562.0f; a.st[0].fb = 0.7438f; a.st[0].Rs = 3.916e4f; a.st[0].cathDb = -9.446f; a.st[0].cathHz = 926.6f; a.st[0].lpHz = 3014.0f; a.st[0].div = 0.4433f;
+                a.st[1].Rk = 773.4f; a.st[1].fb = 0.1652f; a.st[1].Rs = 4.692e5f; a.st[1].cathDb = -13.22f; a.st[1].cathHz = 31.15f; a.st[1].lpHz = 2515.0f; a.st[1].C = 5.0e-10f; a.st[1].div = 0.456f;
+                a.st[2].Rk = 514.0f; a.st[2].fb = 0.05505f; a.st[2].Rs = 8.494e4f; a.st[2].cathDb = -13.98f; a.st[2].cathHz = 48.24f; a.st[2].lpHz = 1.337e4f; a.st[2].C = 6.474e-10f; a.st[2].div = 0.6735f;
+                a.st[3].Rk = 541.7f; a.st[3].fb = 0.973f; a.st[3].Rs = 3.82e5f; a.st[3].cathDb = -10.27f; a.st[3].cathHz = 31.57f; a.st[3].lpHz = 5621.0f; a.st[3].C = 9.844e-8f;
+                a.outDb += -2.1f;   // level-matched to the other models at noon
                 break;
             }
             case 4: // STEEL - tight American high gain: bass-cut first stages, a cold clipper, 6L6s with lots of feedback
@@ -186,6 +208,17 @@ namespace ampsim
                 a.presenceHz = 3500.0f; a.presenceMax = 0.9f; a.depthHz = 100.0f; a.depthMax = 1.0f;
                 a.spkHz = 85.0f; a.spkQ = 1.4f; a.spkDb = 10.0f; a.coilHz = 1800.0f; a.coilDb = 7.0f;
                 a.xfHp = 35.0f; a.xfLp = 13000.0f; a.paRef = 13.80f; a.outDb = -2.5f;
+                // fitted to captures of the real amps (SwarmnessAmpLab, Mesa Rectifier-family, Badlander crush channel)
+                a.gridKg = 3.715e-6f; a.inDb = 18.08f; a.bias = 0.304f; a.satKnee = 1.018f; a.nfb = 1.242f; a.piMax = 1.435f;
+                a.sag = 0.4984f; a.R1 = 3.752e5f; a.R2 = 6.142e5f; a.R3 = 2.286e4f; a.R4 = 9913.0f; a.C1 = 1.041e-10f;
+                a.C2 = 1.074e-8f; a.C3 = 2.133e-7f; a.voiceHz = 466.0f; a.voiceDb = 2.379f; a.voiceQ = 2.033f;
+                a.brightDb = 0.8737f; a.brightHz = 2137.0f; a.presenceHz = 2952.0f; a.depthHz = 145.9f; a.spkHz = 103.6f;
+                a.spkQ = 0.8913f; a.spkDb = 9.378f; a.coilHz = 3081.0f; a.coilDb = 11.79f; a.xfHp = 21.71f; a.xfLp = 9098.0f;
+                a.st[0].Rk = 3215.0f; a.st[0].fb = 0.5298f; a.st[0].Rs = 6.623e4f; a.st[0].cathDb = -7.077f; a.st[0].cathHz = 529.8f; a.st[0].lpHz = 6099.0f; a.st[0].div = 0.9817f;
+                a.st[1].Rk = 671.9f; a.st[1].fb = 0.0214f; a.st[1].Rs = 4.607e4f; a.st[1].cathDb = -5.284f; a.st[1].cathHz = 119.8f; a.st[1].lpHz = 2555.0f; a.st[1].C = 6.57e-8f; a.st[1].div = 0.4683f;
+                a.st[2].Rk = 612.1f; a.st[2].fb = 0.6411f; a.st[2].Rs = 1.838e5f; a.st[2].cathDb = -13.83f; a.st[2].cathHz = 37.05f; a.st[2].lpHz = 1.984e4f; a.st[2].C = 1.169e-9f; a.st[2].div = 0.2608f;
+                a.st[3].Rk = 470.1f; a.st[3].fb = 0.5161f; a.st[3].Rs = 4.697e5f; a.st[3].cathDb = -13.48f; a.st[3].cathHz = 64.09f; a.st[3].lpHz = 3931.0f; a.st[3].C = 5.664e-10f;
+                a.outDb += 0.9f;   // level-matched to the other models at noon
                 break;
             }
         }

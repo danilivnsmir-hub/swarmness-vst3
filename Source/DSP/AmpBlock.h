@@ -379,7 +379,9 @@ private:
         co.paRefInv = 1.0f / lerp (A.paRef, B.paRef, x);
         co.paThr = co.bias + co.hard * 1.0e6f;
         co.paDtOverC = (float) (dt / 0.02);   // grid leak x coupling cap = 20 ms (normalised units)
-        co.out = juce::Decibels::decibelsToGain (lerp (A.outDb, B.outDb, x)) * 0.18f;
+        // the in-between amp is its own circuit: its level is matched to the two references too
+        static constexpr float middleTrimDb[3] { 0.0f, -8.8f, -1.3f };
+        co.out = juce::Decibels::decibelsToGain (lerp (A.outDb, B.outDb, x) + middleTrimDb[activeChannel] * 4.0f * x * (1.0f - x)) * 0.18f;
 
         for (auto& cs : ch)
         {
