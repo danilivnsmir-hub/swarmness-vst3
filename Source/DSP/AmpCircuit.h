@@ -201,20 +201,17 @@ namespace ampsim
                 a.presenceHz = 3000.0f; a.presenceMax = 0.9f; a.depthHz = 120.0f; a.depthMax = 1.0f;
                 a.spkHz = 95.0f; a.spkQ = 1.6f; a.spkDb = 10.0f; a.coilHz = 1800.0f; a.coilDb = 7.0f;
                 a.xfHp = 45.0f; a.xfLp = 12000.0f; a.paRef = 39.50f; a.outDb = 4.0f;
-                // fitted to captures of the real amps (SwarmnessAmpLab, 5150 / 6505+ lead channels)
-                a.gridKg = 0.0004589f; a.inDb = 17.0f; a.bias = 0.9357f; a.satKnee = 2.138f; a.nfb = 0.8f; a.piMax = 2.295f;
-                a.sag = 0.2293f; a.R1 = 6.214e5f; a.R2 = 1.126e6f; a.R3 = 1.779e4f; a.R4 = 3.771e4f; a.C1 = 1.177e-10f;
-                a.C2 = 6.761e-8f; a.C3 = 6.552e-8f; a.voiceHz = 1380.0f; a.voiceDb = -4.076f; a.voiceQ = 0.7053f;
-                a.brightDb = 4.413f; a.brightHz = 2766.0f; a.presenceHz = 1960.0f; a.depthHz = 121.1f; a.spkHz = 106.4f;
-                a.spkQ = 2.548f; a.spkDb = 9.98f; a.coilHz = 1025.0f; a.coilDb = 0.1731f; a.xfHp = 23.84f; a.xfLp = 7835.0f;
-                a.st[0].Rk = 1084.0f; a.st[0].fb = 0.8189f; a.st[0].Rs = 2.434e5f; a.st[0].cathDb = -4.589f; a.st[0].cathHz = 34.91f; a.st[0].lpHz = 1.354e4f; a.st[0].div = 0.852f;
-                a.st[1].Rk = 2370.0f; a.st[1].fb = 0.1907f; a.st[1].Rs = 1.157e5f; a.st[1].cathDb = -6.123f; a.st[1].cathHz = 171.2f; a.st[1].lpHz = 3386.0f; a.st[1].C = 4.905e-8f; a.st[1].div = 0.9894f;
-                a.st[2].Rk = 1739.0f; a.st[2].fb = 0.8711f; a.st[2].Rs = 3.991e5f; a.st[2].cathDb = -0.02684f; a.st[2].cathHz = 70.82f; a.st[2].lpHz = 2609.0f; a.st[2].C = 5.0e-10f; a.st[2].div = 0.6228f;
-                a.st[3].Rk = 476.1f; a.st[3].fb = 0.4599f; a.st[3].Rs = 4.364e5f; a.st[3].cathDb = -12.81f; a.st[3].cathHz = 30.03f; a.st[3].lpHz = 9877.0f; a.st[3].C = 9.776e-8f;
-                a.nfb = 1.3f;   // a little more feedback than the fit, so PRESENCE / DEPTH have a loop to work on
-                a.outDb += 7.5f;   // level-matched to the other models at noon
-                a.inDb -= 5.7f;    // noon = where players set it (the real lead channels are usually played around 4)
-                a.outDb += 2.0f;
+                // fitted to a DI -> real-amp reamp (the snappy 5150-style lead), with the 5150 / 6505+ captures as a regulariser
+                a.gridKg = 4.339e-6f; a.inDb = 20.46f; a.bias = 0.5304f; a.satKnee = 3.012f; a.nfb = 0.8313f; a.piMax = 2.665f;
+                a.sag = 0.1258f; a.R1 = 7.33e5f; a.R2 = 7.127e5f; a.R3 = 4.0e4f; a.R4 = 1.371e5f; a.C1 = 1.005e-10f;
+                a.C2 = 7.242e-8f; a.C3 = 1.009e-7f; a.voiceHz = 414.7f; a.voiceDb = -3.259f; a.voiceQ = 1.205f;
+                a.brightDb = 3.598f; a.brightHz = 5048.0f; a.presenceHz = 1509.0f; a.depthHz = 199.9f; a.spkHz = 119.3f;
+                a.spkQ = 2.987f; a.spkDb = 11.62f; a.coilHz = 2096.0f; a.coilDb = 0.9582f; a.xfHp = 133.2f; a.xfLp = 9829.0f;
+                a.st[0].Rk = 2018.0f; a.st[0].fb = 0.6211f; a.st[0].Rs = 2.994e4f; a.st[0].cathDb = -7.472f; a.st[0].cathHz = 154.3f; a.st[0].lpHz = 2.197e4f; a.st[0].div = 0.994f;
+                a.st[1].Rk = 2894.0f; a.st[1].fb = 0.3258f; a.st[1].Rs = 8.549e4f; a.st[1].cathDb = -7.843f; a.st[1].cathHz = 30.5f; a.st[1].lpHz = 2853.0f; a.st[1].C = 8.247e-10f; a.st[1].div = 0.5471f;
+                a.st[2].Rk = 947.7f; a.st[2].fb = 0.682f; a.st[2].Rs = 4.556e5f; a.st[2].cathDb = -10.08f; a.st[2].cathHz = 163.3f; a.st[2].lpHz = 1.839e4f; a.st[2].C = 9.741e-8f; a.st[2].div = 0.9711f;
+                a.st[3].Rk = 470.1f; a.st[3].fb = 0.1652f; a.st[3].Rs = 4.429e5f; a.st[3].cathDb = -13.99f; a.st[3].cathHz = 30.33f; a.st[3].lpHz = 9437.0f; a.st[3].C = 3.86e-8f;
+                a.outDb += 4.5f;   // level-matched to the other models at noon
                 break;
             }
             default: // SLUDGE - loose modern high gain: four hot stages, big caps, tube-rectifier sag, deep resonance
