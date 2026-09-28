@@ -193,6 +193,18 @@ namespace ampsim
                 a.presenceHz = 3000.0f; a.presenceMax = 0.9f; a.depthHz = 120.0f; a.depthMax = 1.0f;
                 a.spkHz = 95.0f; a.spkQ = 1.6f; a.spkDb = 10.0f; a.coilHz = 1800.0f; a.coilDb = 7.0f;
                 a.xfHp = 45.0f; a.xfLp = 12000.0f; a.paRef = 39.50f; a.outDb = 4.0f;
+                // fitted to captures of the real amps (SwarmnessAmpLab, 5150 / 6505+ lead channels)
+                a.gridKg = 0.0004589f; a.inDb = 17.0f; a.bias = 0.9357f; a.satKnee = 2.138f; a.nfb = 0.8f; a.piMax = 2.295f;
+                a.sag = 0.2293f; a.R1 = 6.214e5f; a.R2 = 1.126e6f; a.R3 = 1.779e4f; a.R4 = 3.771e4f; a.C1 = 1.177e-10f;
+                a.C2 = 6.761e-8f; a.C3 = 6.552e-8f; a.voiceHz = 1380.0f; a.voiceDb = -4.076f; a.voiceQ = 0.7053f;
+                a.brightDb = 4.413f; a.brightHz = 2766.0f; a.presenceHz = 1960.0f; a.depthHz = 121.1f; a.spkHz = 106.4f;
+                a.spkQ = 2.548f; a.spkDb = 9.98f; a.coilHz = 1025.0f; a.coilDb = 0.1731f; a.xfHp = 23.84f; a.xfLp = 7835.0f;
+                a.st[0].Rk = 1084.0f; a.st[0].fb = 0.8189f; a.st[0].Rs = 2.434e5f; a.st[0].cathDb = -4.589f; a.st[0].cathHz = 34.91f; a.st[0].lpHz = 1.354e4f; a.st[0].div = 0.852f;
+                a.st[1].Rk = 2370.0f; a.st[1].fb = 0.1907f; a.st[1].Rs = 1.157e5f; a.st[1].cathDb = -6.123f; a.st[1].cathHz = 171.2f; a.st[1].lpHz = 3386.0f; a.st[1].C = 4.905e-8f; a.st[1].div = 0.9894f;
+                a.st[2].Rk = 1739.0f; a.st[2].fb = 0.8711f; a.st[2].Rs = 3.991e5f; a.st[2].cathDb = -0.02684f; a.st[2].cathHz = 70.82f; a.st[2].lpHz = 2609.0f; a.st[2].C = 5.0e-10f; a.st[2].div = 0.6228f;
+                a.st[3].Rk = 476.1f; a.st[3].fb = 0.4599f; a.st[3].Rs = 4.364e5f; a.st[3].cathDb = -12.81f; a.st[3].cathHz = 30.03f; a.st[3].lpHz = 9877.0f; a.st[3].C = 9.776e-8f;
+                a.nfb = 1.3f;   // a little more feedback than the fit, so PRESENCE / DEPTH have a loop to work on
+                a.outDb += 7.5f;   // level-matched to the other models at noon
                 break;
             }
             default: // SLUDGE - loose modern high gain: four hot stages, big caps, tube-rectifier sag, deep resonance
