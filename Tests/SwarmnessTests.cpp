@@ -1941,7 +1941,7 @@ namespace
             const float midDip = AmpBlock::toneStackDb (AmpBlock::clean, 1.0f, 0.5f, 0.5f, 0.5f, 500.0f);
             const float hi = AmpBlock::toneStackDb (AmpBlock::clean, 1.0f, 0.5f, 0.5f, 0.5f, 5000.0f);
             check (midDip < lo - 3.0f && midDip < hi - 3.0f,
-                   juce::String::formatted ("BLACKFACE stack at noon: scooped mids (100 Hz %.1f, 500 Hz %.1f, 5 kHz %.1f dB)", lo, midDip, hi));
+                   juce::String::formatted ("CLEAN stack at noon: scooped mids (100 Hz %.1f, 500 Hz %.1f, 5 kHz %.1f dB)", lo, midDip, hi));
             const float bassUp = AmpBlock::toneStackDb (AmpBlock::crunch, 0.0f, 1.0f, 0.5f, 0.5f, 80.0f)
                                - AmpBlock::toneStackDb (AmpBlock::crunch, 0.0f, 0.0f, 0.5f, 0.5f, 80.0f);
             const float trebleUp = AmpBlock::toneStackDb (AmpBlock::crunch, 0.0f, 0.5f, 0.5f, 1.0f, 4000.0f)
@@ -1952,7 +1952,7 @@ namespace
                    juce::String::formatted ("BASS / TREBLE / MID ranges: %.1f / %.1f / %.1f dB", bassUp, trebleUp, midUp));
         }
 
-        // The three channel amps (CLEAN = BLACKFACE, CRUNCH = BRIT, LEAD = STEEL): bounded, level-matched
+        // The three channel amps (CLEAN = CHROME, CRUNCH = BRIT, LEAD = STEEL): bounded, level-matched
         double minDb = 1e9, maxDb = -1e9;
         for (int chn = 0; chn < 3; ++chn)
             for (float character : { AmpBlock::channelSide (chn) })
@@ -2008,7 +2008,7 @@ namespace
                 return toneDb (out, sr, 330.0, 12000, 9600) - toneDb (out, sr, 110.0, 12000, 9600);
             };
             const double low = h3At (0.3f), high = h3At (1.0f);
-            check (high > low + 15.0, juce::String::formatted ("BLACKFACE: MASTER 3 -> 10 = power-amp breakup (3rd harmonic %.1f -> %.1f dB)", low, high));
+            check (high > low + 15.0, juce::String::formatted ("VELVET: MASTER 3 -> 10 = power-amp breakup (3rd harmonic %.1f -> %.1f dB)", low, high));
             // Responsive: turning the guitar down cleans a crunch amp up
             AmpBlock::Settings cr;
             cr.on = true; cr.channel = AmpBlock::crunch; cr.character = 0.0f; cr.gain = 0.5f;
@@ -2461,7 +2461,7 @@ namespace
 
     void testWasp()
     {
-        std::printf ("\nWASP: overdrive (TS-style clipper, ATTACK, BRIGHT, GATE)\n");
+        std::printf ("\nWASP: overdrive (asymmetric hard clipping, ATTACK, BRIGHT, GATE)\n");
         const double sr = 48000.0;
         auto guitar = makeGuitar (sr, 48000);
        #ifdef SWARMNESS_NAM_EXAMPLES

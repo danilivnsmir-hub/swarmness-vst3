@@ -933,7 +933,7 @@ AmpCabSection::AmpCabSection (SwarmnessAudioProcessor& p)
     attachButton (ampPower, ParamIDs::ampOn, "AMP on / off");
     attachButton (cabPower, ParamIDs::cabOn, "CAB on / off");
 
-    channelSelector.setTooltip ("CLEAN = BLACKFACE (American clean), CRUNCH = BRIT (British crunch), LEAD = STEEL (American high gain). "
+    channelSelector.setTooltip ("CLEAN = CHROME (crystal clean), CRUNCH = BRIT (barking crunch), LEAD = STEEL (tight high gain). "
                                 "NAM: a Neural Amp Modeler capture (.nam) - load one below, or find thousands on TONE3000");
     cabSelector.setTooltip ("Modelled cabinets: 1x12 / 2x12 open-back combos, 4x12 BRIT (warm, mid-forward) and 4x12 MOD (tight, aggressive upper mids). "
                             "IR = your cabinet impulse response");
@@ -1112,9 +1112,10 @@ void AmpCabSection::paint (juce::Graphics& g)
     if (! namMode)
     {
         // the channel's amp: its name and what it is
-        static const char* about[3] { "American clean: glassy, scooped and bright, sparkles when you play soft and breaks up when you dig in (voiced after a Fender Twin Reverb).",
-                                      "British crunch: barking upper mids and a tight bottom, cleans up with the guitar's volume (voiced after JCM2000 / JVM / JCM900 crunch channels).",
-                                      "American high gain: tight, compressed and cutting - chugs that stay tight (voiced after 5150 / 6505+ lead channels). WASP in front tightens it more." };
+        static const char* about[3] { "Crystal clean: solid-state headroom to the top, a tight bottom and a glassy top - your guitar's own dynamics, "
+                                      "piano-clear arpeggios for intros. SWARM and CRYPT behind it.",
+                                      "Crunch: barking upper mids and a tight bottom, cleans up with the guitar's volume.",
+                                      "High gain: tight, cutting and fast - chugs that stay tight. WASP in front tightens it more." };
         auto t = morphArea.reduced (18.0f, 12.0f);
         g.setFont (displayFont (30.0f));
         g.setColour (ampOn ? Colours::accent : Colours::textDim);

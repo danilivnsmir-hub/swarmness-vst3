@@ -18,9 +18,9 @@
  *
  * CLEAN / CRUNCH / LEAD each sit between two reference amps (see DSP/AmpCircuit.h), and CHARACTER
  * morphs the circuit between them - the middle is an amp of its own:
- *    CLEAN   CHROME (solid-state jazz clean)       <-> BLACKFACE (American clean / breakup)
- *    CRUNCH  BRIT   (British crunch)               <-> CITRUS    (thick British fuzz-crunch)
- *    LEAD    STEEL  (tight American high gain)     <-> SLUDGE    (loose modern high gain)
+ *    CLEAN   CHROME (crystal solid-state clean)    <-> VELVET    (tube clean / breakup)
+ *    CRUNCH  BRIT   (barking crunch)               <-> CITRUS    (thick fuzz-crunch)
+ *    LEAD    STEEL  (tight high gain)              <-> SLUDGE    (loose modern high gain)
  * NAM runs a loaded .nam capture instead, with its own knobs (INPUT, post EQ, OUTPUT; 5 = neutral).
  *
  * gate -> [8x] input (volts) -> preamp stages / GAIN pot / tone stack -> MASTER -> power amp
@@ -49,9 +49,8 @@ public:
     };
 
     /** Model names: reference A, the in-between amp, reference B. */
-    /** One amp per channel: CLEAN = BLACKFACE, CRUNCH = BRIT, LEAD = STEEL (which of the channel's two
-        fitted reference circuits it uses). */
-    static float channelSide (int channel) noexcept { return channel == clean ? 1.0f : 0.0f; }
+    /** One amp per channel (which of the channel's two reference circuits it uses). */
+    static float channelSide (int) noexcept { return 0.0f; }   // CLEAN = CHROME, CRUNCH = BRIT, LEAD = STEEL
     static const char* channelModel (int channel) noexcept
     {
         return channel >= 0 && channel < 3 ? referenceName (channel, (int) channelSide (channel)) : "NAM";
@@ -59,7 +58,7 @@ public:
 
     static const char* modelName (int channel, float character) noexcept
     {
-        static const char* names[3][3] { { "CHROME", "GLASSHOUSE", "BLACKFACE" },
+        static const char* names[3][3] { { "CHROME", "GLASSHOUSE", "VELVET" },
                                          { "BRIT", "MARMALADE", "CITRUS" },
                                          { "STEEL", "IRONHIVE", "SLUDGE" } };
         if (channel < 0 || channel > 2) return "NAM";
@@ -67,7 +66,7 @@ public:
     }
     static const char* referenceName (int channel, int side) noexcept
     {
-        static const char* names[3][2] { { "CHROME", "BLACKFACE" }, { "BRIT", "CITRUS" }, { "STEEL", "SLUDGE" } };
+        static const char* names[3][2] { { "CHROME", "VELVET" }, { "BRIT", "CITRUS" }, { "STEEL", "SLUDGE" } };
         return channel >= 0 && channel < 3 ? names[channel][side & 1] : "";
     }
 

@@ -18,7 +18,7 @@
  *     up, soft diodes in its feedback round the first bit of overload;
  *   - then the hard clipper: a small series resistor into diodes to ground, more diodes on one
  *     side than the other, so the negative half flattens first - the square, asymmetric (even
- *     harmonics) clipping of the real pedal, not a TS's smooth compression;
+ *     harmonics) clipping of the real pedal, not the smooth compression of a classic overdrive;
  *   - BRIGHT tilts the output filter, then a two-pole top roll-off.
  * The values are fitted to captures of the real pedal (see Tune). ATTACK tightens the low end in
  * front of it all (20 Hz .. 500 Hz), GATE is a noise gate keyed from the input, VOLUME the output

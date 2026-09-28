@@ -55,7 +55,7 @@ namespace ampsim
     {
         std::array<StageDef, 4> st;
         int gainPotAfter = 0;                 // the GAIN pot sits after this stage
-        bool stackEarly = false;              // tone stack right after stage 1 (Fender style)
+        bool stackEarly = false;              // tone stack right after stage 1 (clean-amp style)
         float brightDb = 0.0f, brightHz = 2500.0f;   // bright cap across the GAIN pot
         float cf = 0.0f;                       // cathode follower in front of the stack
         float R1, R2, R3, R4, C1, C2, C3;      // FMV tone stack
@@ -96,7 +96,7 @@ namespace ampsim
         };
         switch (channel * 2 + side)
         {
-            case 0: // CHROME - solid-state jazz clean: op-amp preamp, flat active EQ, hard-clipping SS power amp
+            case 0: // CHROME - crystal solid-state clean: op-amp preamp, flat active EQ, a solid-state power amp
             {
                 StageDef s1; s1.type = 2; s1.ssGain = 3.0f; s1.ssRail = 11.0f; s1.Rs = 10 * k; s1.Rg = 1 * M; s1.lpHz = 20000.0f;
                 StageDef s2 = s1; s2.ssGain = 12.0f; s2.C = 1000 * n; s2.Rs = 10 * k; s2.lpHz = 18000.0f;
@@ -107,9 +107,16 @@ namespace ampsim
                 a.presenceHz = 4000.0f; a.presenceMax = 0.3f; a.depthHz = 90.0f; a.depthMax = 0.3f;
                 a.spkHz = 95.0f; a.spkQ = 1.5f; a.spkDb = 8.0f; a.coilHz = 2000.0f; a.coilDb = 6.0f;
                 a.xfHp = 30.0f; a.xfLp = 18000.0f; a.paRef = 0.12f; a.outDb = 0.0f;
+                // the crystal clean: headroom to 0 dBFS at noon (no compression, the guitar's own dynamics),
+                // a tight bottom, a touch of mid scoop and a glassy top; a solid-state output stage has no
+                // speaker bump or coil rise
+                a.st[0].ssGain = 2.0f; a.st[1].ssGain = 6.0f; a.paRef = 1.0f;
+                a.brightDb = 6.0f; a.brightHz = 3500.0f; a.voiceHz = 600.0f; a.voiceDb = -3.0f; a.voiceQ = 0.7f;
+                a.xfHp = 75.0f; a.spkDb = 0.3f; a.coilDb = 0.3f;
+                a.outDb += 40.4f;   // level-matched to the other models at noon
                 break;
             }
-            case 1: // BLACKFACE - American clean / breakup: V1 -> tone stack -> volume -> V2 -> 6V6 pair, GZ34 sag
+            case 1: // VELVET - tube clean / breakup: V1 -> tone stack -> volume -> V2 -> 6V6 pair, tube-rectifier sag
             {
                 a.st[0] = triode (250.0f, 1.5f * k, 0.0f, 220 * k, 68 * k, 1 * M, 0.0f, 14000.0f, 1.0f);
                 a.st[1] = triode (250.0f, 1.5f * k, 0.0f, 330 * k, 220 * k, 1 * M, 0.0f, 12000.0f, 0.45f);
@@ -119,7 +126,7 @@ namespace ampsim
                 a.presenceHz = 3500.0f; a.presenceMax = 0.5f; a.depthHz = 100.0f; a.depthMax = 0.5f;
                 a.spkHz = 110.0f; a.spkQ = 1.8f; a.spkDb = 8.0f; a.coilHz = 1800.0f; a.coilDb = 5.0f;
                 a.xfHp = 45.0f; a.xfLp = 13000.0f; a.paRef = 2.35f; a.outDb = -3.0f;
-                // tone fitted to captures of the real amp (SwarmnessAmpLab, Fender Twin Reverb, both channels)
+                // tone fitted to captures of a real tube clean amp (SwarmnessAmpLab)
                 a.R1 = 2.471e4f; a.R2 = 1.146e6f; a.R3 = 8921.0f; a.R4 = 1.186e5f; a.C1 = 9.592e-10f; a.C2 = 5.393e-8f;
                 a.C3 = 3.305e-8f; a.voiceHz = 1319.0f; a.voiceDb = -5.06f; a.voiceQ = 0.5462f; a.brightDb = 4.549f;
                 a.brightHz = 3617.0f; a.spkHz = 68.5f; a.spkQ = 0.8886f; a.spkDb = 8.085f; a.coilHz = 2538.0f;
@@ -145,7 +152,7 @@ namespace ampsim
                 a.presenceHz = 2500.0f; a.presenceMax = 0.85f; a.depthHz = 100.0f; a.depthMax = 0.6f;
                 a.spkHz = 90.0f; a.spkQ = 1.5f; a.spkDb = 8.0f; a.coilHz = 2000.0f; a.coilDb = 6.0f;
                 a.xfHp = 40.0f; a.xfLp = 12000.0f; a.paRef = 27.80f; a.outDb = 4.0f;
-                // fitted on a real DI, through one IR, to the average of JCM2000 / JVM / JCM900 crunch captures (spectrum,
+                // fitted on a real DI, through one IR, to the average of three captures of real crunch amps (spectrum,
                 // envelope, attack), with their sine / response features as a regulariser
                 a.gridKg = 9.261e-6f; a.inDb = 30.0f; a.bias = 0.3463f; a.satKnee = 2.494f; a.nfb = 6.036f; a.piMax = 1.157f;
                 a.sag = 0.2272f; a.R1 = 2.939e4f; a.R2 = 1.978e6f; a.R3 = 1.95e4f; a.R4 = 1.16e5f; a.C1 = 3.557e-10f;
@@ -174,7 +181,7 @@ namespace ampsim
                 a.presenceHz = 3000.0f; a.presenceMax = 0.4f; a.depthHz = 110.0f; a.depthMax = 0.5f;
                 a.spkHz = 95.0f; a.spkQ = 1.4f; a.spkDb = 9.0f; a.coilHz = 1800.0f; a.coilDb = 6.0f;
                 a.xfHp = 35.0f; a.xfLp = 10500.0f; a.paRef = 9.40f; a.outDb = -2.5f;
-                // fitted to captures of the real amps (SwarmnessAmpLab, Orange Rockerverb)
+                // fitted to captures of a real amp (SwarmnessAmpLab)
                 a.gridKg = 7.468e-6f; a.inDb = 28.66f; a.bias = 0.3435f; a.satKnee = 1.682f; a.nfb = 1.377f; a.piMax = 1.048f;
                 a.sag = 0.2854f; a.R1 = 3.031e4f; a.R2 = 5.817e5f; a.R3 = 2.549e4f; a.R4 = 1.373e5f; a.C1 = 2.23e-10f;
                 a.C2 = 3.623e-8f; a.C3 = 1.079e-8f; a.voiceHz = 315.5f; a.voiceDb = 6.035f; a.voiceQ = 0.4475f;
@@ -202,7 +209,7 @@ namespace ampsim
                 a.presenceHz = 3000.0f; a.presenceMax = 0.9f; a.depthHz = 120.0f; a.depthMax = 1.0f;
                 a.spkHz = 95.0f; a.spkQ = 1.6f; a.spkDb = 10.0f; a.coilHz = 1800.0f; a.coilDb = 7.0f;
                 a.xfHp = 45.0f; a.xfLp = 12000.0f; a.paRef = 39.50f; a.outDb = 4.0f;
-                // fitted on a real DI, through one IR, to the average of 5150 / 6505+ / 5152 lead captures (spectrum,
+                // fitted on a real DI, through one IR, to the average of three captures of real high-gain amps (spectrum,
                 // envelope, attack), with their sine / response features as a regulariser
                 a.gridKg = 1.654e-5f; a.inDb = 26.08f; a.bias = 0.4413f; a.satKnee = 3.425f; a.nfb = 1.027f; a.piMax = 2.969f;
                 a.sag = 0.1391f; a.R1 = 1.588e5f; a.R2 = 5.383e5f; a.R3 = 2.074e4f; a.R4 = 3.3e4f; a.C1 = 1.768e-10f;
@@ -229,7 +236,7 @@ namespace ampsim
                 a.presenceHz = 3500.0f; a.presenceMax = 0.9f; a.depthHz = 100.0f; a.depthMax = 1.0f;
                 a.spkHz = 85.0f; a.spkQ = 1.4f; a.spkDb = 10.0f; a.coilHz = 1800.0f; a.coilDb = 7.0f;
                 a.xfHp = 35.0f; a.xfLp = 13000.0f; a.paRef = 13.80f; a.outDb = -2.5f;
-                // fitted to captures of the real amps (SwarmnessAmpLab, Mesa Rectifier-family, Badlander crush channel)
+                // fitted to captures of real amps (SwarmnessAmpLab)
                 a.gridKg = 3.715e-6f; a.inDb = 18.08f; a.bias = 0.304f; a.satKnee = 1.018f; a.nfb = 1.242f; a.piMax = 1.435f;
                 a.sag = 0.4984f; a.R1 = 3.752e5f; a.R2 = 6.142e5f; a.R3 = 2.286e4f; a.R4 = 9913.0f; a.C1 = 1.041e-10f;
                 a.C2 = 1.074e-8f; a.C3 = 2.133e-7f; a.voiceHz = 466.0f; a.voiceDb = 2.379f; a.voiceQ = 2.033f;
