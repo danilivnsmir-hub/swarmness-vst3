@@ -1,5 +1,7 @@
 #include "TunerOverlay.h"
 
+#include <algorithm>
+
 using namespace Theme;
 
 TunerOverlay::TunerOverlay (TunerTap& t) : tap (t)
@@ -62,26 +64,70 @@ void TunerOverlay::timerCallback()
 {
     tap.read (window, 2048);
     const auto est = TunerEstimate::estimate (window, tap.getRate());
-    if (est.hz > 0.0f && est.clarity > 0.75f)
+
+    // a pick attack: the pitch is sharp and wobbly for the first ~80 ms of a note - skip it
+    if (est.levelDb > lastLevelDb + 6.0f)
+        attackSkip = 3;
+    lastLevelDb = est.levelDb;
+
+    bool fresh = false;
+    if (attackSkip > 0)
+        --attackSkip;
+    else if (est.hz > 0.0f && est.clarity > 0.8f)
     {
         const auto r = read (est.hz, a4);
-        // the same note: glide (a steady needle); a new note: jump
-        if (midi == r.midi && hz > 0.0f && std::abs (1200.0f * std::log2 (est.hz / hz)) < 40.0f)
-            hz += 0.35f * (est.hz - hz);
+        // a new note has to show up three times in a row before it takes over (octave slips, harmonics)
+        if (r.midi != midi && midi >= 0 && silentTicks < 8)
+        {
+            candidateCount = r.midi == candidateMidi ? candidateCount + 1 : 1;
+            candidateMidi = r.midi;
+            if (candidateCount >= 3)
+            {
+                midi = r.midi;
+                recentCount = 0;
+                fresh = true;
+            }
+        }
         else
-            hz = est.hz;
-        midi = read (hz, a4).midi;
+        {
+            if (midi < 0 || r.midi != midi) recentCount = 0;
+            midi = r.midi;
+            candidateCount = 0;
+            fresh = true;
+        }
+        if (fresh)
+        {
+            // median of the last few readings (in cents of this note)
+            std::rotate (recent.begin(), recent.begin() + 1, recent.end());
+            recent.back() = 1200.0f * std::log2 (est.hz / (a4 * std::pow (2.0f, (float) (midi - 69) / 12.0f)));
+            recentCount = juce::jmin ((int) recent.size(), recentCount + 1);
+            std::array<float, 5> sorted {};
+            std::copy (recent.end() - recentCount, recent.end(), sorted.begin());
+            std::sort (sorted.begin(), sorted.begin() + recentCount);
+            const float cents = sorted[(size_t) (recentCount / 2)];
+            hz = a4 * std::pow (2.0f, ((float) (midi - 69) + cents / 100.0f) / 12.0f);
+        }
         silentTicks = 0;
     }
-    else if (++silentTicks > 15)   // half a second without a clear pitch: let go
+    else if (++silentTicks > 20)   // ~2/3 s without a clear pitch: let go
     {
         midi = -1;
         hz = 0.0f;
+        recentCount = 0;
+        displayedCents = 0;
     }
+
+    // the needle: a critically damped glide, not a jump
     const float cents = midi >= 0 ? read (hz, a4).cents : 0.0f;
-    shownCents += 0.5f * (cents - shownCents);
-    const bool inTune = midi >= 0 && std::abs (cents) < 3.0f;
-    glow += ((inTune ? 1.0f : 0.0f) - glow) * 0.25f;
+    const float k = 0.10f;
+    velocity += k * (cents - shownCents) - 2.0f * std::sqrt (k) * velocity * 0.9f;
+    shownCents = juce::jlimit (-50.0f, 50.0f, shownCents + velocity);
+    // the readout moves in whole cents, with a little hysteresis
+    if (std::abs (cents - (float) displayedCents) >= 1.3f)
+        displayedCents = juce::roundToInt (cents);
+    // IN TUNE: in under 2 cents, out over 4
+    inTuneShown = midi >= 0 && (inTuneShown ? std::abs (cents) < 4.0f : std::abs (cents) < 2.0f);
+    glow += ((inTuneShown ? 1.0f : 0.0f) - glow) * 0.18f;
     repaint();
 }
 
@@ -115,8 +161,8 @@ void TunerOverlay::paint (juce::Graphics& g)
         g.drawText ("the swarm tunes up  -  play one string", row.withTrimmedLeft (130.0f), juce::Justification::centredLeft, false);
     }
 
-    const float cents = midi >= 0 ? read (hz, a4).cents : 0.0f;
-    const bool inTune = midi >= 0 && std::abs (cents) < 3.0f;
+    const bool inTune = inTuneShown;
+    const int cents = displayedCents;
 
     // the note: big, with its octave; honey when in tune
     {
@@ -154,7 +200,7 @@ void TunerOverlay::paint (juce::Graphics& g)
         g.setColour (inTune ? Colours::ledGreen : (midi >= 0 ? Colours::accent : Colours::textFaint));
         const auto text = midi < 0 ? juce::String ("no signal")
                         : inTune ? juce::String ("IN TUNE")
-                                 : (cents > 0 ? "+" : "") + juce::String (juce::roundToInt (cents)) + " cents  " + (cents > 0 ? "(sharp)" : "(flat)");
+                                 : (cents > 0 ? "+" : "") + juce::String (cents) + " cents  " + (cents > 0 ? "(sharp)" : "(flat)");
         g.drawText (text, row.withTrimmedRight (row.getWidth() * 0.5f).withTrimmedRight (10.0f), juce::Justification::centredRight, false);
         g.setColour (Colours::textDim);
         g.drawText (midi >= 0 ? juce::String (hz, 2) + " Hz" : juce::String(), row.withTrimmedLeft (row.getWidth() * 0.5f).withTrimmedLeft (10.0f),

@@ -2534,6 +2534,43 @@ namespace
             check (worst < 1.5f, juce::String::formatted ("%.1f kHz: F#1 .. E5 read within %.2f cents", sr / 1000.0, worst));
         }
         {
+            // steady: a held A2 4 cents sharp, with pick noise, read by the tuner window tick by tick
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            p.prepareToPlay (48000.0, 256);
+            TunerOverlay t (p.getTuner());
+            t.setBounds (0, 0, 1100, 800);
+            t.open();
+            juce::Random rng (11);
+            const double f = 110.0 * std::pow (2.0, 4.0 / 1200.0);
+            int n = 0, lo = 99, hi = -99, notes = 0;
+            juce::MidiBuffer midi;
+            for (int tick = 0; tick < 60; ++tick)
+            {
+                juce::AudioBuffer<float> b (2, 1600);   // 1/30 s
+                for (int i = 0; i < b.getNumSamples(); ++i, ++n)
+                {
+                    double v = 0.0;
+                    for (int h = 1; h <= 8; ++h)
+                        v += 1.0 / h * std::sin (juce::MathConstants<double>::twoPi * f * h * n / 48000.0 + h);
+                    const float s = (float) (0.08 * v * std::exp (-n / 48000.0 * 0.4)) + 0.004f * (rng.nextFloat() - 0.5f);
+                    b.setSample (0, i, s);
+                    b.setSample (1, i, s);
+                }
+                p.processBlock (b, midi);
+                t.timerCallbackForTests();
+                if (tick >= 20)
+                {
+                    lo = juce::jmin (lo, t.getDisplayedCents());
+                    hi = juce::jmax (hi, t.getDisplayedCents());
+                    notes += t.getMidi() == 45 ? 1 : 0;
+                }
+            }
+            t.close();
+            check (notes == 40 && hi - lo <= 1 && lo >= 3 && hi <= 5,
+                   juce::String::formatted ("TUNER is steady: a held A2 +4 cents reads %+d..%+d cents, the note never flickers (%d / 40)", lo, hi, notes));
+        }
+        {
             SwarmnessAudioProcessor p;
             resetToInit (p);
             p.getTuner().active.store (true);
