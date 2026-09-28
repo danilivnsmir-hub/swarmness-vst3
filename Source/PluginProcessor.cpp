@@ -188,6 +188,7 @@ void SwarmnessAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBl
     amp.prepare (sampleRate, maxBlockSize);
     cab.prepare (sampleRate, maxBlockSize);
     wasp.prepare (sampleRate, maxBlockSize);
+    tunerTap.prepare (sampleRate);
     updateCabModel (true);
     cab.commitPending();   // the cabinet is running from the first block (an offline bounce starts right away)
 
@@ -205,6 +206,7 @@ void SwarmnessAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBl
         s.setCurrentAndTargetValue (value);
     };
     init (outputGainSmoothed, 0.03, juce::Decibels::decibelsToGain (p.output->load()));
+    init (tunerGain, 0.02, 1.0f);
     init (inputGainSmoothed,  0.03, juce::Decibels::decibelsToGain (p.input->load()));
     init (bypassSmoothed,     0.02, on (p.bypass) ? 1.0f : 0.0f);
     init (chainFade,          0.008, 1.0f);
@@ -278,6 +280,7 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     }
 
     auto* const* audio = buffer.getArrayOfWritePointers();
+    tunerTap.push (audio, numChannels, numSamples);   // the raw guitar, while the tuner is open
 
     // Latency-aligned dry copy (for Mix and Bypass)
     for (int ch = 0; ch < numChannels; ++ch)
@@ -435,6 +438,16 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
                 d[i] = 2.0f * std::tanh (d[i] * 0.5f);
         }
     }
+
+    // TUNER with MUTE: silent while it is open (a short fade)
+    tunerGain.setTargetValue (tunerTap.active.load() && tunerTap.mute.load() ? 0.0f : 1.0f);
+    if (tunerGain.isSmoothing() || tunerGain.getTargetValue() < 0.5f)
+        for (int i = 0; i < numSamples; ++i)
+        {
+            const float g = tunerGain.getNextValue();
+            for (int ch = 0; ch < numChannels; ++ch)
+                audio[ch][i] *= g;
+        }
 
     for (int ch = 0; ch < numChannels; ++ch)
         updatePeak (meters.output[(size_t) ch], buffer.getMagnitude (ch, 0, numSamples));

@@ -148,7 +148,8 @@ set(SWARMNESS_GUI_SOURCES
     Source/GUI/SwarmLookAndFeel.cpp
     Source/GUI/Controls.cpp
     Source/GUI/ChainStrip.cpp
-    Source/GUI/Pages.cpp)
+    Source/GUI/Pages.cpp
+    Source/GUI/TunerOverlay.cpp)
 
 target_sources(Swarmness PRIVATE ${SWARMNESS_DSP_SOURCES} ${SWARMNESS_GUI_SOURCES})
 

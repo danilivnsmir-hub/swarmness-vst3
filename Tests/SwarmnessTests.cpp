@@ -2459,6 +2459,48 @@ namespace
         return out;
     }
 
+    void testTuner()
+    {
+        std::printf ("\nTUNER\n");
+        for (double sr : { 44100.0, 48000.0, 96000.0 })
+        {
+            float worst = 0.0f;
+            for (double f : { 46.25, 55.0, 61.74, 82.41, 110.0, 146.83, 196.0, 246.94, 329.63, 659.26 })
+            {
+                SwarmnessAudioProcessor p;
+                resetToInit (p);
+                p.prepareToPlay (sr, 256);
+                p.getTuner().active.store (true);
+                // a plucked-string-like tone: rich harmonics, a weak fundamental on the low strings
+                juce::AudioBuffer<float> b (2, (int) (sr * 0.4));
+                for (int i = 0; i < b.getNumSamples(); ++i)
+                {
+                    double v = 0.0;
+                    for (int h = 1; h <= 12; ++h)
+                        v += (h == 1 && f < 70.0 ? 0.3 : 1.0) / h * std::sin (juce::MathConstants<double>::twoPi * f * h * i / sr + h);
+                    b.setSample (0, i, (float) (0.1 * v * std::exp (-i / sr * 2.0)));
+                    b.setSample (1, i, b.getSample (0, i));
+                }
+                render (p, b, sr, 256);
+                std::vector<float> w;
+                p.getTuner().read (w, 2048);
+                const auto est = TunerEstimate::estimate (w, p.getTuner().getRate());
+                const auto r = TunerOverlay::read (est.hz, 440.0f);
+                const auto want = TunerOverlay::read ((float) f, 440.0f);
+                worst = juce::jmax (worst, r.midi == want.midi ? std::abs (r.cents - want.cents) : 999.0f);
+            }
+            check (worst < 1.5f, juce::String::formatted ("%.1f kHz: F#1 .. E5 read within %.2f cents", sr / 1000.0, worst));
+        }
+        {
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            p.getTuner().active.store (true);
+            p.getTuner().mute.store (true);
+            auto out = render (p, makeSine (48000.0, 24000, 220.0, 0.3f), 48000.0, 256);
+            check (out.getMagnitude (0, 12000, 12000) < 1.0e-5f, "TUNER with MUTE: the output is silent");
+        }
+    }
+
     void testWasp()
     {
         std::printf ("\nWASP: overdrive (asymmetric hard clipping, ATTACK, BRIGHT, GATE)\n");
@@ -3058,6 +3100,7 @@ int main (int argc, char** argv)
         }
         p.setUiMini (mini);
         std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
+        const bool tunerShot = argc >= 7 && juce::String (argv[6]) == "tuner";
         editor->setSize (juce::roundToInt (MainPanel::baseWidth * scale), juce::roundToInt ((mini ? MainPanel::miniHeight : MainPanel::baseHeight) * scale));
 
         // Feed a little audio so meters and the pitch trace show activity.
@@ -3072,6 +3115,29 @@ int main (int argc, char** argv)
                     ed->refresh();
         }
 
+        if (tunerShot)
+        {
+            // open the tuner and play it an A2 a touch sharp
+            std::function<TunerOverlay* (juce::Component&)> find = [&] (juce::Component& c) -> TunerOverlay*
+            {
+                if (auto* t = dynamic_cast<TunerOverlay*> (&c)) return t;
+                for (auto* ch : c.getChildren())
+                    if (auto* t = find (*ch)) return t;
+                return nullptr;
+            };
+            if (auto* t = find (*editor))
+            {
+                t->open();
+                auto tone = makeSine (48000.0, 9600, 110.0 * std::pow (2.0, 4.0 / 1200.0), 0.2f);
+                for (int k = 0; k < 20; ++k)
+                {
+                    juce::AudioBuffer<float> b (tone);
+                    p.processBlock (b, midi);
+                }
+                for (int k = 0; k < 20; ++k)
+                    t->timerCallbackForTests();
+            }
+        }
         auto image = editor->createComponentSnapshot (editor->getLocalBounds(), true, 1.0f);
         juce::File out (juce::File::getCurrentWorkingDirectory().getChildFile (argv[2]));
         out.deleteFile();
@@ -3163,6 +3229,7 @@ int main (int argc, char** argv)
         if (which == "amp")     testAmp();
         if (which == "cab")     testCab();
         if (which == "wasp")    testWasp();
+        if (which == "tuner")   testTuner();
         std::printf ("\n%s (%d failure%s)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures, failures == 1 ? "" : "s");
         return failures == 0 ? 0 : 1;
     }

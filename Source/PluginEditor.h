@@ -6,6 +6,7 @@
 #include "GUI/Controls.h"
 #include "GUI/ChainStrip.h"
 #include "GUI/Pages.h"
+#include "GUI/TunerOverlay.h"
 
 /** All controls laid out at a fixed base resolution; the editor scales it as a whole. */
 class MainPanel : public juce::Component
@@ -75,7 +76,7 @@ private:
     // Header
     PresetBar presetBar;
     SegmentedChoice switchModeSelector;
-    juce::TextButton infoButton { "?" }, miniButton { "MINI" };
+    juce::TextButton infoButton { "?" }, miniButton { "MINI" }, tunerButton { "TUNE" };
     SceneBar sceneBar;
     bool mini = false;
 
@@ -121,6 +122,7 @@ private:
     LevelMeter inMeter { "IN" }, outMeter { "OUT" };
 
     InfoOverlay infoOverlay;
+    TunerOverlay tunerOverlay;
 
     std::vector<std::unique_ptr<APVTS::ButtonAttachment>> buttonAttachments;
 

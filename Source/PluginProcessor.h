@@ -12,6 +12,7 @@
 #include "DSP/AmpBlock.h"
 #include "DSP/CabBlock.h"
 #include "DSP/DriveBlock.h"
+#include "DSP/Tuner.h"
 #include "DSP/SpectrumTap.h"
 #include "Preset/PresetManager.h"
 #include "Amp/Tone3000.h"
@@ -115,6 +116,9 @@ public:
     void browseTone3000 (Tone3000::Target, Tone3000::Architecture = Tone3000::Architecture::a1, int cabSlot = 0);
     /** TONE3000 takes one NAM architecture per flow: the one picked last (the menu ticks it). */
     Tone3000::Architecture lastTone3000Architecture = Tone3000::Architecture::a2;
+
+    /** TUNER: the editor opens it (active) and reads the guitar from it; MUTE silences the output while it is open. */
+    TunerTap& getTuner() noexcept { return tunerTap; }
     int tone3000CabSlot = 0;   // the IR slot a TONE3000 cabinet goes to
     juce::String getTone3000Status() const { return tone3000.getStatus(); }
     /** The previous / next capture (or IR) in the folder of the loaded one - e.g. the other models of a TONE3000 tone. */
@@ -192,6 +196,8 @@ private:
     };
     std::unique_ptr<Housekeeper> housekeeper;
     Tone3000 tone3000;
+    TunerTap tunerTap;
+    juce::SmoothedValue<float> tunerGain;
     std::atomic<int> pendingScene { 0 };
     bool restoringState = false;
     juce::Array<juce::RangedAudioParameter*> learnableParams;   // index = binding param

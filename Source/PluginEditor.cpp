@@ -22,6 +22,7 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
       wasp (p),
       ampCab (p),
       presetBar (p.getPresetManager()),
+      tunerOverlay (p.getTuner()),
       switchModeSelector (param (state, ParamIDs::switchMode), { "MOMENTARY", "LATCH" }),
       stepGrid (p.getAPVTS()),
       fuzzVoiceSelector (param (state, ParamIDs::fuzzVoice), { "DOWN", "MID", "UP" }),
@@ -209,6 +210,10 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     addMouseListener (this, true);   // right-clicks anywhere -> MIDI menu of the control under the mouse
 
     addChildComponent (infoOverlay);
+    addChildComponent (tunerOverlay);
+    addAndMakeVisible (tunerButton);
+    tunerButton.setTooltip ("TUNER (MUTE silences the output while it is open)");
+    tunerButton.onClick = [this] { tunerOverlay.open(); };
 
     mini = processor.getUiMini();
     setSize (baseWidth, getBaseHeight());
@@ -293,8 +298,9 @@ void MainPanel::setSectionDimmed (std::initializer_list<juce::Component*> comps,
 void MainPanel::resized()
 {
     // Header
-    presetBar.setBounds (222, 16, 580, 32);
-    switchModeSelector.setBounds (818, 18, 170, 28);
+    presetBar.setBounds (222, 16, 544, 32);
+    switchModeSelector.setBounds (776, 18, 156, 28);
+    tunerButton.setBounds (938, 16, 48, 32);
     miniButton.setBounds (baseWidth - 16 - 32 - 8 - 52, 16, 52, 32);
     infoButton.setBounds (baseWidth - 16 - 32, 16, 32, 32);
 
@@ -445,6 +451,7 @@ void MainPanel::resized()
     }
 
     infoOverlay.setBounds (getLocalBounds());
+    tunerOverlay.setBounds (getLocalBounds());
     backdrop.setBounds (getLocalBounds());
 }
 
