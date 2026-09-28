@@ -892,65 +892,6 @@ void ReverbPage::chooseFile()
 }
 
 //==============================================================================
-CharacterSlider::CharacterSlider()
-{
-    setSliderStyle (juce::Slider::LinearHorizontal);
-    setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
-    setDoubleClickReturnValue (true, 50.0);
-    setMouseCursor (juce::MouseCursor::LeftRightResizeCursor);
-}
-
-void CharacterSlider::paint (juce::Graphics& g)
-{
-    const int chn = getChannel != nullptr ? getChannel() : 0;
-    const float t = (float) valueToProportionOfLength (getValue());
-    auto r = getLocalBounds().toFloat();
-
-    // names: reference A on the left, B on the right, the amp in between in the middle
-    auto names = r.removeFromTop (22.0f);
-    g.setFont (displayFont (17.0f));
-    auto nameAlpha = [t] (float centre) { return 0.35f + 0.65f * juce::jmax (0.0f, 1.0f - std::abs (t - centre) * 2.2f); };
-    g.setColour (Colours::accent.withAlpha (nameAlpha (0.0f)));
-    g.drawText (AmpBlock::referenceName (chn, 0), names, juce::Justification::centredLeft, false);
-    g.setColour (Colours::accent.withAlpha (nameAlpha (1.0f)));
-    g.drawText (AmpBlock::referenceName (chn, 1), names, juce::Justification::centredRight, false);
-    g.setColour (Colours::accentBright.withAlpha (nameAlpha (0.5f)));
-    g.drawText (AmpBlock::modelName (chn, 0.5f), names, juce::Justification::centred, false);
-
-    // the bar: honey filling from the centre towards the side it leans to
-    auto track = r.withSizeKeepingCentre (r.getWidth() - 16.0f, 8.0f).translated (0.0f, -4.0f);
-    g.setColour (Colours::inset);
-    g.fillRoundedRectangle (track, 4.0f);
-    g.setColour (Colours::panelBorder);
-    g.drawRoundedRectangle (track, 4.0f, 1.0f);
-    const float x = track.getX() + t * track.getWidth(), cx = track.getCentreX();
-    auto fill = juce::Rectangle<float> (juce::jmin (x, cx), track.getY(), std::abs (x - cx), track.getHeight());
-    g.setGradientFill (honeyGradient (fill.expanded (0.0f, 4.0f)));
-    g.fillRoundedRectangle (fill, 4.0f);
-    for (float tick : { 0.0f, 0.3f, 0.5f, 0.7f, 1.0f })
-    {
-        const float tx = track.getX() + tick * track.getWidth();
-        g.setColour (Colours::textFaint);
-        g.fillRect (tx - 0.5f, track.getBottom() + 3.0f, 1.0f, tick == 0.5f ? 7.0f : 4.0f);
-    }
-
-    // hex thumb
-    const auto thumb = juce::Rectangle<float> (22.0f, 20.0f).withCentre ({ x, track.getCentreY() });
-    g.setColour (juce::Colours::black.withAlpha (0.6f));
-    g.fillPath (hexagon (thumb.translated (0.0f, 2.0f)));
-    g.setGradientFill (honeyGradient (thumb));
-    g.fillPath (hexagon (thumb));
-    g.setColour (Colours::accentDeep);
-    g.strokePath (hexagon (thumb), juce::PathStrokeType (1.2f));
-
-    // the blend under the bar
-    g.setFont (font (12.5f, true));
-    g.setColour (Colours::textDim);
-    const int pct = juce::roundToInt (t * 100.0f);
-    g.drawText (juce::String (100 - pct) + "% " + AmpBlock::referenceName (chn, 0) + "  /  " + juce::String (pct) + "% " + AmpBlock::referenceName (chn, 1),
-                r.removeFromBottom (16.0f), juce::Justification::centred, false);
-}
-
 //==============================================================================
 AmpCabSection::AmpCabSection (SwarmnessAudioProcessor& p)
     : processor (p), state (p.getAPVTS()),
@@ -970,7 +911,7 @@ AmpCabSection::AmpCabSection (SwarmnessAudioProcessor& p)
     attachButton (ampPower, ParamIDs::ampOn, "AMP on / off");
     attachButton (cabPower, ParamIDs::cabOn, "CAB on / off");
 
-    channelSelector.setTooltip ("CLEAN / CRUNCH / LEAD: three amp models, each morphing between two reference amps with CHARACTER. "
+    channelSelector.setTooltip ("CLEAN = BLACKFACE (American clean), CRUNCH = BRIT (British crunch), LEAD = STEEL (American high gain). "
                                 "NAM: a Neural Amp Modeler capture (.nam) - load one below, or find thousands on TONE3000");
     cabSelector.setTooltip ("Modelled cabinets: 1x12 / 2x12 open-back combos, 4x12 BRIT (warm, mid-forward) and 4x12 MOD (tight, aggressive upper mids). "
                             "IR = your cabinet impulse response");
@@ -1000,12 +941,6 @@ AmpCabSection::AmpCabSection (SwarmnessAudioProcessor& p)
     for (auto* k : { &namInputKnob, &namBassKnob, &namMidKnob, &namTrebleKnob, &namPresenceKnob, &namDepthKnob, &namOutputKnob })
         addChildComponent (k);
 
-    characterSlider.getChannel = [this] { return juce::jlimit (0, 2, (int) state.getRawParameterValue (ParamIDs::ampChannel)->load()); };
-    characterSlider.setTooltip ("CHARACTER: morphs the whole amp circuit between the channel's two reference amps - the middle is an amp of its own. "
-                                "Double-click = middle");
-    characterAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (state, ampChar, characterSlider);
-    MidiLearnable::tag (characterSlider, ampChar);
-    addAndMakeVisible (characterSlider);
 
     loadNamButton.setTooltip ("Load a Neural Amp Modeler capture (.nam). Or drop one on the AMP panel");
     loadNamButton.onClick = [this] { choose (true); };
@@ -1071,7 +1006,6 @@ void AmpCabSection::resized()
             k->setBounds ((int) (10.0f + step * ((float) i++ + 0.5f)) - 36, 42, 72, 102);
     }
     morphArea = { 16.0f, 150.0f, 490.0f, h - 160.0f };
-    characterSlider.setBounds (morphArea.reduced (14.0f, 10.0f).toNearestInt());
     {
         auto buttons = morphArea.reduced (14.0f, 0.0f).removeFromBottom (40.0f).withTrimmedBottom (8.0f).toNearestInt();
         loadNamButton.setBounds (buttons.removeFromLeft (130));
@@ -1109,7 +1043,7 @@ void AmpCabSection::paint (juce::Graphics& g)
 {
     drawPanel (g, ampArea);
     drawPanel (g, cabArea);
-    const juce::String model = namMode ? juce::String ("neural capture") : juce::String (AmpBlock::modelName (juce::jmax (0, channel), character)).toLowerCase();
+    const juce::String model = namMode ? juce::String ("neural capture") : juce::String (AmpBlock::channelModel (juce::jmax (0, channel))).toLowerCase();
     drawPanelTitle (g, ampArea, "AMP", model, ampOn);
     drawPanelTitle (g, cabArea, "CAB", {}, cabOn);
 
@@ -1118,6 +1052,20 @@ void AmpCabSection::paint (juce::Graphics& g)
     g.fillRoundedRectangle (morphArea, 6.0f);
     g.setColour (dragTarget == 1 ? Colours::accentBright : Colours::panelBorder);
     g.drawRoundedRectangle (morphArea, 6.0f, dragTarget == 1 ? 2.0f : 1.0f);
+    if (! namMode)
+    {
+        // the channel's amp: its name and what it is
+        static const char* about[3] { "American clean: glassy, scooped and bright, sparkles when you play soft and breaks up when you dig in (voiced after a Fender Twin Reverb).",
+                                      "British crunch: barking upper mids and a tight bottom, cleans up with the guitar's volume (voiced after JCM2000 / JVM / JCM900 crunch channels).",
+                                      "American high gain: tight, compressed and cutting - chugs that stay tight (voiced after 5150 / 6505+ lead channels). WASP in front tightens it more." };
+        auto t = morphArea.reduced (18.0f, 12.0f);
+        g.setFont (displayFont (30.0f));
+        g.setColour (ampOn ? Colours::accent : Colours::textDim);
+        g.drawText (AmpBlock::channelModel (juce::jlimit (0, 2, channel)), t.removeFromTop (38.0f), juce::Justification::centredLeft, false);
+        g.setFont (font (13.5f));
+        g.setColour (Colours::textDim);
+        g.drawFittedText (about[juce::jlimit (0, 2, channel)], t.toNearestInt(), juce::Justification::topLeft, 3, 1.0f);
+    }
     if (namMode)
     {
         auto t = morphArea.reduced (14.0f, 10.0f);
@@ -1175,7 +1123,6 @@ void AmpCabSection::tick()
 {
     const bool nowAmp = ampPower.getToggleState(), nowCab = cabPower.getToggleState();
     const int nowChannel = juce::roundToInt (state.getRawParameterValue (ParamIDs::ampChannel)->load());
-    const float nowChar = state.getRawParameterValue (ParamIDs::ampChar)->load() * 0.01f;
     const int nowType = juce::roundToInt (state.getRawParameterValue (ParamIDs::cabType)->load());
     const float nowMic = state.getRawParameterValue (ParamIDs::cabMic)->load() * 0.01f;
     const float nowDist = state.getRawParameterValue (ParamIDs::cabDist)->load() * 0.01f;
@@ -1190,15 +1137,13 @@ void AmpCabSection::tick()
         message.clear();
         repaint();
     }
-    if (nowAmp != ampOn || nowCab != cabOn || nowChannel != channel || std::abs (nowChar - character) > 0.001f || nowType != cabType
+    if (nowAmp != ampOn || nowCab != cabOn || nowChannel != channel || nowType != cabType
         || std::abs (nowMic - mic) > 0.001f || std::abs (nowDist - dist) > 0.001f || nowNam != namDescription || nowIr != cabIrDescription)
     {
-        const bool channelChanged = nowChannel != channel;
-        ampOn = nowAmp; cabOn = nowCab; channel = nowChannel; character = nowChar;
+        ampOn = nowAmp; cabOn = nowCab; channel = nowChannel;
         cabType = nowType; mic = nowMic; dist = nowDist; namDescription = nowNam; cabIrDescription = nowIr;
         namMode = channel == AmpBlock::nam;
         cabIrMode = cabType == CabBlock::ir;
-        characterSlider.setVisible (! namMode);
         for (auto* b : { &loadNamButton, &toneButton, &clearNamButton })
             b->setVisible (namMode);
         clearNamButton.setEnabled (namDescription.isNotEmpty());
@@ -1211,8 +1156,6 @@ void AmpCabSection::tick()
             k->setVisible (! namMode);
         for (auto* k : { &namInputKnob, &namBassKnob, &namMidKnob, &namTrebleKnob, &namPresenceKnob, &namDepthKnob, &namOutputKnob })
             k->setVisible (namMode);
-        if (channelChanged)
-            characterSlider.repaint();
         for (auto* k : { &micKnob, &distKnob })
             k->setAlpha (cabIrMode ? 0.35f : 1.0f);
         repaint();

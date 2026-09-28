@@ -213,6 +213,8 @@ namespace ampsim
                 a.st[3].Rk = 476.1f; a.st[3].fb = 0.4599f; a.st[3].Rs = 4.364e5f; a.st[3].cathDb = -12.81f; a.st[3].cathHz = 30.03f; a.st[3].lpHz = 9877.0f; a.st[3].C = 9.776e-8f;
                 a.nfb = 1.3f;   // a little more feedback than the fit, so PRESENCE / DEPTH have a loop to work on
                 a.outDb += 7.5f;   // level-matched to the other models at noon
+                a.inDb -= 5.7f;    // noon = where players set it (the real lead channels are usually played around 4)
+                a.outDb += 2.0f;
                 break;
             }
             default: // SLUDGE - loose modern high gain: four hot stages, big caps, tube-rectifier sag, deep resonance

@@ -265,7 +265,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     auto amp = std::make_unique<Group> ("amp", "Amp", "|");
     amp->addChild (toggle (ampOn, "Amp On", false));
     amp->addChild (std::make_unique<juce::AudioParameterChoice> (pid (ampChannel), "Amp Channel", ParamChoices::ampChannels, 1));
-    amp->addChild (percent (ampChar, "Amp Character", 50.0f));
     amp->addChild (knob10 (ampGain, "Amp Gain", 5.0f));
     amp->addChild (knob10 (ampBass, "Amp Bass", 5.0f));
     amp->addChild (knob10 (ampMid, "Amp Mid", 5.0f));

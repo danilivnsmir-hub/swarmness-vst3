@@ -66,7 +66,7 @@ SwarmnessAudioProcessor::SwarmnessAudioProcessor()
     p.revOn = get (id::revOn);           p.revType = get (id::revType);         p.revMix = get (id::revMix);
     p.revDecay = get (id::revDecay);     p.revSize = get (id::revSize);         p.revPreDelay = get (id::revPreDelay);
     p.revTone = get (id::revTone);       p.revLowCut = get (id::revLowCut);     p.revMod = get (id::revMod);         p.revDuck = get (id::revDuck);
-    p.ampOn = get (id::ampOn);           p.ampChannel = get (id::ampChannel);   p.ampChar = get (id::ampChar);       p.ampGain = get (id::ampGain);
+    p.ampOn = get (id::ampOn);           p.ampChannel = get (id::ampChannel);   p.ampGain = get (id::ampGain);
     p.ampBass = get (id::ampBass);       p.ampMid = get (id::ampMid);           p.ampTreble = get (id::ampTreble);   p.ampPresence = get (id::ampPresence);
     p.ampDepth = get (id::ampDepth);     p.ampMaster = get (id::ampMaster);     p.ampGate = get (id::ampGate);       p.ampLevel = get (id::ampLevel);
     p.namInput = get (id::namInput);     p.namBass = get (id::namBass);         p.namMid = get (id::namMid);         p.namTreble = get (id::namTreble);
@@ -492,7 +492,7 @@ void SwarmnessAudioProcessor::processChainBlock (int block, const BlockContext& 
             AmpBlock::Settings s;
             s.on = on (p.ampOn);
             s.channel = juce::jlimit (0, 3, (int) p.ampChannel->load());
-            s.character = pct (p.ampChar);
+            s.character = AmpBlock::channelSide (s.channel);   // one amp per channel
             s.gain = p.ampGain->load() * 0.1f;
             s.bass = p.ampBass->load() * 0.1f;
             s.mid = p.ampMid->load() * 0.1f;

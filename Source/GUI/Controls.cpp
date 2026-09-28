@@ -932,7 +932,7 @@ void InfoOverlay::paint (juce::Graphics& g)
                       "(the pick sags, the note blooms), CLEAN = clean signal under the fuzz." },
         { "WASP",     "Tight overdrive in front of the AMP (a TS-style clipper): DRIVE = clean boost .. thick overdrive, ATTACK = how tight the low end is "
                       "before the clipping, BRIGHT = voicing, VOLUME (5 = about unity), GATE = noise gate keyed from the guitar." },
-        { "AMP",      "CLEAN / CRUNCH / LEAD amp models; CHARACTER morphs each between two reference amps (the middle is an amp of its own). "
+        { "AMP",      "Three amps: CLEAN = BLACKFACE (American clean), CRUNCH = BRIT (British crunch), LEAD = STEEL (American high gain). "
                       "NAM = a Neural Amp Modeler capture with its own INPUT / EQ / OUTPUT knobs (all at 5 = the capture as it is) - LOAD .NAM or drop one, find thousands on TONE3000. GATE = noise gate in front." },
         { "CAB",      "Speaker cabinet: four modelled cabinets (MIC = cap..edge, DISTANCE = grille..room) or your own IR (LOAD IR or drop a WAV)." },
         { "CHAIN",    "The strip under the header is the signal chain. Drag a block to reorder it (fuzz before or after the pitch, reverb into the fuzz...), "

@@ -167,19 +167,7 @@ private:
 };
 
 //==============================================================================
-/**
- * CHARACTER as a wide morph bar between the channel's two reference amps:
- *   CHROME  <----(o)---->  BLACKFACE     (the name of the amp in between shows at the middle)
- */
-class CharacterSlider : public RightClickSafeSlider
-{
-public:
-    CharacterSlider();
-    std::function<int()> getChannel;
-    void paint (juce::Graphics&) override;
-};
-
-/** AMP + CAB, on the FX page under SMOKE / SWARM / WINGS. */
+/** AMP + CAB, on the RIG page under WASP. */
 class AmpCabSection : public juce::Component,
                       public juce::FileDragAndDropTarget
 {
@@ -211,7 +199,6 @@ private:
     Knob presenceKnob { "PRESENCE" }, depthKnob { "DEPTH" }, masterKnob { "MASTER" }, gateKnob { "GATE" }, levelKnob { "LEVEL", true };
     Knob namInputKnob { "INPUT" }, namBassKnob { "BASS" }, namMidKnob { "MID" }, namTrebleKnob { "TREBLE" };
     Knob namPresenceKnob { "PRESENCE" }, namDepthKnob { "DEPTH" }, namOutputKnob { "OUTPUT" };
-    CharacterSlider characterSlider;
     juce::TextButton loadNamButton { "LOAD .NAM" }, toneButton { "TONE3000" }, clearNamButton { "CLEAR" };
     Knob micKnob { "MIC" }, distKnob { "DISTANCE" }, lowCutKnob { "LOW CUT" }, highCutKnob { "HIGH CUT" }, cabLevelKnob { "LEVEL", true };
     juce::TextButton loadIrButton { "LOAD IR" }, clearIrButton { "CLEAR" }, irToneButton { "TONE3000" };
@@ -219,12 +206,11 @@ private:
     juce::String toneStatus;
 
     std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>> buttonAttachments;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> characterAttachment;
     std::unique_ptr<juce::FileChooser> chooser;
 
     bool ampOn = false, cabOn = false, namMode = false, cabIrMode = false;
     int channel = -1, cabType = -1, dragTarget = 0;   // dragTarget: 1 = AMP, 2 = CAB
-    float character = -1.0f, mic = -1.0f, dist = -1.0f;
+    float mic = -1.0f, dist = -1.0f;
     juce::String namDescription, cabIrDescription, message;
     int messageTicks = 0;
 

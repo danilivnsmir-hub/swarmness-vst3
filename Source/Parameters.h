@@ -143,7 +143,6 @@ namespace ParamIDs
     // AMP (amp models CLEAN / CRUNCH / LEAD with CHARACTER, or a NAM capture)
     inline constexpr const char* ampOn       = "ampOn";
     inline constexpr const char* ampChannel  = "ampChannel";
-    inline constexpr const char* ampChar     = "ampChar";
     inline constexpr const char* ampGain     = "ampGain";
     inline constexpr const char* ampBass     = "ampBass";
     inline constexpr const char* ampMid      = "ampMid";

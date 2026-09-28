@@ -223,7 +223,7 @@ private:
         std::atomic<float>* revOn {};      std::atomic<float>* revType {};     std::atomic<float>* revMix {};
         std::atomic<float>* revDecay {};   std::atomic<float>* revSize {};     std::atomic<float>* revPreDelay {};
         std::atomic<float>* revTone {};    std::atomic<float>* revLowCut {};   std::atomic<float>* revMod {};     std::atomic<float>* revDuck {};
-        std::atomic<float>* ampOn {};      std::atomic<float>* ampChannel {};  std::atomic<float>* ampChar {};     std::atomic<float>* ampGain {};
+        std::atomic<float>* ampOn {};      std::atomic<float>* ampChannel {};  std::atomic<float>* ampGain {};
         std::atomic<float>* ampBass {};    std::atomic<float>* ampMid {};      std::atomic<float>* ampTreble {};   std::atomic<float>* ampPresence {};
         std::atomic<float>* ampDepth {};   std::atomic<float>* ampMaster {};   std::atomic<float>* ampGate {};     std::atomic<float>* ampLevel {};
         std::atomic<float>* namInput {};   std::atomic<float>* namBass {};     std::atomic<float>* namMid {};      std::atomic<float>* namTreble {};

@@ -4,7 +4,7 @@ using namespace Theme;
 
 namespace
 {
-    constexpr float kInW = 34.0f, kOutW = 42.0f, kGap = 14.0f, kSplitGap = 26.0f, kMergeGap = 46.0f;
+    constexpr float kInW = 30.0f, kOutW = 38.0f, kGap = 18.0f, kSplitGap = 26.0f, kMergeGap = 46.0f;
 }
 
 ChainStrip::ChainStrip (juce::AudioProcessorValueTreeState& s) : state (s)
@@ -144,8 +144,8 @@ void ChainStrip::resized()
 juce::Rectangle<float> ChainStrip::ledRect (juce::Rectangle<float> tile) const noexcept
 {
     const bool half = isHalf (tile, (float) getHeight());
-    const float s = half ? 10.0f : 12.0f;
-    return juce::Rectangle<float> (s, s - 1.0f).withCentre ({ tile.getX() + (half ? 16.0f : 18.0f), tile.getCentreY() });
+    const float s = half ? 9.0f : 10.0f;
+    return juce::Rectangle<float> (s, s - 1.0f).withCentre ({ tile.getX() + (half ? 14.0f : 15.0f), tile.getCentreY() });
 }
 
 Chain::Layout ChainStrip::displayLayout() const
@@ -351,22 +351,22 @@ void ChainStrip::paint (juce::Graphics& g)
         }
 
         // name (+ subtitle on full-height tiles)
-        // ten blocks share the strip: names squeeze a little rather than getting cut
-        auto text = r.withTrimmedLeft (half ? 25.0f : 29.0f).withTrimmedRight (half ? 8.0f : 6.0f);
+        // eleven blocks share the strip: names squeeze rather than getting cut
+        auto text = r.withTrimmedLeft (half ? 21.0f : 23.0f).withTrimmedRight (half ? 7.0f : 7.0f);
         if (half)
         {
             g.setFont (displayFont (16.0f));
             if (on || hi) g.setGradientFill (honeyGradient (text)); else g.setColour (Colours::textDim);
-            g.drawFittedText (Chain::names[b], text.translated (0.0f, 1.0f).toNearestInt(), juce::Justification::centredLeft, 1, 0.6f);
+            g.drawFittedText (Chain::names[b], text.translated (0.0f, 1.0f).toNearestInt(), juce::Justification::centredLeft, 1, 0.5f);
             return;
         }
         g.setFont (displayFont (19.0f));
         const auto nameArea = text.withTrimmedBottom (text.getHeight() * 0.42f).translated (0.0f, 2.0f);
         if (on || hi) g.setGradientFill (honeyGradient (nameArea)); else g.setColour (Colours::textDim);
-        g.drawFittedText (Chain::names[b], nameArea.toNearestInt(), juce::Justification::bottomLeft, 1, 0.7f);
-        g.setFont (font (10.5f, true));
+        g.drawFittedText (Chain::names[b], nameArea.toNearestInt(), juce::Justification::bottomLeft, 1, 0.55f);
+        g.setFont (font (9.5f, true));
         g.setColour (hi ? Colours::text.withAlpha (0.8f) : Colours::textFaint);
-        g.drawFittedText (Chain::subtitles[b], text.withTrimmedTop (text.getHeight() * 0.58f).toNearestInt(), juce::Justification::topLeft, 1, 0.7f);
+        g.drawFittedText (Chain::subtitles[b], text.withTrimmedTop (text.getHeight() * 0.58f).toNearestInt(), juce::Justification::topLeft, 1, 0.5f);
     };
 
     for (int b = 0; b < Chain::numBlocks; ++b)

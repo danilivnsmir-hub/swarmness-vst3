@@ -1952,10 +1952,10 @@ namespace
                    juce::String::formatted ("BASS / TREBLE / MID ranges: %.1f / %.1f / %.1f dB", bassUp, trebleUp, midUp));
         }
 
-        // Every model: bounded, level-matched within a sane window, more gain = more harmonics
+        // The three channel amps (CLEAN = BLACKFACE, CRUNCH = BRIT, LEAD = STEEL): bounded, level-matched
         double minDb = 1e9, maxDb = -1e9;
         for (int chn = 0; chn < 3; ++chn)
-            for (float character : { 0.0f, 0.5f, 1.0f })
+            for (float character : { AmpBlock::channelSide (chn) })
             {
                 AmpBlock::Settings s;
                 s.on = true;
@@ -1968,7 +1968,7 @@ namespace
                 check (allFinite (out) && out.getMagnitude (0, 0, out.getNumSamples()) < 2.0f,
                        juce::String::formatted ("%-10s: bounded, %.1f dB RMS", AmpBlock::modelName (chn, character), db));
             }
-        check (maxDb - minDb < 12.0, juce::String::formatted ("levels at noon within %.1f dB of each other", maxDb - minDb));
+        check (maxDb - minDb < 3.0, juce::String::formatted ("the three amps at noon within %.1f dB of each other", maxDb - minDb));
 
         auto harmonics = [&] (int chn, float gain)
         {

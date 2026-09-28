@@ -48,6 +48,14 @@ public:
     };
 
     /** Model names: reference A, the in-between amp, reference B. */
+    /** One amp per channel: CLEAN = BLACKFACE, CRUNCH = BRIT, LEAD = STEEL (which of the channel's two
+        fitted reference circuits it uses). */
+    static float channelSide (int channel) noexcept { return channel == clean ? 1.0f : 0.0f; }
+    static const char* channelModel (int channel) noexcept
+    {
+        return channel >= 0 && channel < 3 ? referenceName (channel, (int) channelSide (channel)) : "NAM";
+    }
+
     static const char* modelName (int channel, float character) noexcept
     {
         static const char* names[3][3] { { "CHROME", "GLASSHOUSE", "BLACKFACE" },
