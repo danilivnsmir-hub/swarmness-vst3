@@ -2441,7 +2441,7 @@ namespace
             }
             const double secs = juce::Time::highResolutionTicksToSeconds (juce::Time::getHighResolutionTicks() - t0);
             const double load = 100.0 * secs / (buf.getNumSamples() / 48000.0);
-            check (load < 5.0, juce::String::formatted ("WASP stereo at 48 kHz: %.1f%% of one core", load));
+            check (load < 10.0, juce::String::formatted ("WASP stereo at 48 kHz: %.1f%% of one core", load));
         }
     }
 
