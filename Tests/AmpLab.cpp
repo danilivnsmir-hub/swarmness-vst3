@@ -626,20 +626,20 @@ int main (int argc, char** argv)
         std::fputs (dumpReference (args[1].getIntValue(), args[2].getIntValue()).c_str(), stdout);
         return 0;
     }
-    if (argc >= 5 && juce::String (argv[1]) == "render")
+    if (args.size() >= 4 && args[0] == "render")
     {
-        auto f = parseTarget (argv[2]);
+        auto f = parseTarget (args[1]);
         juce::AudioFormatManager fm;
         fm.registerBasicFormats();
-        std::unique_ptr<juce::AudioFormatReader> r (fm.createReaderFor (juce::File (argv[3])));
+        std::unique_ptr<juce::AudioFormatReader> r (fm.createReaderFor (juce::File (args[2])));
         if (r == nullptr) return 2;
         juce::AudioBuffer<float> b (1, (int) r->lengthInSamples);
         r->read (&b, 0, b.getNumSamples(), 0, true, false);
         std::vector<float> in (b.getReadPointer (0), b.getReadPointer (0) + b.getNumSamples());
-        return writeWav (juce::File (argv[4]), run (f, in)) ? 0 : 1;
+        return writeWav (juce::File (args[3]), run (f, in)) ? 0 : 1;
     }
-    if (argc >= 3 && juce::String (argv[1]) == "riff")
-        return writeWav (juce::File (argv[2]), guitarRiff (8.0)) ? 0 : 1;
+    if (args.size() >= 2 && args[0] == "riff")
+        return writeWav (juce::File (args[1]), guitarRiff (8.0)) ? 0 : 1;
     std::fprintf (stderr, "usage: SwarmnessAmpLab [--set ch:side:k=v,...] features|fitfeat <target> | dump <ch> <side> | render <target> <in.wav> <out.wav> | riff <out.wav>\n");
     return 2;
 }

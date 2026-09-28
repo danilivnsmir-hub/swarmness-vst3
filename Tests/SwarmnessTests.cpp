@@ -2939,6 +2939,39 @@ int main (int argc, char** argv)
         return 0;
     }
 
+    if (argc >= 4 && juce::String (argv[1]) == "--process")
+    {
+        // --process in.wav out.wav [preset=Name] [paramId=value ...]: the whole plug-in on a file (mono in, stereo out)
+        juce::AudioFormatManager fm;
+        fm.registerBasicFormats();
+        std::unique_ptr<juce::AudioFormatReader> r (fm.createReaderFor (juce::File (argv[2])));
+        if (r == nullptr) { std::printf ("cannot read %s\n", argv[2]); return 1; }
+        const double sr = r->sampleRate;
+        juce::AudioBuffer<float> in (2, (int) r->lengthInSamples);
+        r->read (&in, 0, in.getNumSamples(), 0, true, true);
+        if (r->numChannels == 1) in.copyFrom (1, 0, in, 0, 0, in.getNumSamples());
+        SwarmnessAudioProcessor p;
+        resetToInit (p);
+        for (int i = 4; i < argc; ++i)
+        {
+            const juce::String kv (argv[i]);
+            const auto k = kv.upToFirstOccurrenceOf ("=", false, false), v = kv.fromFirstOccurrenceOf ("=", false, false);
+            if (k == "preset") { p.getPresetManager().loadPreset (v); continue; }
+            if (auto* param = p.getAPVTS().getParameter (k))
+                param->setValueNotifyingHost (param->convertTo0to1 (v.getFloatValue()));
+            else
+                std::printf ("unknown parameter %s\n", k.toRawUTF8());
+        }
+        auto out = render (p, in, sr, 256);
+        juce::File f (argv[3]);
+        f.deleteFile();
+        juce::WavAudioFormat wav;
+        std::unique_ptr<juce::OutputStream> os (f.createOutputStream().release());
+        auto writer = wav.createWriterFor (os, juce::AudioFormatWriterOptions().withSampleRate (sr).withNumChannels (2).withBitsPerSample (24));
+        writer->writeFromAudioSampleBuffer (out, 0, out.getNumSamples());
+        std::printf ("latency %d samples\n", p.getLatencySamples());
+        return 0;
+    }
     if (argc >= 3 && juce::String (argv[1]) == "--only")
     {
         const juce::String which (argv[2]);
