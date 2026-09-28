@@ -2,6 +2,8 @@
 
 #include <JuceHeader.h>
 
+#include "IrTools.h"
+
 #include <array>
 #include <cmath>
 #include <complex>
@@ -18,7 +20,10 @@
  * (proximity bass) out into the room (floor reflection, less bass, a little air).
  *
  * The IRs are built on the message thread and handed to juce::dsp::Convolution (zero latency);
- * both engines (model / user IR) cross-fade when switching.
+ * both engines (model / user IR) cross-fade when switching. A loaded IR is kept as it came from the
+ * file and resampled to the host rate with a proper sinc (Convolution's own resampler dulls the top
+ * octave), stereo IRs play in stereo, and an IR only takes over once its engine is really running
+ * (before that, an offline bounce would hear the amp without a cabinet).
  */
 class CabBlock
 {
@@ -41,8 +46,16 @@ public:
         fs = sampleRate;
         maxBlock = juce::jmax (1, maxBlockSize);
         const juce::dsp::ProcessSpec spec { sampleRate, (juce::uint32) maxBlock, 2 };
-        modelConv.prepare (spec);
-        userConv.prepare (spec);
+        {
+            const juce::SpinLock::ScopedLockType sl (lock);
+            if (userSource.getNumSamples() > 0)
+            {
+                pendingUser = buildUserIR (userSource, userSourceRate, fs);
+                pendingUserRate = fs;
+                userPending = true;
+            }
+        }
+        commitPending();
         dryCopy.setSize (2, maxBlock, false, false, true);
         userOut.setSize (2, maxBlock, false, false, true);
         reset();
@@ -61,6 +74,16 @@ public:
         level.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (settings.levelDb));
     }
 
+    /** Loads what is pending into the convolutions and prepares them, so the IRs are active from the
+        very next process() call. Only while audio is stopped (prepare, or right after it). */
+    void commitPending()
+    {
+        pickUp();
+        const juce::dsp::ProcessSpec spec { fs, (juce::uint32) maxBlock, 2 };
+        modelConv.prepare (spec);
+        userConv.prepare (spec);
+    }
+
     void setParams (const Settings& s) noexcept { settings = s; }
     const Settings& getParams() const noexcept { return settings; }
 
@@ -73,17 +96,34 @@ public:
         pendingModelRate = irRate;
         modelPending = true;
     }
-    /** A loaded cabinet IR (message thread). Levelled so its mid band sits at 0 dB. */
+    /** A loaded cabinet IR, one or two channels at the file's rate (message thread). It is kept, and
+        resampled to the host rate whenever that changes; levelled so its mid band sits at 0 dB. */
     void setUserIR (juce::AudioBuffer<float>&& irBuffer, double irRate)
     {
+        const double rate = fs;
+        auto built = buildUserIR (irBuffer, irRate, rate);
         const juce::SpinLock::ScopedLockType sl (lock);
-        pendingUser = std::move (irBuffer);
-        pendingUserRate = irRate;
+        userSource = std::move (irBuffer);
+        userSourceRate = irRate;
+        pendingUser = std::move (built);
+        pendingUserRate = rate;
         userPending = true;
+    }
+
+    /** The IR as the convolution runs it: two channels at `hostRate`, levelled. */
+    static juce::AudioBuffer<float> buildUserIR (const juce::AudioBuffer<float>& source, double sourceRate, double hostRate)
+    {
+        auto ir = irtools::resample (source, sourceRate, hostRate);
+        juce::AudioBuffer<float> st (2, ir.getNumSamples());
+        for (int c = 0; c < 2; ++c)
+            st.copyFrom (c, 0, ir, juce::jmin (c, ir.getNumChannels() - 1), 0, ir.getNumSamples());
+        levelIR (st, hostRate);
+        return st;
     }
     void clearUserIR()
     {
         const juce::SpinLock::ScopedLockType sl (lock);
+        userSource.setSize (0, 0);
         userCleared = true;
     }
     bool hasModelIR() const noexcept { return modelLoaded; }
@@ -107,7 +147,8 @@ public:
         if (numCh == 1)
             dryCopy.clear (1, 0, numSamples);
 
-        userMix.setTargetValue (settings.type == ir && userLoaded ? 1.0f : 0.0f);
+        const bool userReady = userLoaded && userConv.getCurrentIRSize() == userSize;
+        userMix.setTargetValue (settings.type == ir && userReady ? 1.0f : 0.0f);
         const bool runUser = userMix.getTargetValue() > 0.5f || userMix.isSmoothing();
         const bool runModel = userMix.getTargetValue() < 0.5f || userMix.isSmoothing();
 
@@ -120,11 +161,11 @@ public:
         }
         if (runModel)
         {
+            juce::dsp::AudioBlock<float> b (audio, (size_t) numCh, (size_t) numSamples);
             if (modelLoaded)
-            {
-                juce::dsp::AudioBlock<float> b (audio, (size_t) numCh, (size_t) numSamples);
                 modelConv.process (juce::dsp::ProcessContextReplacing<float> (b));
-            }
+            if (! modelLoaded || modelConv.getCurrentIRSize() < 16)
+                b.clear();   // no cabinet running yet: silence, never the raw amp
         }
         if (runUser)
             for (int i = 0; i < numSamples; ++i)
@@ -137,14 +178,17 @@ public:
         // LOW CUT / HIGH CUT (12 dB/oct), LEVEL, on / off fade
         updateCuts();
         level.setTargetValue (juce::Decibels::decibelsToGain (settings.levelDb));
+        const bool loOff = loCur <= 20.5f, hiOff = hiCur >= 19900.0f;   // at the ends of their ranges the cuts are off
         for (int i = 0; i < numSamples; ++i)
         {
             const float g = level.getNextValue(), on = onGain.getNextValue();
             for (int c = 0; c < numCh; ++c)
             {
                 float x = audio[c][i];
-                x = cuts[0].process (x, c);
-                x = cuts[1].process (x, c);
+                if (! loOff)
+                    x = cuts[0].process (x, c);
+                if (! hiOff)
+                    x = cuts[1].process (x, c);
                 const float dry = dryCopy.getSample (c, i);
                 audio[c][i] = dry + on * (x * g - dry);
             }
@@ -237,19 +281,22 @@ public:
         if (len == 0) return;
         int n = 1;
         while (n < len * 2) n <<= 1;
-        std::vector<std::complex<double>> x ((size_t) n);
-        for (int i = 0; i < len; ++i)
-            x[(size_t) i] = irBuf.getSample (0, i);
-        fft (x, false);
         double sum = 0.0;
         int count = 0;
-        for (int k = 1; k < n / 2; ++k)
+        for (int c = 0; c < irBuf.getNumChannels(); ++c)
         {
-            const double hz = (double) k * sampleRate / n;
-            if (hz >= 200.0 && hz <= 3000.0)
+            std::vector<std::complex<double>> x ((size_t) n);
+            for (int i = 0; i < len; ++i)
+                x[(size_t) i] = irBuf.getSample (c, i);
+            fft (x, false);
+            for (int k = 1; k < n / 2; ++k)
             {
-                sum += 20.0 * std::log10 (std::abs (x[(size_t) k]) + 1.0e-12);
-                ++count;
+                const double hz = (double) k * sampleRate / n;
+                if (hz >= 200.0 && hz <= 3000.0)
+                {
+                    sum += 20.0 * std::log10 (std::abs (x[(size_t) k]) + 1.0e-12);
+                    ++count;
+                }
             }
         }
         if (count > 0)
@@ -474,7 +521,8 @@ private:
         }
         if (userPending)
         {
-            userConv.loadImpulseResponse (std::move (pendingUser), pendingUserRate, juce::dsp::Convolution::Stereo::no,
+            userSize = pendingUser.getNumSamples();
+            userConv.loadImpulseResponse (std::move (pendingUser), pendingUserRate, juce::dsp::Convolution::Stereo::yes,
                                           juce::dsp::Convolution::Trim::no, juce::dsp::Convolution::Normalise::no);
             userPending = false;
             userLoaded = true;
@@ -497,6 +545,9 @@ private:
 
     juce::SpinLock lock;
     juce::AudioBuffer<float> pendingModel, pendingUser;
+    juce::AudioBuffer<float> userSource;   // the loaded file as it was (resampled again on a rate change)
+    double userSourceRate = 44100.0;
+    int userSize = -1;
     double pendingModelRate = 44100.0, pendingUserRate = 44100.0;
     bool modelPending = false, userPending = false, userCleared = false;
     bool modelLoaded = false, userLoaded = false;

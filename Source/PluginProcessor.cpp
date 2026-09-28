@@ -173,6 +173,7 @@ void SwarmnessAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBl
     cab.prepare (sampleRate, maxBlockSize);
     wasp.prepare (sampleRate, maxBlockSize);
     updateCabModel (true);
+    cab.commitPending();   // the cabinet is running from the first block (an offline bounce starts right away)
 
     // Only SMOKE (oversampling) adds latency, and it is there wherever SMOKE sits in the chain.
     const int latency = fuzzStage.getLatencySamples();
@@ -845,24 +846,27 @@ juce::String SwarmnessAudioProcessor::loadCabIR (const juce::File& file)
     if (length < 16 || reader->sampleRate <= 0.0)
         return "\"" + file.getFileName() + "\" is too short";
 
-    juce::AudioBuffer<float> ir (1, length);
+    // a stereo IR plays in stereo (left into left, right into right); two identical channels are one
+    juce::AudioBuffer<float> ir (reader->numChannels > 1 ? 2 : 1, length);
     ir.clear();
-    if (reader->numChannels > 1)
+    reader->read (&ir, 0, length, 0, true, ir.getNumChannels() > 1);
+    if (ir.getNumChannels() > 1)
     {
-        juce::AudioBuffer<float> both (2, length);
-        reader->read (&both, 0, length, 0, true, true);
-        ir.copyFrom (0, 0, both, 0, 0, length);
-        ir.addFrom (0, 0, both, 1, 0, length);
-        ir.applyGain (0.5f);
-    }
-    else
-    {
-        reader->read (&ir, 0, length, 0, true, false);
+        double diff = 0.0, sum = 0.0;
+        for (int i = 0; i < length; ++i)
+        {
+            const double l = ir.getSample (0, i), r = ir.getSample (1, i);
+            diff += (l - r) * (l - r);
+            sum += l * l + r * r;
+        }
+        if (diff <= sum * 1.0e-6)
+            ir.setSize (1, length, true);
     }
     if (const auto problem = irtools::sanitise (ir, reader->sampleRate); problem.isNotEmpty())
         return "\"" + file.getFileName() + "\": " + problem;
-    CabBlock::levelIR (ir, reader->sampleRate);
-    const auto desc = file.getFileNameWithoutExtension() + "  -  " + juce::String (juce::roundToInt ((double) ir.getNumSamples() / reader->sampleRate * 1000.0)) + " ms";
+    const auto desc = file.getFileNameWithoutExtension() + "  -  " + juce::String (juce::roundToInt ((double) ir.getNumSamples() / reader->sampleRate * 1000.0)) + " ms, "
+                    + juce::String (reader->sampleRate / 1000.0, reader->sampleRate == std::floor (reader->sampleRate / 1000.0) * 1000.0 ? 0 : 1) + " kHz"
+                    + (ir.getNumChannels() > 1 ? ", stereo" : "");
     cab.setUserIR (std::move (ir), reader->sampleRate);
 
     const juce::ScopedLock sl (irInfoLock);

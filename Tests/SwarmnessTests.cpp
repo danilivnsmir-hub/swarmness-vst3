@@ -2306,6 +2306,67 @@ namespace
             irFile.deleteFile();
         }
         {
+            // IR resampling keeps the top octave (a linear interpolator loses 1-2 dB there)
+            juce::AudioBuffer<float> src (1, 4410);
+            juce::Random rng (5);
+            for (int i = 0; i < src.getNumSamples(); ++i)
+                src.setSample (0, i, i < 64 ? 0.0f : (rng.nextFloat() - 0.5f) * std::exp (-(i - 64) / 300.0f));   // files keep ~1 ms before the sound
+            auto magDb = [] (const juce::AudioBuffer<float>& h, double rate, double hz)
+            {
+                std::complex<double> acc;
+                for (int i = 0; i < h.getNumSamples(); ++i)
+                    acc += (double) h.getSample (0, i) * std::polar (1.0, -juce::MathConstants<double>::twoPi * hz * i / rate);
+                return 20.0 * std::log10 (std::abs (acc) + 1.0e-12);
+            };
+            double worst = 0.0;
+            for (double to : { 48000.0, 96000.0 })
+            {
+                const auto up = irtools::resample (src, 44100.0, to);
+                const auto back = irtools::resample (up, to, 44100.0);
+                for (double hz : { 100.0, 1000.0, 8000.0, 12000.0, 16000.0 })
+                    worst = juce::jmax (worst, std::abs (magDb (up, to, hz) - magDb (src, 44100.0, hz)),
+                                        std::abs (magDb (back, 44100.0, hz) - magDb (src, 44100.0, hz)));
+            }
+            check (worst < 0.15, juce::String::formatted ("IR resampling 44.1 <-> 48 / 96 kHz: within %.3f dB up to 16 kHz", worst));
+        }
+        {
+            // a stereo IR plays in stereo, and a loaded IR is running from the very first block
+            auto irFile = juce::File::createTempFile (".wav");
+            {
+                juce::AudioBuffer<float> ir (2, 2205);
+                for (int i = 0; i < ir.getNumSamples(); ++i)
+                {
+                    ir.setSample (0, i, (i % 5 == 0 ? 1.0f : -0.2f) * std::exp (-i / 150.0f));
+                    ir.setSample (1, i, i < 20 ? 0.0f : (i % 3 == 0 ? 0.8f : -0.3f) * std::exp (-(i - 20) / 250.0f));
+                }
+                juce::WavAudioFormat wav;
+                std::unique_ptr<juce::OutputStream> stream = irFile.createOutputStream();
+                auto w = wav.createWriterFor (stream, juce::AudioFormatWriterOptions{}.withSampleRate (44100.0).withNumChannels (2).withBitsPerSample (24));
+                w->writeFromAudioSampleBuffer (ir, 0, ir.getNumSamples());
+            }
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            setParam (p, ParamIDs::cabOn, 1.0f);
+            setParam (p, ParamIDs::cabType, (float) CabBlock::ir);
+            const auto err = p.loadCabIR (irFile);
+            check (err.isEmpty() && p.getCabIRDescription().contains ("stereo"), "stereo CAB IR: " + (err.isEmpty() ? p.getCabIRDescription() : err));
+            juce::AudioBuffer<float> click (2, 4800);
+            click.clear();
+            click.setSample (0, 100, 0.5f);
+            click.setSample (1, 100, 0.5f);
+            const auto out = render (p, click, sr, 256);   // no waiting for a background thread
+            double diff = 0.0, tail = 0.0;
+            for (int i = 0; i < out.getNumSamples(); ++i)
+            {
+                diff += std::pow (out.getSample (0, i) - out.getSample (1, i), 2.0);
+                if (i > 400) tail += std::pow (out.getSample (0, i), 2.0);
+            }
+            check (diff > 1.0e-4 && tail > 1.0e-6,
+                   juce::String::formatted ("stereo IR: left and right differ (%.1f dB), the IR rings from the first block (tail %.1f dB)",
+                                            10.0 * std::log10 (diff + 1.0e-20), 10.0 * std::log10 (tail + 1.0e-20)));
+            irFile.deleteFile();
+        }
+        {
             // the amp presets play at sane levels (the modelled cabinet IR loads on its own thread)
             auto guitar = makeGuitar (sr, 96000);
             double lo = 1e9, hi = -1e9;
@@ -2963,7 +3024,7 @@ int main (int argc, char** argv)
 
     if (argc >= 4 && juce::String (argv[1]) == "--process")
     {
-        // --process in.wav out.wav [preset=Name] [paramId=value ...]: the whole plug-in on a file (mono in, stereo out)
+        // --process in.wav out.wav [preset=Name] [cabir=file.wav] [paramId=value ...]: the whole plug-in on a file (mono in, stereo out)
         juce::AudioFormatManager fm;
         fm.registerBasicFormats();
         std::unique_ptr<juce::AudioFormatReader> r (fm.createReaderFor (juce::File (argv[2])));
@@ -2979,6 +3040,12 @@ int main (int argc, char** argv)
             const juce::String kv (argv[i]);
             const auto k = kv.upToFirstOccurrenceOf ("=", false, false), v = kv.fromFirstOccurrenceOf ("=", false, false);
             if (k == "preset") { p.getPresetManager().loadPreset (v); continue; }
+            if (k == "cabir")
+            {
+                if (const auto err = p.loadCabIR (juce::File (v)); err.isNotEmpty())
+                    std::printf ("%s\n", err.toRawUTF8());
+                continue;
+            }
             if (auto* param = p.getAPVTS().getParameter (k))
                 param->setValueNotifyingHost (param->convertTo0to1 (v.getFloatValue()));
             else
