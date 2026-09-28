@@ -203,6 +203,7 @@ private:
     Knob micKnob { "MIC" }, distKnob { "DISTANCE" }, lowCutKnob { "LOW CUT" }, highCutKnob { "HIGH CUT" }, cabLevelKnob { "LEVEL", true };
     juce::TextButton loadIrButton { "LOAD IR" }, clearIrButton { "CLEAR" }, irToneButton { "TONE3000" };
     juce::TextButton namPrev { "<" }, namNext { ">" }, irPrev { "<" }, irNext { ">" };
+    PillToggle namLiteToggle { "LITE" };
     juce::String toneStatus;
 
     std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>> buttonAttachments;

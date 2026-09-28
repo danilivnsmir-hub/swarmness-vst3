@@ -71,6 +71,7 @@ SwarmnessAudioProcessor::SwarmnessAudioProcessor()
     p.ampDepth = get (id::ampDepth);     p.ampMaster = get (id::ampMaster);     p.ampGate = get (id::ampGate);       p.ampLevel = get (id::ampLevel);
     p.namInput = get (id::namInput);     p.namBass = get (id::namBass);         p.namMid = get (id::namMid);         p.namTreble = get (id::namTreble);
     p.namPresence = get (id::namPresence); p.namDepth = get (id::namDepth);     p.namOutput = get (id::namOutput);
+    p.namLite = get (id::namLite);
     p.drvOn = get (id::drvOn);           p.drvVolume = get (id::drvVolume);     p.drvDrive = get (id::drvDrive);     p.drvBright = get (id::drvBright);
     p.drvAttack = get (id::drvAttack);   p.drvGate = get (id::drvGate);
     p.cabOn = get (id::cabOn);           p.cabType = get (id::cabType);         p.cabMic = get (id::cabMic);         p.cabDist = get (id::cabDist);
@@ -800,8 +801,10 @@ juce::String SwarmnessAudioProcessor::loadNamModel (const juce::File& file)
         if (metaName.isNotEmpty())
             name = metaName;
     }
-    const auto desc = name + "  -  " + juce::String (model->getArchitecture()) + ", "
-                    + juce::String (model->getSampleRate() / 1000.0, 1).trimCharactersAtEnd ("0").trimCharactersAtEnd (".") + " kHz";
+    auto desc = name + "  -  " + juce::String (model->getArchitecture()) + ", "
+              + juce::String (model->getSampleRate() / 1000.0, 1).trimCharactersAtEnd ("0").trimCharactersAtEnd (".") + " kHz";
+    if (model->hasInputLevel())
+        desc << ", calibrated " << juce::String (model->getInputLevelDbu(), 1).trimCharactersAtEnd ("0").trimCharactersAtEnd (".") << " dBu";
     amp.setNamModel (std::move (model));
 
     const juce::ScopedLock sl (irInfoLock);

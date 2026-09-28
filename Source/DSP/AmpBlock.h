@@ -134,13 +134,29 @@ public:
     void setNamModel (std::unique_ptr<NamModel> model)
     {
         if (model != nullptr)
+        {
+            model->setSize (namSize.load());
             model->reset (maxModelBlock (model->getSampleRate()));
+        }
         const juce::SpinLock::ScopedLockType sl (namLock);
         retired.reset();
         pending = std::move (model);
         pendingSet = true;
     }
     bool hasNamModel() const noexcept { return namLoaded.load(); }
+    /** A2 captures: Full (1) or Lite (0). Off the audio thread (the housekeeping thread calls it). */
+    void setNamSize (double size01)
+    {
+        if (std::abs (namSize.exchange (size01) - size01) < 1.0e-9)
+            return;
+        const juce::SpinLock::ScopedLockType sl (namLock);
+        for (auto* m : { active.get(), pending.get() })
+            if (m != nullptr)
+                m->setSize (size01);
+    }
+    /** 0 dBFS at the plug-in's input in dBu (a sine at full scale: 2.5 V peak), for captures that
+        carry their reamp level (input calibration, as the NAM plug-in does). */
+    static constexpr double kInputDbu = 7.17;
     /** Frees a model the audio thread swapped out (message thread). */
     void releaseRetired()
     {
@@ -687,6 +703,9 @@ private:
         const int prefill = (int) std::ceil (fsNamOs / modelRate) * 3 + 4;
         qCount = juce::jmin (prefill, (int) outQueue.size());
         namGain = 1.0f;
+        namCal = 1.0f;
+        if (active != nullptr && active->hasInputLevel())
+            namCal = juce::Decibels::decibelsToGain ((float) juce::jlimit (-24.0, 24.0, kInputDbu - active->getInputLevelDbu()));
         if (active != nullptr && active->hasLoudness())
             namGain = juce::Decibels::decibelsToGain (juce::jlimit (-12.0f, 24.0f, -18.0f - (float) active->getLoudnessDb()));
     }
@@ -719,7 +738,7 @@ private:
         }
 
         // its own knobs, 5 = neutral: INPUT +-18 dB into the capture, BASS..DEPTH post EQ, OUTPUT +-18 dB
-        const float inGain = juce::Decibels::decibelsToGain (namKnobDb (settings.namInput, 18.0f));
+        const float inGain = namCal * juce::Decibels::decibelsToGain (namKnobDb (settings.namInput, 18.0f));
         const float outGain = namGain * juce::Decibels::decibelsToGain (namKnobDb (settings.namOutput, 18.0f));
         juce::dsp::AudioBlock<float> block (audio, (size_t) numCh, (size_t) numSamples);
         juce::dsp::AudioBlock<float> up;
@@ -855,6 +874,7 @@ private:
     PushResampler down, upRs;
     std::vector<float> modelIn, modelOut, outQueue;
     int qRead = 0, qCount = 0;
-    float namGain = 1.0f;
+    float namGain = 1.0f, namCal = 1.0f;
+    std::atomic<double> namSize { 1.0 };
     std::array<EqBand, 5> namEq;
 };

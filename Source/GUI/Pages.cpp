@@ -951,6 +951,11 @@ AmpCabSection::AmpCabSection (SwarmnessAudioProcessor& p)
     toneButton.onClick = [this] { processor.browseTone3000 (false); };
     namPrev.setTooltip ("Previous capture in the same folder (e.g. the other models of a TONE3000 tone)");
     namNext.setTooltip ("Next capture in the same folder");
+    namLiteToggle.setTooltip ("A2 captures hold two sizes of the same model: Full (best) and Lite (a fraction of the CPU, close in sound). "
+                              "Older captures have one size and ignore this");
+    MidiLearnable::tag (namLiteToggle, ParamIDs::namLite);
+    buttonAttachments.push_back (std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (state, ParamIDs::namLite, namLiteToggle));
+    addChildComponent (namLiteToggle);
     namPrev.onClick = [this] { processor.stepNamModel (-1); };
     namNext.onClick = [this] { processor.stepNamModel (1); };
     for (auto* b : { &namPrev, &namNext })
@@ -1015,6 +1020,7 @@ void AmpCabSection::resized()
         clearNamButton.setBounds (buttons.removeFromLeft (80));
     }
     namPrev.setBounds ((int) morphArea.getRight() - 14 - 50, (int) morphArea.getY() + 10, 22, 20);
+    namLiteToggle.setBounds ((int) morphArea.getRight() - 14 - 50 - 8 - 56, (int) morphArea.getY() + 9, 56, 22);
     namNext.setBounds ((int) morphArea.getRight() - 14 - 26, (int) morphArea.getY() + 10, 22, 20);
     gateKnob .setBounds ((int) morphArea.getRight() + 20, 146, 72, 102);
     levelKnob.setBounds (gateKnob.getRight() + 8, 146, 72, 102);
@@ -1071,7 +1077,7 @@ void AmpCabSection::paint (juce::Graphics& g)
         auto t = morphArea.reduced (14.0f, 10.0f);
         g.setFont (font (15.0f, true));
         g.setColour (namDescription.isNotEmpty() ? Colours::text : Colours::textDim);
-        g.drawFittedText (namDescription.isNotEmpty() ? namDescription : juce::String ("no capture loaded"), t.removeFromTop (22.0f).withTrimmedRight (56.0f).toNearestInt(),
+        g.drawFittedText (namDescription.isNotEmpty() ? namDescription : juce::String ("no capture loaded"), t.removeFromTop (22.0f).withTrimmedRight (126.0f).toNearestInt(),
                           juce::Justification::centredLeft, 1, 0.8f);
         g.setFont (font (12.5f));
         g.setColour (message.isNotEmpty() ? Colours::ledRed : (toneStatus.isNotEmpty() ? Colours::accent : Colours::textFaint));
@@ -1149,6 +1155,7 @@ void AmpCabSection::tick()
         clearNamButton.setEnabled (namDescription.isNotEmpty());
         clearIrButton.setEnabled (cabIrDescription.isNotEmpty());
         namPrev.setVisible (namMode && namDescription.isNotEmpty());
+        namLiteToggle.setVisible (namMode && namDescription.contains (" A2,"));
         namNext.setVisible (namMode && namDescription.isNotEmpty());
         irPrev.setVisible (cabIrMode && cabIrDescription.isNotEmpty());
         irNext.setVisible (cabIrMode && cabIrDescription.isNotEmpty());

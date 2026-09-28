@@ -8,6 +8,7 @@
 #include "NAM/linear.h"
 #include "NAM/lstm.h"
 #include "NAM/sequential.h"
+#include "NAM/slimmable.h"
 #include "NAM/wavenet/model.h"
 
 #include <algorithm>
@@ -72,6 +73,8 @@ std::unique_ptr<NamModel> NamModel::load (const std::string& jsonText, std::stri
         }
         std::unique_ptr<NamModel> m (new NamModel());
         m->architecture = j.value ("architecture", std::string());
+        if (m->architecture == "SlimmableContainer")
+            m->architecture = "A2";
         const double sr = dsp->GetExpectedSampleRate();
         m->impl->sampleRate = sr > 0.0 ? sr : 48000.0;
         m->impl->dsp = std::move (dsp);
@@ -89,6 +92,14 @@ std::unique_ptr<NamModel> NamModel::load (const std::string& jsonText, std::stri
 }
 
 double NamModel::getSampleRate() const noexcept   { return impl->sampleRate; }
+bool NamModel::hasInputLevel() const noexcept     { return impl->dsp->HasInputLevel(); }
+double NamModel::getInputLevelDbu() const noexcept { return impl->dsp->GetInputLevel(); }
+bool NamModel::isSlimmable() const noexcept       { return dynamic_cast<nam::SlimmableModel*> (impl->dsp.get()) != nullptr; }
+void NamModel::setSize (double size01)
+{
+    if (auto* s = dynamic_cast<nam::SlimmableModel*> (impl->dsp.get()))
+        s->SetSlimmableSize (std::clamp (size01, 0.0, 1.0));
+}
 bool NamModel::hasLoudness() const noexcept       { return impl->dsp->HasLoudness(); }
 double NamModel::getLoudnessDb() const noexcept   { return impl->dsp->GetLoudness(); }
 

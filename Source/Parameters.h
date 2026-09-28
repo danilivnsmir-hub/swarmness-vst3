@@ -160,6 +160,7 @@ namespace ParamIDs
     inline constexpr const char* namPresence = "namPresence";
     inline constexpr const char* namDepth    = "namDepth";
     inline constexpr const char* namOutput   = "namOutput";
+    inline constexpr const char* namLite     = "namLite";     // A2 captures: the Lite size (less CPU)
 
     // WASP (tight overdrive / boost, usually in front of the AMP)
     inline constexpr const char* drvOn       = "drvOn";

@@ -176,6 +176,7 @@ private:
             {
                 owner.updateCabModel();   // modelled cabinet IR rebuilds
                 owner.amp.releaseRetired();   // frees NAM captures the audio thread swapped out
+                owner.amp.setNamSize (owner.p.namLite->load() > 0.5f ? 0.0 : 1.0);   // A2 Full / Lite
                 wait (100);
             }
         }
@@ -228,6 +229,7 @@ private:
         std::atomic<float>* ampDepth {};   std::atomic<float>* ampMaster {};   std::atomic<float>* ampGate {};     std::atomic<float>* ampLevel {};
         std::atomic<float>* namInput {};   std::atomic<float>* namBass {};     std::atomic<float>* namMid {};      std::atomic<float>* namTreble {};
         std::atomic<float>* namPresence {}; std::atomic<float>* namDepth {};   std::atomic<float>* namOutput {};
+        std::atomic<float>* namLite {};
         std::atomic<float>* drvOn {};      std::atomic<float>* drvVolume {};   std::atomic<float>* drvDrive {};    std::atomic<float>* drvBright {};
         std::atomic<float>* drvAttack {};  std::atomic<float>* drvGate {};
         std::atomic<float>* cabOn {};      std::atomic<float>* cabType {};     std::atomic<float>* cabMic {};      std::atomic<float>* cabDist {};

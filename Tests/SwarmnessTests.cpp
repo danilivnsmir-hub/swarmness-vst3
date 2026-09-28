@@ -2105,6 +2105,28 @@ namespace
                 const double f = dominantFrequency (out, 44100.0, 22050, purity);
                 check (std::abs (f - 440.0) < 2.0, juce::String::formatted ("NAM at 44.1 kHz: 440 Hz in -> %.1f Hz out", f));
             }
+            // A2: shown as A2, both sizes (Full / Lite) play
+            {
+                std::string e;
+                auto m = NamModel::load (namExample ("A2.nam").loadFileAsString().toStdString(), e);
+                check (m != nullptr && m->getArchitecture() == "A2" && m->isSlimmable(), "A2 capture: recognised as A2, slimmable");
+                double lvl[2] {};
+                for (int k = 0; k < 2; ++k)
+                {
+                    AmpBlock a;
+                    a.prepare (48000.0, 256);
+                    a.setNamSize (k == 0 ? 1.0 : 0.0);
+                    std::string e2;
+                    a.setNamModel (NamModel::load (namExample ("A2.nam").loadFileAsString().toStdString(), e2));
+                    AmpBlock::Settings s;
+                    s.on = true;
+                    s.channel = AmpBlock::nam;
+                    auto out = renderAmp (s, makeGuitar (48000.0, 48000), &a);
+                    lvl[k] = allFinite (out) ? juce::Decibels::gainToDecibels (out.getRMSLevel (0, 9600, 24000)) : -999.0;
+                }
+                check (lvl[0] > -60.0 && lvl[1] > -60.0 && std::abs (lvl[0] - lvl[1]) < 6.0,
+                       juce::String::formatted ("A2 Full %.1f dB RMS, Lite %.1f dB RMS", lvl[0], lvl[1]));
+            }
             // NAM's own knobs: 5 = neutral, OUTPUT is a clean gain, INPUT drives it, the amp's knobs don't touch it
             {
                 auto run = [&] (std::function<void (AmpBlock::Settings&)> f)

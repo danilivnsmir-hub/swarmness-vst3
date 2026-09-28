@@ -281,6 +281,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     amp->addChild (knob10 (namPresence, "NAM Presence", 5.0f));
     amp->addChild (knob10 (namDepth, "NAM Depth", 5.0f));
     amp->addChild (knob10 (namOutput, "NAM Output", 5.0f));
+    amp->addChild (toggle (namLite, "NAM A2 Lite", false));
 
     // ------------------------------------------------------------------ WASP
     auto drv = std::make_unique<Group> ("wasp", "Wasp", "|");

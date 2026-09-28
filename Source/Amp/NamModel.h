@@ -25,8 +25,15 @@ public:
     /** Measured output loudness in dB, when the capture carries it. */
     bool hasLoudness() const noexcept;
     double getLoudnessDb() const noexcept;
-    /** "WaveNet", "LSTM", ... */
+    /** "A2", "WaveNet", "LSTM", ... (A2 = the slimmable container NAM uses for Architecture 2) */
     const std::string& getArchitecture() const noexcept { return architecture; }
+    /** The reamp level the capture was made at (0 dBFS in = this many dBu), when it carries it. */
+    bool hasInputLevel() const noexcept;
+    double getInputLevelDbu() const noexcept;
+    /** A2: one file, several sizes of the same model (Full, Lite). 1 = the biggest, 0 = the smallest.
+        Not real-time safe (call off the audio thread); safe while the model is playing. */
+    bool isSlimmable() const noexcept;
+    void setSize (double size01);
 
     /** Allocates for blocks of up to maxBlockSize samples and runs the model into its settled state. */
     void reset (int maxBlockSize);
