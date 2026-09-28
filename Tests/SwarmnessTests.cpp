@@ -2306,6 +2306,48 @@ namespace
             irFile.deleteFile();
         }
         {
+            // an IR loaded while the plug-in is running (as in a DAW) takes over from the modelled cabinet
+            auto irFile = juce::File::createTempFile (".wav");
+            {
+                juce::AudioBuffer<float> ir (1, 4800);
+                ir.clear();
+                ir.setSample (0, 0, 1.0f);
+                ir.setSample (0, 2400, 0.8f);   // a clear echo at 50 ms: nothing like a cabinet
+                juce::WavAudioFormat wav;
+                std::unique_ptr<juce::OutputStream> stream = irFile.createOutputStream();
+                auto w = wav.createWriterFor (stream, juce::AudioFormatWriterOptions{}.withSampleRate (48000.0).withNumChannels (1).withBitsPerSample (24));
+                w->writeFromAudioSampleBuffer (ir, 0, ir.getNumSamples());
+            }
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            setParam (p, ParamIDs::cabOn, 1.0f);
+            p.prepareToPlay (sr, 256);
+            juce::MidiBuffer midi;
+            auto block = [&] (bool click)
+            {
+                juce::AudioBuffer<float> b (2, 256);
+                b.clear();
+                if (click) { b.setSample (0, 0, 0.5f); b.setSample (1, 0, 0.5f); }
+                p.processBlock (b, midi);
+                return b;
+            };
+            for (int k = 0; k < 40; ++k) block (false);
+            const auto err = p.loadCabIR (irFile);
+            setParam (p, ParamIDs::cabType, (float) CabBlock::ir);
+            for (int k = 0; k < 40; ++k) { block (false); juce::Thread::sleep (5); }
+            // a click, then look for the echo 2400 samples later
+            juce::AudioBuffer<float> out (2, 256 * 16);
+            for (int k = 0; k < 16; ++k)
+                out.copyFrom (0, k * 256, block (k == 0), 0, 0, 256);
+            int at = 0;   // the plug-in's latency
+            for (int i = 0; i < 256; ++i)
+                if (std::abs (out.getSample (0, i)) > std::abs (out.getSample (0, at))) at = i;
+            const float direct = std::abs (out.getSample (0, at)), echo = out.getMagnitude (0, at + 2400 - 4, 9);
+            check (err.isEmpty() && echo > 0.3f * direct && direct > 0.0f,
+                   juce::String::formatted ("IR loaded while running plays (direct %.3f, its echo at 50 ms %.3f)", direct, echo));
+            irFile.deleteFile();
+        }
+        {
             // two IR slots: MIX blends them, B is time-aligned to A (no comb filter), INV B flips B
             juce::AudioBuffer<float> a (1, 2400), b (1, 2400);
             a.clear(); b.clear();

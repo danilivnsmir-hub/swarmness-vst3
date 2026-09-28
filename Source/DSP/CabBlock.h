@@ -180,9 +180,12 @@ public:
         if (numCh == 1)
             dryCopy.clear (1, 0, numSamples);
 
-        const bool userReady = userLoaded && userConv.getCurrentIRSize() == userSize;
+        // a real IR is running (JUCE cross-fades from one IR to the next itself); before the first one: the model
+        const bool userReady = userLoaded && userConv.getCurrentIRSize() >= 16;
         userMix.setTargetValue (settings.type == ir && userReady ? 1.0f : 0.0f);
-        const bool runUser = userMix.getTargetValue() > 0.5f || userMix.isSmoothing();
+        // a new IR only takes over inside process(): keep the engine running until it has (silently)
+        const bool userInstalling = userLoaded && ! userReady;
+        const bool runUser = userMix.getTargetValue() > 0.5f || userMix.isSmoothing() || userInstalling;
         const bool runModel = userMix.getTargetValue() < 0.5f || userMix.isSmoothing();
 
         if (runUser)
