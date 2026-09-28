@@ -192,7 +192,7 @@ private:
 
     SwarmnessAudioProcessor& processor;
     juce::AudioProcessorValueTreeState& state;
-    juce::Rectangle<float> ampArea, cabArea, morphArea, curveArea;
+    juce::Rectangle<float> ampArea, cabArea, morphArea, curveArea, plateArea;
 
     PowerButton ampPower, cabPower;
     SegmentedChoice channelSelector, cabSelector;

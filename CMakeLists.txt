@@ -127,10 +127,14 @@ juce_add_plugin(Swarmness
 
 juce_generate_juce_header(Swarmness)
 
+# optional artwork (Source/Assets/Skin/README.md): whatever PNGs are there are built in
+file(GLOB SWARMNESS_SKIN_ASSETS CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/Source/Assets/Skin/*.png)
+
 juce_add_binary_data(SwarmnessBinaryData
     HEADER_NAME BinaryData.h
     NAMESPACE BinaryData
     SOURCES
+        ${SWARMNESS_SKIN_ASSETS}
         Source/Assets/header_logo.png
         Source/Assets/emblem.png
         Source/Assets/Fonts/MetalMania-Regular.ttf

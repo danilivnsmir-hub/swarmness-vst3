@@ -1,4 +1,5 @@
 #include "Pages.h"
+#include "AmpFaceplate.h"
 
 using namespace Theme;
 
@@ -1054,7 +1055,8 @@ void AmpCabSection::resized()
         for (auto* k : namRow)
             k->setBounds ((int) (10.0f + step * ((float) i++ + 0.5f)) - 36, 42, 72, 102);
     }
-    morphArea = { 16.0f, 150.0f, 490.0f, h - 160.0f };
+    plateArea = { 10.0f, 38.0f, 670.0f, 110.0f };
+    morphArea = { 16.0f, 154.0f, 490.0f, h - 164.0f };
     {
         auto buttons = morphArea.reduced (14.0f, 0.0f).removeFromBottom (40.0f).withTrimmedBottom (8.0f).toNearestInt();
         loadNamButton.setBounds (buttons.removeFromLeft (130));
@@ -1104,26 +1106,24 @@ void AmpCabSection::paint (juce::Graphics& g)
     drawPanelTitle (g, ampArea, "AMP", model, ampOn);
     drawPanelTitle (g, cabArea, "CAB", {}, cabOn);
 
-    // CHARACTER / NAM box
-    g.setColour (Colours::inset);
-    g.fillRoundedRectangle (morphArea, 6.0f);
-    g.setColour (dragTarget == 1 ? Colours::accentBright : Colours::panelBorder);
-    g.drawRoundedRectangle (morphArea, 6.0f, dragTarget == 1 ? 2.0f : 1.0f);
+    // the channel's faceplate behind the knobs, and its nameplate (or the NAM card)
+    const int style = namMode ? (int) AmpFaceplate::nam : juce::jlimit (0, 2, channel);
+    AmpFaceplate::drawPlate (g, plateArea, style, ampOn);
     if (! namMode)
     {
-        // the channel's amp: its name and what it is
         static const char* about[3] { "Crystal clean: solid-state headroom to the top, a tight bottom and a glassy top - your guitar's own dynamics, "
                                       "piano-clear arpeggios for intros. SWARM and CRYPT behind it.",
                                       "Crunch: barking upper mids and a tight bottom, cleans up with the guitar's volume.",
                                       "High gain: tight, cutting and fast - chugs that stay tight. WASP in front tightens it more." };
-        auto t = morphArea.reduced (18.0f, 12.0f);
-        g.setFont (displayFont (30.0f));
-        g.setColour (ampOn ? Colours::accent : Colours::textDim);
-        g.drawText (AmpBlock::channelModel (juce::jlimit (0, 2, channel)), t.removeFromTop (38.0f), juce::Justification::centredLeft, false);
-        g.setFont (font (13.5f));
-        g.setColour (Colours::textDim);
-        g.drawFittedText (about[juce::jlimit (0, 2, channel)], t.toNearestInt(), juce::Justification::topLeft, 3, 1.0f);
+        AmpFaceplate::drawNameplate (g, morphArea, style, AmpBlock::channelModel (juce::jlimit (0, 2, channel)), about[juce::jlimit (0, 2, channel)], ampOn);
     }
+    else
+    {
+        g.setColour (Colours::inset);
+        g.fillRoundedRectangle (morphArea, 6.0f);
+    }
+    g.setColour (dragTarget == 1 ? Colours::accentBright : Colours::panelBorder);
+    g.drawRoundedRectangle (morphArea, 6.0f, dragTarget == 1 ? 2.0f : 1.0f);
     if (namMode)
     {
         auto t = morphArea.reduced (14.0f, 10.0f);
