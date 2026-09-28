@@ -166,7 +166,16 @@ jobs:
         run: |
           curl -sSL -o pluginval.zip https://github.com/Tracktion/pluginval/releases/latest/download/pluginval_Linux.zip
           unzip -q pluginval.zip
+          # a crash leaves a core dump: its backtrace is the real one (a rerun under gdb changes the timing)
+          ulimit -c unlimited
+          sudo sysctl -w kernel.core_pattern="$PWD/core.%p" > /dev/null
           if ! xvfb-run -a ./pluginval --strictness-level $PLUGINVAL_STRICTNESS --validate-in-process --timeout-ms 600000 build/Swarmness_artefacts/Release/VST3/Swarmness.vst3; then
+            for c in core.*; do
+              [ -f "$c" ] || continue
+              echo "::group::pluginval crashed - backtrace from $c"
+              gdb -q -batch -ex "thread apply all bt 30" ./pluginval "$c" 2>&1 | tail -200
+              echo "::endgroup::"
+            done
             echo "::group::pluginval crashed - the same run under gdb (backtrace)"
             xvfb-run -a gdb -q -batch -ex run -ex "thread apply all bt 25" --args \
               ./pluginval --strictness-level $PLUGINVAL_STRICTNESS --validate-in-process --timeout-ms 600000 build/Swarmness_artefacts/Release/VST3/Swarmness.vst3 2>&1 | tail -150

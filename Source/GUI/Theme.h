@@ -32,26 +32,27 @@ namespace Theme
         inline const juce::Colour meterHigh    { 0xffff2d1a };
     }
 
-    inline juce::Typeface::Ptr typefaceMedium()
+    /** The embedded typefaces. Owned by JUCE's shutdown list (not function statics): they are released
+        while JUCE is still up, instead of at library unload after FreeType is gone (a crash on exit on Linux). */
+    struct FontCache : juce::DeletedAtShutdown
     {
-        static auto tf = juce::Typeface::createSystemTypefaceFor (BinaryData::RajdhaniMedium_ttf,
-                                                                  BinaryData::RajdhaniMedium_ttfSize);
-        return tf;
-    }
+        juce::Typeface::Ptr medium = juce::Typeface::createSystemTypefaceFor (BinaryData::RajdhaniMedium_ttf, BinaryData::RajdhaniMedium_ttfSize);
+        juce::Typeface::Ptr bold = juce::Typeface::createSystemTypefaceFor (BinaryData::RajdhaniBold_ttf, BinaryData::RajdhaniBold_ttfSize);
+        juce::Typeface::Ptr display = juce::Typeface::createSystemTypefaceFor (BinaryData::MetalManiaRegular_ttf, BinaryData::MetalManiaRegular_ttfSize);
 
-    inline juce::Typeface::Ptr typefaceBold()
-    {
-        static auto tf = juce::Typeface::createSystemTypefaceFor (BinaryData::RajdhaniBold_ttf,
-                                                                  BinaryData::RajdhaniBold_ttfSize);
-        return tf;
-    }
+        ~FontCache() override { instance() = nullptr; }
+        static FontCache*& instance() noexcept { static FontCache* p = nullptr; return p; }
+        static FontCache& get()   // message thread
+        {
+            auto& p = instance();
+            if (p == nullptr) p = new FontCache();
+            return *p;
+        }
+    };
 
-    inline juce::Typeface::Ptr typefaceDisplay()
-    {
-        static auto tf = juce::Typeface::createSystemTypefaceFor (BinaryData::MetalManiaRegular_ttf,
-                                                                  BinaryData::MetalManiaRegular_ttfSize);
-        return tf;
-    }
+    inline juce::Typeface::Ptr typefaceMedium()  { return FontCache::get().medium; }
+    inline juce::Typeface::Ptr typefaceBold()    { return FontCache::get().bold; }
+    inline juce::Typeface::Ptr typefaceDisplay() { return FontCache::get().display; }
 
     inline juce::Font font (float height, bool bold = false)
     {
