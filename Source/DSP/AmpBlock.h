@@ -2,6 +2,7 @@
 
 #include <JuceHeader.h>
 #include "NamRunner.h"
+#include "NoiseGate.h"
 #include "AmpCircuit.h"
 
 #include <array>
@@ -94,6 +95,7 @@ public:
         namCopy.setSize (2, maxBlock, false, false, true);
 
         namRunner.prepare (sampleRate, maxBlock);
+        gate.prepare (sampleRate, maxBlock);
         reset();
     }
 
@@ -103,7 +105,7 @@ public:
             c = {};
         for (auto& e : namEq) e.reset();
         if (oversampler != nullptr) oversampler->reset();
-        gateEnv = 0.0f; gateGain = 1.0f; gateHold = 0;
+        gate.reset();
         firstUpdate = true;
         coeffsDirty = true;
         blendReady = false;
@@ -150,7 +152,11 @@ public:
         const bool runNam = useNam || namMix.isSmoothing();
         const bool runModel = ! useNam || namMix.isSmoothing();
 
-        applyGate (audio, numCh, numSamples);
+        // the gate: keyed from the input, applied to the input and again to the output below
+        const float* gateCurve = gate.compute (audio, numCh, numSamples, settings.gate);
+        if (gateCurve != nullptr)
+            for (int c = 0; c < numCh; ++c)
+                juce::FloatVectorOperations::multiply (audio[c], gateCurve, numSamples);
         if (runNam)
             for (int c = 0; c < numCh; ++c)
                 namCopy.copyFrom (c, 0, audio[c], numSamples);
@@ -172,7 +178,7 @@ public:
         level.setTargetValue (juce::Decibels::decibelsToGain (settings.levelDb));
         for (int i = 0; i < numSamples; ++i)
         {
-            const float g = level.getNextValue(), on = onGain.getNextValue();
+            const float g = level.getNextValue() * (gateCurve != nullptr ? gateCurve[i] : 1.0f), on = onGain.getNextValue();
             for (int c = 0; c < numCh; ++c)
             {
                 const float wet = audio[c][i] * g;
@@ -584,35 +590,6 @@ private:
 
     //==============================================================================
     // Noise gate on the input (before the gain): keyed by the louder channel, with hold + hysteresis
-    void applyGate (float* const* audio, int numCh, int numSamples) noexcept
-    {
-        if (settings.gate <= 0.001f && gateGain >= 0.9999f)
-            return;
-        const float openDb = -86.0f + 56.0f * settings.gate;     // 0..100 % -> -86..-30 dBFS
-        const float open = juce::Decibels::decibelsToGain (openDb), close = open * 0.5f;
-        const float envRel = std::exp (-1.0f / (0.01f * (float) fs));
-        const float attack = 1.0f - std::exp (-1.0f / (0.0008f * (float) fs));
-        const float release = 1.0f - std::exp (-1.0f / (0.07f * (float) fs));
-        const int holdSamples = (int) (0.04 * fs);
-        for (int i = 0; i < numSamples; ++i)
-        {
-            float peak = 0.0f;
-            for (int c = 0; c < numCh; ++c)
-                peak = juce::jmax (peak, std::abs (audio[c][i]));
-            gateEnv = juce::jmax (peak, gateEnv * envRel);
-            if (settings.gate <= 0.001f || gateEnv > open)
-                gateHold = holdSamples;
-            else if (gateEnv > close && gateHold > 0)
-                gateHold = holdSamples;
-            else if (gateHold > 0)
-                --gateHold;
-            const float target = gateHold > 0 ? 1.0f : 0.0f;
-            gateGain += (target > gateGain ? attack : release) * (target - gateGain);
-            for (int c = 0; c < numCh; ++c)
-                audio[c][i] *= gateGain;
-        }
-    }
-
     //==============================================================================
 
     /** A NAM knob (0..1) in dB: 0 at noon, +-range at the ends. */
@@ -700,8 +677,7 @@ private:
     const std::array<ampsim::Table, 4>* tableB = nullptr;
     std::array<ChannelState, 1> ch;
 
-    float gateEnv = 0.0f, gateGain = 1.0f;
-    int gateHold = 0;
+    NoiseGate gate;
 
     juce::SmoothedValue<float> onGain, namMix, level;
 

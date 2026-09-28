@@ -2,6 +2,7 @@
 
 #include <JuceHeader.h>
 #include "NamRunner.h"
+#include "NoiseGate.h"
 
 #include <array>
 #include <cmath>
@@ -74,7 +75,7 @@ public:
         dryCopy.setSize (2, maxBlock, false, false, true);
         namCopy.setSize (2, maxBlock, false, false, true);
         namRunner.prepare (sampleRate, maxBlock);
-        gateCurve.assign ((size_t) maxBlock, 1.0f);
+        noiseGate.prepare (sampleRate, maxBlock);
         reset();
     }
 
@@ -83,7 +84,7 @@ public:
         for (auto& c : ch)
             c = {};
         if (oversampler != nullptr) oversampler->reset();
-        gateEnv = 0.0f; gateGain = 1.0f; gateHold = 0;
+        noiseGate.reset();
         attackHz = attackFor (settings.attack);
         onGain.reset (fs, 0.02);
         onGain.setCurrentAndTargetValue (settings.on ? 1.0f : 0.0f);
@@ -117,7 +118,7 @@ public:
         for (int c = 0; c < numCh; ++c)
             dryCopy.copyFrom (c, 0, audio[c], numSamples);
 
-        updateGate (audio, numCh, numSamples);   // keyed from the input, applied after the drive
+        const float* gateCurve = noiseGate.compute (audio, numCh, numSamples, settings.gate);   // keyed from the input, applied after the drive
 
         const bool useNam = settings.nam && namRunner.isActive();
         namMix.setTargetValue (useNam ? 1.0f : 0.0f);
@@ -159,7 +160,7 @@ public:
         for (int i = 0; i < numSamples; ++i)
         {
             const float g = volume.getNextValue();
-            const float gate = gateCurve[(size_t) juce::jmin (i, (int) gateCurve.size() - 1)];
+            const float gate = gateCurve != nullptr ? gateCurve[i] : 1.0f;
             const float on = onGain.getNextValue();
             const float m = namMix.getNextValue();
             for (int c = 0; c < numCh; ++c)
@@ -357,34 +358,6 @@ private:
         dcR = (float) std::exp (-2.0 * juce::MathConstants<double>::pi * 8.0 / fs);
     }
 
-    void updateGate (float* const* audio, int numCh, int numSamples) noexcept
-    {
-        const int n = juce::jmin (numSamples, (int) gateCurve.size());
-        if (settings.gate <= 0.001f && gateGain >= 0.9999f)
-        {
-            std::fill (gateCurve.begin(), gateCurve.begin() + n, 1.0f);
-            return;
-        }
-        const float open = juce::Decibels::decibelsToGain (-86.0f + 56.0f * settings.gate), close = open * 0.5f;
-        const float envRel = std::exp (-1.0f / (0.01f * (float) fs));
-        const float attack = 1.0f - std::exp (-1.0f / (0.0008f * (float) fs));
-        const float release = 1.0f - std::exp (-1.0f / (0.07f * (float) fs));
-        const int holdSamples = (int) (0.04 * fs);
-        for (int i = 0; i < n; ++i)
-        {
-            float peak = 0.0f;
-            for (int c = 0; c < numCh; ++c)
-                peak = juce::jmax (peak, std::abs (audio[c][i]));
-            gateEnv = juce::jmax (peak, gateEnv * envRel);
-            if (settings.gate <= 0.001f || gateEnv > open || (gateEnv > close && gateHold > 0))
-                gateHold = holdSamples;
-            else if (gateHold > 0)
-                --gateHold;
-            const float t = gateHold > 0 ? 1.0f : 0.0f;
-            gateGain += (t > gateGain ? attack : release) * (t - gateGain);
-            gateCurve[(size_t) i] = gateGain;
-        }
-    }
 
     Settings settings;
     double fs = 44100.0, fsOs = 176400.0;
@@ -397,8 +370,6 @@ private:
     float hb0 = 1.0f, hb1 = 0.0f, hb2 = 0.0f, ha1 = 0.0f, ha2 = 0.0f;
     float invLeg = 1.0f / 4700.0f, fbIs = 2.52e-9f, fbIsNeg = 1.26e-9f, invRs = 0.0f, makeup = 0.9f, inGain = 1.0f;
     float legA = 0.0f, invRf = 1.0f / 50000.0f, cfA = 1.0f, toneA = 0.0f, brightG = 1.0f, outA = 1.0f, dcR = 0.999f;
-    float gateEnv = 0.0f, gateGain = 1.0f;
-    int gateHold = 0;
-    std::vector<float> gateCurve;
+    NoiseGate noiseGate;
     juce::SmoothedValue<float> onGain, volume, namMix;
 };
