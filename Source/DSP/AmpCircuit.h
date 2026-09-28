@@ -1,6 +1,7 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include <functional>
 
 #include <array>
 #include <cmath>
@@ -71,7 +72,16 @@ namespace ampsim
         float xfHp = 40.0f, xfLp = 14000.0f;
         float paRef = 1.0f;                    // volts at the phase inverter for full power
         float outDb = 0.0f;
+        float gridKg = 3.0e-4f;                // preamp grid conduction (A / V^1.5): how hard the grids clamp
+        float inDb = 0.0f;                     // input sensitivity (the amp's gain ahead of the first stage)
     };
+
+    /** Development hook (the amp lab fits circuit values to measurements): edits a reference as it is built. */
+    inline std::function<void (int channel, int side, AmpDef&)>& referenceTweak()
+    {
+        static std::function<void (int, int, AmpDef&)> f;
+        return f;
+    }
 
     /** The six references: [channel][side]. */
     inline AmpDef reference (int channel, int side)
@@ -179,6 +189,8 @@ namespace ampsim
                 break;
             }
         }
+        if (auto& tweak = referenceTweak())
+            tweak (channel, side, a);
         return a;
     }
 
@@ -310,21 +322,26 @@ namespace ampsim
     }
 
     /** All reference tables, built once: [channel * 2 + side][stage]. */
-    inline const std::array<std::array<Table, 4>, 6>& tables()
+    using TableSet = std::array<std::array<Table, 4>, 6>;
+    inline TableSet buildTables()
     {
-        static const auto built = []
+        TableSet t;
+        for (int r = 0; r < 6; ++r)
         {
-            std::array<std::array<Table, 4>, 6> t;
-            for (int r = 0; r < 6; ++r)
-            {
-                const auto def = reference (r / 2, r % 2);
-                for (int s = 0; s < 4; ++s)
-                    t[(size_t) r][(size_t) s] = makeTable (def.st[(size_t) s]);
-            }
-            return t;
-        }();
+            const auto def = reference (r / 2, r % 2);
+            for (int s = 0; s < 4; ++s)
+                t[(size_t) r][(size_t) s] = makeTable (def.st[(size_t) s]);
+        }
+        return t;
+    }
+    inline TableSet& tableStore()
+    {
+        static TableSet built = buildTables();
         return built;
     }
+    inline const TableSet& tables() { return tableStore(); }
+    /** Amp lab only (after referenceTweak changed): rebuild in place, before any AmpBlock is prepared. */
+    inline void rebuildTables() { tableStore() = buildTables(); }
 
     //==============================================================================
     // Small filters

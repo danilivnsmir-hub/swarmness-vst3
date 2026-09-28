@@ -213,7 +213,6 @@ public:
 private:
     //==============================================================================
     static constexpr float kInputVolts = 2.5f;      // full scale = 2.5 V from the guitar
-    static constexpr float kGridKg = 3.0e-4f;       // 12AX7 grid conduction (A / V^1.5)
     static constexpr int subBlock = 16;             // coefficient refresh (host-rate samples)
 
     static inline float tanhR (float x) noexcept
@@ -235,6 +234,7 @@ private:
     {
         std::array<StageCoeffs, 4> st;
         int gainPotAfter = 0;
+        float gridKg = 3.0e-4f, inGain = kInputVolts;
         bool stackEarly = false;
         float alpha = 0.1f, brightA = 1.0f, cf = 0.0f, stackMakeup = 1.0f, masterA = 0.1f;
         float piMax = 1.6f, invPiMax = 1.0f / 1.6f, bias = 0.55f, hard = 0.0f, satKnee = 2.0f, nfbIn = 3.0f, beta = 1.0f, idle2 = 0.5f;
@@ -312,6 +312,8 @@ private:
         tableB = &tbl[(size_t) (activeChannel * 2 + 1)];
         const double dt = 1.0 / fsOs;
 
+        co.gridKg = geo (A.gridKg, B.gridKg, x);
+        co.inGain = kInputVolts * juce::Decibels::decibelsToGain (lerp (A.inDb, B.inDb, x));
         for (size_t s = 0; s < 4; ++s)
         {
             const auto& a = A.st[s];
@@ -331,7 +333,7 @@ private:
             c.cath = std::abs (c.cathA - 1.0f) > 1.0e-4f;
             c.shelf = std::abs (c.divShelfA - 1.0f) > 1.0e-4f;
             c.gridK = c.Rg / (c.Rs + c.Rg);
-            const float cc = c.Rs * c.gridK * kGridKg;
+            const float cc = c.Rs * c.gridK * co.gridKg;
             c.c2 = cc * cc;
             c.invC2 = 1.0f / c.c2;
             c.charge = c.dtOverC / c.Rs;
@@ -427,7 +429,7 @@ private:
 
     inline float processSample (float in, ChannelState& cs) noexcept
     {
-        float v = in * kInputVolts;
+        float v = in * co.inGain;
         for (size_t s = 0; s < 4; ++s)
         {
             const auto& c = co.st[s];

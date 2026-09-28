@@ -152,80 +152,83 @@ public:
     }
 
     //==============================================================================
-    /** Magnitude of a modelled cabinet in dB (0 dB at 800 Hz), before the room reflection. */
+    /** Magnitude of a modelled cabinet in dB (0 dB around 1 kHz): the smooth curve, its breakup ripple. */
     static float responseDb (int type, float mic, float distance, float hz) noexcept
     {
-        const auto sh = shapeFor (type, mic, distance);
-        return (float) (shapeDb (sh, hz) - shapeDb (sh, 800.0));
+        type = juce::jlimit (0, (int) ir - 1, type);
+        return (float) (curveDb (type, mic, distance, hz) + rippleDb (type, mic, hz));
     }
 
-    /** A modelled cabinet's impulse response at `sampleRate` (message thread: allocates, FFTs). */
+    /** A modelled cabinet's impulse response at `sampleRate` (message thread: allocates, FFTs).
+        The speaker + mic part is minimum phase; on top come what a close mic also hears - the back panel
+        (closed cabs) or the rear wave off the wall (open backs), the box's diffuse decay - and, pulled back,
+        the floor and the room. Two passes pull the smoothed response back onto the curve. */
     static juce::AudioBuffer<float> designIR (int type, float mic, float distance, double sampleRate)
     {
         type = juce::jlimit (0, (int) ir - 1, type);
-        const auto sh = shapeFor (type, mic, distance);
         const int order = sampleRate > 100000.0 ? 14 : 13;
         const int n = 1 << order;
+        const int length = juce::jmin (n, (int) (0.09 * sampleRate));
+        const float d = juce::jlimit (0.0f, 1.0f, distance);
 
-        // log magnitude on the FFT grid
-        std::vector<std::complex<double>> x ((size_t) n);
-        const double ref = shapeDb (sh, 800.0);
+        std::vector<double> targetDb ((size_t) n / 2 + 1), designDb ((size_t) n / 2 + 1);
         for (int k = 0; k <= n / 2; ++k)
         {
             const double hz = juce::jmax (1.0, (double) k * sampleRate / n);
-            const double db = juce::jmax (-80.0, shapeDb (sh, hz) - ref);
-            const double lnMag = db * (std::log (10.0) / 20.0);
-            x[(size_t) k] = lnMag;
-            if (k > 0 && k < n / 2)
-                x[(size_t) (n - k)] = lnMag;
+            targetDb[(size_t) k] = curveDb (type, mic, distance, hz);
+            designDb[(size_t) k] = targetDb[(size_t) k] + rippleDb (type, mic, hz);
         }
-        // minimum phase through the real cepstrum
-        fft (x, true);
-        for (int k = 1; k < n / 2; ++k)
-            x[(size_t) k] *= 2.0;
-        for (int k = n / 2 + 1; k < n; ++k)
-            x[(size_t) k] = 0.0;
-        fft (x, false);
-        for (auto& v : x)
-            v = std::exp (v);
-        fft (x, true);
 
-        // ~50 ms, faded out, plus the room: floor bounce and a little diffuse air when miked from afar
-        const int length = juce::jmin (n, (int) (0.05 * sampleRate));
         juce::AudioBuffer<float> out (1, length);
-        out.clear();
-        auto* h = out.getWritePointer (0);
-        const int fadeFrom = (int) (length * 0.6);
-        for (int i = 0; i < length; ++i)
+        for (int pass = 0; pass < 3; ++pass)
         {
-            float w = 1.0f;
-            if (i > fadeFrom)
-                w = 0.5f + 0.5f * std::cos (juce::MathConstants<float>::pi * (float) (i - fadeFrom) / (float) (length - fadeFrom));
-            h[i] = (float) x[(size_t) i].real() * w;
-        }
-
-        const float d = juce::jlimit (0.0f, 1.0f, distance);
-        if (d > 0.0f)
-        {
-            std::vector<float> dry (h, h + length);
-            const int bounce = (int) ((0.35 + 3.2 * d) * 0.001 * sampleRate);
-            const float bounceGain = 0.18f + 0.4f * d;
-            for (int i = bounce + 2; i < length; ++i)   // floor bounce, slightly dull
-                h[i] += bounceGain * (0.25f * dry[(size_t) (i - bounce)] + 0.5f * dry[(size_t) (i - bounce - 1)] + 0.25f * dry[(size_t) (i - bounce - 2)]);
-            juce::Random rng (4242 + type);
-            const float air = 0.02f * d * d;
-            float lp = 0.0f;
-            const float tau = (float) (0.012 * sampleRate);
-            for (int i = bounce; i < length; ++i)
+            auto direct = minimumPhase (designDb, n);
+            out.clear();
+            auto* h = out.getWritePointer (0);
+            for (int i = 0; i < length; ++i)
+                h[i] = (float) direct[(size_t) i];
+            addBoxAndRoom (h, length, type, d, sampleRate);
+            const int fadeFrom = (int) (length * 0.7);
+            for (int i = fadeFrom; i < length; ++i)
+                h[i] *= 0.5f + 0.5f * std::cos (juce::MathConstants<float>::pi * (float) (i - fadeFrom) / (float) (length - fadeFrom));
+            if (pass == 2)
             {
-                lp += 0.35f * ((rng.nextFloat() * 2.0f - 1.0f) - lp);
-                h[i] += air * lp * std::exp (-(float) (i - bounce) / tau);
+                // the same loudness for every cabinet and mic position: the 200 Hz..3 kHz band at kModelLevelDb
+                levelIR (out, sampleRate);
+                out.applyGain (juce::Decibels::decibelsToGain (kModelLevelDb));
+                break;
             }
-            // the reflections make it louder: keep the 800 Hz level where it was
-            out.applyGain (1.0f / (1.0f + 0.5f * bounceGain));
+            // what came out, smoothed over 1/3 octave, against the target: correct the design by the difference
+            std::vector<std::complex<double>> x ((size_t) n);
+            for (int i = 0; i < length; ++i) x[(size_t) i] = h[i];
+            fft (x, false);
+            std::vector<double> power ((size_t) n / 2 + 1);
+            for (int k = 0; k <= n / 2; ++k) power[(size_t) k] = std::norm (x[(size_t) k]);
+            std::vector<double> prefix ((size_t) n / 2 + 2, 0.0);
+            for (int k = 0; k <= n / 2; ++k) prefix[(size_t) k + 1] = prefix[(size_t) k] + power[(size_t) k];
+            double refErr = 0.0;
+            std::vector<double> err ((size_t) n / 2 + 1, 0.0);
+            for (int k = 1; k <= n / 2; ++k)
+            {
+                const int lo = juce::jmax (1, (int) std::floor (k * 0.891)), hi = juce::jmin (n / 2, (int) std::ceil (k * 1.122));
+                const double smoothDb = 10.0 * std::log10 ((prefix[(size_t) hi + 1] - prefix[(size_t) lo]) / (hi - lo + 1) + 1.0e-24);
+                err[(size_t) k] = smoothDb - targetDb[(size_t) k];
+            }
+            err[0] = err[1];
+            // only the shape matters (the level is set below): relative to the 1 kHz region
+            const int k1 = (int) std::round (1000.0 * n / sampleRate);
+            refErr = err[(size_t) k1];
+            for (int k = 0; k <= n / 2; ++k)
+            {
+                const double hz = (double) k * sampleRate / n;
+                if (hz > 25.0 && hz < 16000.0)
+                    designDb[(size_t) k] -= juce::jlimit (-12.0, 12.0, err[(size_t) k] - refErr);
+            }
         }
         return out;
     }
+
+    static constexpr float kModelLevelDb = -5.0f;   // modelled cabinets: about as loud as the cabinets of v3.1 beta 1
 
     /** Levels a loaded IR: its 200 Hz..3 kHz band averages 0 dB (message thread). */
     static void levelIR (juce::AudioBuffer<float>& irBuf, double sampleRate)
@@ -254,40 +257,31 @@ public:
     }
 
 private:
-    struct Shape
-    {
-        float resHz, resQ;           // cone in the box
-        float openHz;                // open back: extra first-order low cut (0 = closed)
-        float lowMidHz, lowMidDb, lowMidQ;
-        float presHz, presDb, presQ;
-        float rippleFromHz, rippleDb; // cone breakup
-        float rollHz; int rollOrder;
-        float notchHz, notchDb;
-        float proximityDb;           // close-miking bass lift
-        int seed;
-    };
+    static constexpr int kPoints = 57;
+    static constexpr float open1x12Db[kPoints] { -10.5f, -9.5f, -7.7f, -5.8f, -4.0f, -2.4f, -0.9f, 0.4f, 1.3f, 2.0f, 2.3f, 2.4f, 2.1f, 1.8f, 1.6f, 1.7f, 2.2f, 2.6f, 2.7f, 2.5f, 2.3f, 2.5f, 2.5f, 2.2f, 2.1f, 1.8f, 2.1f, 1.9f, 2.0f, 1.2f, 0.4f, -0.4f, -1.1f, -2.1f, -2.7f, -2.2f, -1.9f, -1.8f, -2.3f, -2.1f, -1.3f, -0.4f, -1.5f, -4.4f, -8.2f, -10.4f, -12.5f, -16.3f, -20.8f, -24.7f, -26.7f, -27.5f, -29.2f, -31.9f, -36.4f, -40.9f, -43.3f };
+    static constexpr float open2x12Db[kPoints] { -8.4f, -7.3f, -5.3f, -3.3f, -1.5f, 0.1f, 1.5f, 2.7f, 3.4f, 3.8f, 3.7f, 3.5f, 3.0f, 2.6f, 2.3f, 2.5f, 3.1f, 3.8f, 4.0f, 3.9f, 3.7f, 3.5f, 3.2f, 2.9f, 2.6f, 2.3f, 1.9f, 1.1f, 0.5f, 0.1f, -0.3f, -0.7f, -1.4f, -2.1f, -2.0f, -1.4f, -0.3f, 0.1f, -0.1f, -0.5f, -0.6f, -0.2f, -0.6f, -2.4f, -6.0f, -9.6f, -13.8f, -17.5f, -21.6f, -23.9f, -25.6f, -27.5f, -30.9f, -35.5f, -40.0f, -43.8f, -45.3f };
+    static constexpr float brit4x12Db[kPoints] { -20.4f, -18.8f, -15.9f, -13.2f, -10.6f, -7.8f, -4.5f, -1.6f, 0.9f, 2.9f, 4.6f, 6.1f, 6.9f, 7.5f, 7.6f, 7.4f, 6.9f, 6.3f, 5.6f, 4.9f, 4.1f, 3.5f, 3.0f, 2.3f, 1.1f, 0.4f, 0.8f, 1.5f, 1.4f, 0.1f, -1.0f, -1.4f, -1.7f, -1.9f, -1.7f, -1.2f, 0.3f, 1.6f, 3.0f, 3.0f, 2.8f, 1.8f, 0.7f, -1.4f, -3.1f, -6.5f, -11.4f, -16.8f, -20.4f, -22.8f, -25.3f, -27.3f, -28.1f, -28.5f, -30.9f, -35.1f, -37.8f };
+    static constexpr float modern4x12Db[kPoints] { -20.1f, -18.5f, -15.6f, -12.9f, -10.3f, -7.4f, -4.7f, -2.2f, -0.2f, 1.8f, 3.4f, 4.9f, 5.7f, 5.9f, 5.9f, 5.7f, 5.4f, 5.1f, 4.7f, 4.2f, 3.6f, 2.9f, 2.2f, 1.5f, 0.4f, -0.2f, 0.2f, 0.7f, 0.6f, -1.0f, -1.9f, -1.5f, -1.4f, -1.3f, -1.3f, -0.4f, 1.3f, 2.2f, 1.9f, 0.8f, 0.5f, 0.5f, -0.0f, -1.5f, -4.0f, -8.7f, -14.5f, -20.0f, -23.7f, -25.4f, -27.1f, -28.6f, -31.5f, -34.6f, -38.2f, -41.4f, -42.9f };
+    static constexpr float micEdgeDb[kPoints] { 3.4f, 3.4f, 3.4f, 3.4f, 3.3f, 3.2f, 3.2f, 3.1f, 3.1f, 3.0f, 3.0f, 2.9f, 2.9f, 2.9f, 2.8f, 2.7f, 2.7f, 2.6f, 2.4f, 2.2f, 2.3f, 2.1f, 1.8f, 1.9f, 2.1f, 2.2f, 2.5f, 3.1f, 3.1f, 2.9f, 1.9f, 0.5f, -1.4f, -2.5f, -3.7f, -3.6f, -3.2f, -3.4f, -4.1f, -5.6f, -7.4f, -8.3f, -7.4f, -9.0f, -9.8f, -8.3f, -7.8f, -7.6f, -6.9f, -5.9f, -7.6f, -10.2f, -11.2f, -9.7f, -8.6f, -7.7f, -4.9f };
+    static constexpr float distRoomDb[kPoints] { -3.7f, -3.8f, -3.8f, -3.6f, -3.6f, -3.5f, -3.4f, -3.2f, -3.0f, -3.0f, -2.9f, -2.8f, -2.6f, -2.5f, -2.2f, -2.0f, -1.8f, -1.7f, -1.3f, -0.9f, -0.8f, -0.7f, -0.5f, -1.2f, -1.9f, -2.6f, -2.4f, -2.5f, -2.2f, -1.6f, -0.7f, -0.9f, -0.2f, 1.0f, 1.5f, 2.3f, 3.0f, 2.6f, 2.1f, 2.0f, 1.9f, 1.8f, 2.7f, 2.6f, 2.3f, 1.9f, 1.5f, 0.2f, 1.0f, 3.0f, 3.8f, 4.1f, 5.1f, 4.8f, 2.7f, 2.1f, 2.1f };
 
-    static Shape shapeFor (int type, float mic, float distance) noexcept
+    /** The smooth curve of a cabinet class (averaged from many real cabinets of that kind, 1/6 octave),
+        with the mic (cap .. edge) and distance (on the grille .. a few inches back) trends of a real 4x12. */
+    static double curveDb (int type, float mic, float distance, double hz) noexcept
     {
-        Shape s;
-        switch (type)
+        const float* base = type == open1x12 ? open1x12Db : type == open2x12 ? open2x12Db : type == brit4x12 ? brit4x12Db : modern4x12Db;
+        auto at = [] (const float* t, double f)
         {
-            case open1x12:   s = { 88.0f, 0.9f, 115.0f, 380.0f, -1.0f, 1.0f, 2300.0f, 3.0f, 1.2f, 2600.0f, 2.5f, 5600.0f, 3, 4200.0f, -4.0f, 0.0f, 11 }; break;
-            case open2x12:   s = { 95.0f, 1.0f,  90.0f, 420.0f, -1.5f, 1.0f, 1900.0f, 4.0f, 1.1f, 2400.0f, 3.0f, 5200.0f, 3, 3800.0f, -5.0f, 0.0f, 23 }; break;
-            case brit4x12:   s = { 82.0f, 1.3f,   0.0f, 700.0f,  1.0f, 0.9f, 1500.0f, 4.0f, 1.0f, 2200.0f, 3.0f, 4300.0f, 4, 3400.0f, -4.0f, 0.0f, 37 }; break;
-            default:         s = { 105.0f, 1.5f,  0.0f, 500.0f, -3.0f, 1.0f, 2600.0f, 6.0f, 1.4f, 3000.0f, 4.0f, 5000.0f, 4, 4400.0f, -6.0f, 0.0f, 51 }; break;
-        }
-        const float m = juce::jlimit (0.0f, 1.0f, mic), d = juce::jlimit (0.0f, 1.0f, distance);
-        // mic towards the edge: the top rolls off earlier, less presence and fizz, a little warmer
-        s.rollHz *= std::pow (2.0f, -0.7f * m);
-        s.presDb -= 4.0f * m;
-        s.presHz *= std::pow (2.0f, -0.4f * m);
-        s.rippleDb *= 1.0f - 0.5f * m;
-        s.lowMidDb += 1.5f * m;
-        // distance: proximity bass up close, a darker top further away
-        s.proximityDb = 5.0f * (1.0f - d) * (1.0f - d);
-        s.rollHz *= std::pow (2.0f, -0.35f * d);
-        return s;
+            const double pos = std::log2 (juce::jmax (1.0, f) / 30.0) * 6.0;
+            if (pos <= 0.0) return (double) t[0] + 2.0 * pos;                          // -12 dB / octave below 30 Hz
+            if (pos >= kPoints - 1) return (double) t[kPoints - 1] - 4.0 * (pos - (kPoints - 1));   // -24 dB / octave on top
+            const int i = (int) pos;
+            const double fr = pos - i;
+            return (double) t[i] + fr * (t[i + 1] - t[i]);
+        };
+        const double m = juce::jlimit (0.0f, 1.0f, mic), d = juce::jlimit (0.0f, 1.0f, distance);
+        const double close = juce::jmin (1.0, d / 0.6);
+        return at (base, hz) + 1.1 * (m - 0.3) * at (micEdgeDb, hz) + (close - 0.3) * at (distRoomDb, hz);
     }
 
     static double bellDb (double hz, double f0, double q, double db) noexcept
@@ -296,29 +290,108 @@ private:
         return db / (1.0 + q * q * r * r);
     }
 
-    static double shapeDb (const Shape& s, double hz) noexcept
+    /** Cone breakup: a fixed pattern of narrow peaks and dips of each speaker, smoother towards the edge. */
+    static double rippleDb (int type, float mic, double hz) noexcept
     {
-        const double w = hz / s.resHz;
-        // second-order high-pass with Q: the resonance bump and the 12 dB/oct fall below it
-        const double hp2 = 20.0 * std::log10 (w * w / std::sqrt ((1.0 - w * w) * (1.0 - w * w) + (w / s.resQ) * (w / s.resQ)));
-        double db = hp2;
-        if (s.openHz > 0.0f)
-            db += 20.0 * std::log10 ((hz / s.openHz) / std::sqrt (1.0 + (hz / s.openHz) * (hz / s.openHz)));
-        db += bellDb (hz, s.lowMidHz, s.lowMidQ, s.lowMidDb);
-        db += bellDb (hz, s.presHz, s.presQ, s.presDb);
-        db += bellDb (hz, s.notchHz, 3.0, s.notchDb);
-        db += s.proximityDb / (1.0 + std::pow (hz / 160.0, 2.0));
-        // cone breakup: a fixed pattern of narrow peaks and dips above rippleFrom
-        juce::Random rng (s.seed);
-        for (int k = 0; k < 9; ++k)
+        juce::Random rng (7 + 31 * type);
+        const double amount = 8.0 * (1.0 - 0.4 * juce::jlimit (0.0f, 1.0f, mic));
+        double db = 0.0;
+        for (int k = 0; k < 24; ++k)
         {
-            const double f0 = s.rippleFromHz * std::pow (2.0, 1.6 * (double) k / 9.0 + 0.1 * rng.nextDouble());
-            const double g = s.rippleDb * (rng.nextBool() ? 1.0 : -0.8) * (0.5 + 0.5 * rng.nextDouble());
-            db += bellDb (hz, f0, 5.0 + 4.0 * rng.nextDouble(), g);
+            const double f0 = 700.0 * std::pow (2.0, 3.6 * (double) k / 24.0 + 0.12 * rng.nextDouble());
+            const double g = amount * (rng.nextBool() ? 1.0 : -1.0) * (0.4 + 0.6 * rng.nextDouble());
+            db += bellDb (hz, f0, 6.0 + 8.0 * rng.nextDouble(), g);
         }
-        // the top: a steep Butterworth-like roll-off
-        db += -10.0 * std::log10 (1.0 + std::pow (hz / s.rollHz, 2.0 * s.rollOrder));
         return db;
+    }
+
+    /** Minimum-phase impulse response for a log magnitude on the FFT grid (real cepstrum). */
+    static std::vector<double> minimumPhase (const std::vector<double>& db, int n)
+    {
+        std::vector<std::complex<double>> x ((size_t) n);
+        for (int k = 0; k <= n / 2; ++k)
+        {
+            const double lnMag = juce::jmax (-100.0, db[(size_t) k]) * (std::log (10.0) / 20.0);
+            x[(size_t) k] = lnMag;
+            if (k > 0 && k < n / 2)
+                x[(size_t) (n - k)] = lnMag;
+        }
+        fft (x, true);
+        for (int k = 1; k < n / 2; ++k) x[(size_t) k] *= 2.0;
+        for (int k = n / 2 + 1; k < n; ++k) x[(size_t) k] = 0.0;
+        fft (x, false);
+        for (auto& v : x) v = std::exp (v);
+        fft (x, true);
+        std::vector<double> h ((size_t) n);
+        for (int i = 0; i < n; ++i) h[(size_t) i] = x[(size_t) i].real();
+        return h;
+    }
+
+    /** What the mic hears besides the cone: the box (or the wall behind an open back), its decay, the room. */
+    static void addBoxAndRoom (float* h, int length, int type, float d, double sr)
+    {
+        const std::vector<float> direct (h, h + length);
+        auto echo = [&] (double ms, float gain, double lpHz)
+        {
+            const int delay = (int) (ms * 0.001 * sr);
+            const float a = (float) (1.0 - std::exp (-2.0 * juce::MathConstants<double>::pi * lpHz / sr));
+            float lp = 0.0f;
+            for (int i = 0; i + delay < length; ++i)
+            {
+                lp += a * (direct[(size_t) i] - lp);
+                h[i + delay] += gain * lp;
+            }
+        };
+        const bool open = type == open1x12 || type == open2x12;
+        if (open)
+        {
+            echo (type == open1x12 ? 3.4 : 4.1, -0.30f, 2200.0);   // the rear wave, off the wall behind the amp
+            echo (7.9, 0.10f, 1500.0);
+            echo (0.71, 0.11f, 7000.0);                             // baffle edges and the cabinet sides
+            echo (1.13, -0.09f, 6000.0);
+        }
+        else
+        {
+            echo (type == brit4x12 ? 1.7 : 1.45, 0.26f, 2000.0);  // the back panel, through the cone
+            echo (3.1, 0.12f, 1200.0);
+            echo (0.52, 0.12f, 7000.0);                             // the neighbouring speakers, the baffle, the sides
+            echo (0.87, -0.10f, 6000.0);
+            echo (1.21, 0.09f, 5000.0);
+            echo (2.3, -0.07f, 3000.0);
+        }
+        // the box's diffuse decay (panels and the air inside), band-limited
+        juce::Random rng (99 + type);
+        const float tau = (float) ((open ? 0.011 : 0.019) * sr);
+        float peak = 0.0f;
+        for (int i = 0; i < length; ++i) peak = juce::jmax (peak, std::abs (direct[(size_t) i]));
+        const float tail = peak * (open ? 0.018f : 0.028f);
+        float lp = 0.0f, lp2 = 0.0f;
+        const float aLp = (float) (1.0 - std::exp (-2.0 * juce::MathConstants<double>::pi * 3200.0 / sr));
+        const float aHp = (float) (1.0 - std::exp (-2.0 * juce::MathConstants<double>::pi * 160.0 / sr));
+        const int start = (int) (0.0006 * sr);
+        for (int i = start; i < length; ++i)
+        {
+            lp += aLp * ((rng.nextFloat() * 2.0f - 1.0f) - lp);
+            lp2 += aHp * (lp - lp2);
+            h[i] += tail * (lp - lp2) * std::exp (-(float) (i - start) / tau);
+        }
+        // further back: the floor bounce and some room
+        if (d > 0.45f)
+        {
+            const float room = (d - 0.45f) / 0.55f;
+            const std::vector<float> near (h, h + length);
+            const int bounce = (int) ((1.0 + 3.0 * room) * 0.001 * sr);
+            const float bounceGain = 0.35f * room;
+            for (int i = bounce + 2; i < length; ++i)
+                h[i] += bounceGain * (0.25f * near[(size_t) (i - bounce)] + 0.5f * near[(size_t) (i - bounce - 1)] + 0.25f * near[(size_t) (i - bounce - 2)]);
+            float air = 0.0f;
+            const float airTau = (float) (0.02 * sr);
+            for (int i = bounce; i < length; ++i)
+            {
+                air += 0.3f * ((rng.nextFloat() * 2.0f - 1.0f) - air);
+                h[i] += peak * 0.03f * room * air * std::exp (-(float) (i - bounce) / airTau);
+            }
+        }
     }
 
     /** In-place radix-2 FFT (double; inverse scaled by 1/n). */

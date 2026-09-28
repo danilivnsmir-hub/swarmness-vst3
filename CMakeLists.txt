@@ -230,6 +230,23 @@ if(SWARMNESS_BUILD_TESTS)
         target_compile_options(SwarmnessTests PRIVATE /bigobj)
     endif()
 
+    # Amp lab: measures NAM captures and our amp / drive circuits the same way (development tool)
+    juce_add_console_app(SwarmnessAmpLab PRODUCT_NAME "SwarmnessAmpLab")
+    juce_generate_juce_header(SwarmnessAmpLab)
+    target_sources(SwarmnessAmpLab PRIVATE Tests/AmpLab.cpp)
+    target_include_directories(SwarmnessAmpLab PRIVATE Source)
+    target_compile_definitions(SwarmnessAmpLab PRIVATE
+        JUCE_WEB_BROWSER=0
+        JUCE_USE_CURL=0
+        JUCE_STANDALONE_APPLICATION=1
+        DONT_SET_USING_JUCE_NAMESPACE=1
+        _USE_MATH_DEFINES)
+    target_link_libraries(SwarmnessAmpLab PRIVATE
+        swarmness_nam
+        juce::juce_audio_utils
+        juce::juce_dsp
+        juce::juce_recommended_config_flags)
+
     enable_testing()
     add_test(NAME SwarmnessDSP COMMAND SwarmnessTests)
 endif()

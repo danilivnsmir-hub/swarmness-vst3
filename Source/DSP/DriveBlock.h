@@ -125,7 +125,7 @@ public:
     static float feedbackOhms (float drive) noexcept
     {
         const float taper = (std::exp (4.0f * drive) - 1.0f) / (std::exp (4.0f) - 1.0f);   // audio taper pot
-        return 4700.0f + 500000.0f * taper;
+        return kRfMin + 500000.0f * taper;
     }
 
     int getOversampling() const noexcept { return 1 << osLog2; }
@@ -145,7 +145,8 @@ public:
         const cd lp = 1.0 / (1.0 + jw / (2.0 * juce::MathConstants<double>::pi * 723.0));
         const double bg = juce::Decibels::decibelsToGain (-14.0 + 20.0 * s.bright);
         const cd tone = lp + bg * (1.0 - lp);
-        const cd out = 1.0 / (1.0 + jw / (2.0 * juce::MathConstants<double>::pi * (6000.0 + 6000.0 * s.bright)));
+        const cd out1 = 1.0 / (1.0 + jw / (2.0 * juce::MathConstants<double>::pi * (5000.0 + 5000.0 * s.bright)));
+        const cd out = out1 * out1;
         return (float) (20.0 * std::log10 (std::abs (hp * core * tone * out) * kMakeup + 1.0e-12));
     }
 
@@ -157,8 +158,8 @@ public:
         for (int it = 0; it < 60; ++it)
         {
             const float e = std::exp (juce::jlimit (-40.0f, 40.0f, v / kNVt));
-            const float f = v * invR + kIs * (e - 1.0f / e) - i;
-            const float d = invR + kIs / kNVt * (e + 1.0f / e);
+            const float f = v * invR + kIs * (e - 1.0f) - kIsNeg * (1.0f / e - 1.0f) - i;
+            const float d = invR + (kIs * e + kIsNeg / e) / kNVt;
             const float step = juce::jlimit (-0.1f, 0.1f, f / d);
             v -= step;
             if (std::abs (step) < 1.0e-7f)
@@ -175,11 +176,13 @@ private:
         float legX = 0.0f, legY = 0.0f;                             // 720 Hz gain leg
         float v = 0.0f;                                             // diode voltage (Newton warm start)
         float cf = 0.0f;                                            // feedback cap
-        float toneLp = 0.0f, outLp = 0.0f;
+        float toneLp = 0.0f, outLp = 0.0f, outLp2 = 0.0f;
         float dcX = 0.0f, dcY = 0.0f;
     };
 
     static constexpr float kIs = 2.52e-9f;         // 1N914
+    static constexpr float kIsNeg = 0.5f * kIs;    // the other diode clips a little later: a touch of even harmonics
+    static constexpr float kRfMin = 33000.0f;      // DRIVE at 0 still has gain (x8): the TS-family mid hump and bite
     static constexpr float kNVt = 1.752f * 0.02585f;
     static constexpr float kLegOhms = 4700.0f;
     static constexpr float kMakeup = 0.9f;          // VOLUME 5 at DRIVE ~3 = unity
@@ -203,9 +206,8 @@ private:
         for (int it = 0; it < 6; ++it)
         {
             const float e = std::exp (juce::jlimit (-40.0f, 40.0f, v / kNVt));
-            const float sh = 0.5f * (e - 1.0f / e), chh = 0.5f * (e + 1.0f / e);
-            const float f = v * invRf + 2.0f * kIs * sh - i;
-            const float d = invRf + 2.0f * kIs / kNVt * chh;
+            const float f = v * invRf + kIs * (e - 1.0f) - kIsNeg * (1.0f / e - 1.0f) - i;
+            const float d = invRf + (kIs * e + kIsNeg / e) / kNVt;
             const float step = juce::jlimit (-0.1f, 0.1f, f / d);
             v -= step;
             if (std::abs (step) < 1.0e-6f)
@@ -224,7 +226,8 @@ private:
         st.toneLp += toneA * (y - st.toneLp);
         y = st.toneLp + brightG * (y - st.toneLp);
         st.outLp += outA * (y - st.outLp);
-        return st.outLp / kVolts * kMakeup;
+        st.outLp2 += outA * (st.outLp - st.outLp2);
+        return st.outLp2 / kVolts * kMakeup;
     }
 
     static float onePoleA (double hz, double rate) noexcept
@@ -252,7 +255,7 @@ private:
         cfA = onePoleA (1.0 / (2.0 * juce::MathConstants<double>::pi * rf * 51.0e-12), fsOs);
         toneA = onePoleA (723.0, fsOs);
         brightG = juce::Decibels::decibelsToGain (-14.0f + 20.0f * settings.bright);   // -14 .. +6 dB above ~720 Hz
-        outA = onePoleA (6000.0 + 6000.0 * settings.bright, fsOs);
+        outA = onePoleA (5000.0 + 5000.0 * settings.bright, fsOs);
         dcR = (float) std::exp (-2.0 * juce::MathConstants<double>::pi * 8.0 / fs);
     }
 
