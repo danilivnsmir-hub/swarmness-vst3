@@ -513,8 +513,9 @@ juce::String ChainStrip::getTooltip()
         "CARVE: parametric EQ with low / high cut",
         "CRYPT: reverb (algorithmic or your impulse response)",
         "SHIFT: pitch shifter. LED = on (SHIFT A all the time); the SHIFT A / B footswitches engage it while held",
-        "AMP: amplifier - CLEAN / CRUNCH / LEAD models with CHARACTER, or a NAM capture",
-        "CAB: speaker cabinet - modelled cabinets or your impulse response" };
+        "AMP: amplifier - CLEAN (CHROME) / CRUNCH (BRIT) / LEAD (STEEL) models, or a NAM capture",
+        "CAB: speaker cabinet - modelled cabinets or two impulse-response slots (A / B MIX)",
+        "WASP: overdrive in front of the amp - tightens the lows and pushes the gain, or a NAM pedal capture" };
     juce::String tip (what[hover]);
     tip << ". Click to open; drag sideways to move, up / down for parallel paths";
     if (powerParamFor (hover) != nullptr)

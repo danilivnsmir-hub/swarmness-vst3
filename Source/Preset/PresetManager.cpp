@@ -54,12 +54,13 @@ void PresetManager::initialiseFactoryPresets()
     // chaos = FRENZY, speed = BUZZ, rbPrimary = DRONE, rbSecondary = QUEEN, rbMagic = TRAILS.
     // Wings division indices: 3 = 1/8, 4 = 1/16, 5 = 1/32
     const auto trailFill = hivePatternLegacy;   // a ready-made TRAILS step pattern (HiveBlock::Fill), expanded below
-    const juce::String recipes ("Recipes - The Noise, Slam, glitch");
+    const juce::String recipes ("Recipes - panic, slam, glitch");
     const juce::String basics ("Basics"), stingCat ("Shift - hold SHIFT A / B"), hiveCat ("Hive Voices & Trails"),
                        texture ("Smoke, Swarm & Wings"), attack ("Swarm Attack"), space ("Chain, EQ & Crypt"),
                        amps ("Amps & Cabs");
     // AMP channels: 0 CLEAN, 1 CRUNCH, 2 LEAD. CAB types: 0 1x12, 1 2x12, 2 4x12 BRIT, 3 4x12 MOD
-    // Chain slots (lower = earlier). Defaults: SMOKE 10, PITCH 20, SWARM 30, WINGS 40, COMB 50, CARVE 60, CRYPT 70.
+    // Chain slots (lower = earlier). Defaults: SMOKE 10, SHIFT 15, HIVE 20, WASP 22, AMP 23, CAB 26, SWARM 30, WINGS 40,
+    // COMB 50, CARVE 60, CRYPT 70.
     const juce::String slotCrypt (Chain::slotIds[Chain::crypt]), slotCarve (Chain::slotIds[Chain::carve]),
                        slotComb (Chain::slotIds[Chain::comb]), slotSmoke (Chain::slotIds[Chain::smoke]);
 
@@ -74,13 +75,13 @@ void PresetManager::initialiseFactoryPresets()
           { { rise, 950 }, { fall, 1500 } } },
 
         // ---------------------------------------------------------------- recipes
-        { "Noise - Octave Panic", recipes, "The Noise (Tallon / Alpha Wolf) approach: SMOKE into a Whammy-style shift. Hold SHIFT A (+1 oct) or SHIFT B (+2 oct); ANGER = Panic, FRENZY = Chaos, BUZZ = Speed, RISE = Rise.",
+        { "Panic - Octave Panic", recipes, "Fuzz into a footswitch octave: SMOKE into SHIFT. Hold SHIFT A (+1 oct) or SHIFT B (+2 oct); ANGER sours it, FRENZY throws the pitch around, BUZZ grinds, RISE slides into the note.",
           { { rise, 25 }, { fall, 40 }, { panic, 55 }, { chaos, 20 }, { speed, 35 },
             { fuzzOn, 1 }, { fuzzVoice, 2 }, { fuzz, 80 }, { fuzzTone, 55 }, { fuzzScoop, 35 }, { fuzzSag, 30 } } },
-        { "Noise - Whammy Sweep", recipes, "Slow RISE, fast FALL: hold SHIFT B and the note screams up two octaves; BUZZ adds the ring-mod / flanger grind. Tap the switch in rhythm for sirens.",
+        { "Panic - Siren Sweep", recipes, "Slow RISE, fast FALL: hold SHIFT B and the note screams up two octaves; BUZZ adds the ring-mod / flanger grind. Tap the switch in rhythm for sirens.",
           { { rise, 220 }, { fall, 70 }, { panic, 30 }, { chaos, 8 }, { speed, 60 },
             { fuzzOn, 1 }, { fuzzVoice, 1 }, { fuzz, 85 }, { fuzzTone, 50 }, { fuzzScoop, 45 } } },
-        { "Noise - In-Key Chaos", recipes, "FRENZY with SNAP: the pitch jumps between 4ths, 5ths and octaves instead of random pitches - the chaos stays musical. Hold SHIFT A.",
+        { "Panic - In-Key Chaos", recipes, "FRENZY with SNAP: the pitch jumps between 4ths, 5ths and octaves instead of random pitches - the chaos stays musical. Hold SHIFT A.",
           { { rise, 10 }, { chaos, 70 }, { panic, 15 }, { speed, 15 }, { shSnap, 1 },
             { fuzzOn, 1 }, { fuzzVoice, 2 }, { fuzz, 75 }, { fuzzScoop, 30 } } },
         { "Slam - Semitone Clash", recipes, "Slam-style dissonance: a constant voice one semitone above, both at full level (MIX 50%), tight and clean, into a DOWN fuzz. SHIFT A / B add -1 / -2 oct layers (SHIFT MIX 50%).",
@@ -150,7 +151,7 @@ void PresetManager::initialiseFactoryPresets()
           { { rbOn, 1 }, { rbPitch, 7 }, { rbPrimary, 50 }, { rbSecondary, 20 }, { rbTracking, 90 }, { rbMagic, 70 }, { trailFill, 4 }, { rbTime, 260 }, { rbTone, 45 } } },
         { "Angry Voices", hiveCat, "MANGLE on the voices too: ANGER and FRENZY sour and scatter the harmony and its trails - one character for the whole block.",
           { { rbOn, 1 }, { rbPitch, 5 }, { rbPrimary, 65 }, { rbSecondary, 25 }, { rbTracking, 70 }, { rbMagic, 40 }, { panic, 45 }, { chaos, 25 } } },
-        { "Pitch Delay", hiveCat, "HIVE as a delay: DRY feeds the repeats from your note, every repeat climbs a fifth (all UP) - a Rainbow-Machine-style pitch delay. DRONE off.",
+        { "Pitch Delay", hiveCat, "HIVE as a delay: DRY feeds the repeats from your note, every repeat climbs a fifth (all UP) - the classic climbing pitch delay. DRONE off.",
           { { rbOn, 1 }, { trDry, 1 }, { rbPrimary, 0 }, { rbPitch, 7 }, { rbTracking, 100 }, { rbMagic, 60 }, { rbTime, 320 }, { rbTone, 55 }, { rbMix, 50 } } },
         { "Dotted Echo", hiveCat, "A plain dotted-1/8 delay out of HIVE: DRY + all-HOLD steps (FILL 'Echo'), synced. RAW gives the repeats tape-like wobble.",
           { { rbOn, 1 }, { trDry, 1 }, { rbPrimary, 0 }, { rbTracking, 100 }, { rbMagic, 55 }, { trailFill, 5 }, { rbSync, 1 }, { rbDiv, 9 }, { rbTone, 45 }, { rbMix, 45 } } },
@@ -161,7 +162,7 @@ void PresetManager::initialiseFactoryPresets()
         { "Swarm Cloud", texture, "DEEP SWARM over a barely-detuned double: wide, seasick, huge.",
           { { rbOn, 1 }, { rbSnap, 0 }, { rbPitch, 0.2f }, { rbPrimary, 40 }, { rbTracking, 90 },
             { swarmOn, 1 }, { swarmDeep, 1 }, { swarmDepth, 75 }, { swarmRate, 0.35f }, { swarmMix, 55 } } },
-        { "Swollen Smoke", texture, "Jumbo fuzz: MID voice, huge sustain and a deep SCOOP - the wall-of-fuzz starting point.",
+        { "Jumbo Smoke", texture, "Jumbo fuzz: MID voice, huge sustain and a deep SCOOP - the wall-of-fuzz starting point.",
           { { fuzzOn, 1 }, { fuzzVoice, 1 }, { fuzz, 90 }, { fuzzTone, 45 }, { fuzzScoop, 75 }, { fuzzSag, 55 } } },
         { "Doom Cathedral", texture, "DOWN voice: crushing low-mids and the full bottom end, flat mids, a little CLEAN under it and a lot of SAG - every note sags and blooms.",
           { { fuzzOn, 1 }, { fuzzVoice, 0 }, { fuzz, 85 }, { fuzzTone, 35 }, { fuzzScoop, 15 }, { fuzzBlend, 20 }, { fuzzSag, 80 } } },
@@ -207,7 +208,7 @@ void PresetManager::initialiseFactoryPresets()
           { { juce::String (Chain::laneIds[Chain::smoke]), 1 }, { Chain::parallelMixIds[0], 35 },
             { fuzzOn, 1 }, { fuzzVoice, 1 }, { fuzz, 90 }, { fuzzScoop, 60 }, { fuzzSag, 50 } } },
         { "Split Swarm", space, "Parallel paths: SWARM on A, CRYPT on B - the chorus stays tight and the reverb never smears it; both meet at the merge.",
-          { { juce::String (Chain::laneIds[Chain::swarm]), 1 }, { juce::String (Chain::laneIds[Chain::crypt]), 2 }, { Chain::parallelMixIds[0], 45 },
+          { { juce::String (Chain::laneIds[Chain::swarm]), 1 }, { juce::String (Chain::laneIds[Chain::crypt]), 2 }, { slotCrypt, 35 }, { Chain::parallelMixIds[0], 45 },
             { swarmOn, 1 }, { swarmDepth, 70 }, { swarmRate, 0.8f }, { swarmMix, 50 },
             { revOn, 1 }, { revType, 2 }, { revDecay, 4 }, { revMix, 100 }, { revTone, 55 } } },
         { "Twin Splits", space, "Two splits: [SMOKE || dry] -> SHIFT, HIVE -> [SWARM || CRYPT]. Parallel fuzz with clean punch, then chorus and reverb side by side.",
@@ -236,11 +237,11 @@ void PresetManager::initialiseFactoryPresets()
         { "Steel Lead", amps, "LEAD: tight, cutting American high gain. GATE keeps the stops clean, PRESENCE and DEPTH up for modern metal.",
           { { ampOn, 1 }, { ampChannel, 2 }, { ampGain, 5 }, { ampBass, 5 }, { ampMid, 5 }, { ampTreble, 6.5f }, { ampPresence, 5.5f }, { ampDepth, 6 },
             { ampGate, 35 }, { ampMaster, 5.5f }, { ampLevel, 2 }, { cabOn, 1 }, { cabType, 3 }, { cabMic, 25 }, { cabDist, 10 }, { cabLowCut, 80 } } },
-        { "Hornet Lead", amps, "WASP boosting the LEAD amp, bright and tight, with the modern 4x12 miked close to the cap: the rig dialled in by ear on beta.2.",
+        { "Hornet Lead", amps, "WASP boosting the LEAD amp, bright and tight, with the modern 4x12 miked close to the cap: a lead rig dialled in by ear.",
           { { input, 3 }, { drvOn, 1 }, { drvDrive, 1 }, { drvVolume, 7 }, { drvBright, 7 }, { drvAttack, 5 }, { drvGate, 45 },
             { ampOn, 1 }, { ampChannel, 2 }, { ampGain, 5 }, { ampBass, 3.6f }, { ampMid, 4 }, { ampTreble, 7 }, { ampPresence, 5 }, { ampDepth, 6.6f },
             { ampLevel, -2.5f }, { ampMaster, 6 }, { cabOn, 1 }, { cabType, 3 }, { cabMic, 15 }, { cabDist, 25 }, { cabLowCut, 60 }, { cabLevel, 4.9f } } },
-        { "Wasp Boost", amps, "The classic tight metal boost: WASP at DRIVE 0 with VOLUME up in front of the LEAD amp - the lows tightened before the amp, "
+        { "Wasp Boost", amps, "The classic tight metal boost: WASP with DRIVE almost off and VOLUME up in front of the LEAD amp - the lows tightened before the amp, "
                               "more bite and a faster attack. Switch WASP off to hear the difference.",
           { { drvOn, 1 }, { drvDrive, 0.5f }, { drvVolume, 7.5f }, { drvBright, 5.5f }, { drvAttack, 6.5f }, { drvGate, 40 },
             { ampOn, 1 }, { ampChannel, 2 }, { ampGain, 4.5f }, { ampBass, 5.5f }, { ampMid, 5.5f }, { ampTreble, 6 }, { ampPresence, 6 }, { ampDepth, 6 },
@@ -252,7 +253,7 @@ void PresetManager::initialiseFactoryPresets()
         { "Sludge Wall", amps, "LEAD scooped and huge: low MID, BASS and DEPTH up, the mic backed off the grille. Slow riffs, big stops.",
           { { ampOn, 1 }, { ampChannel, 2 }, { ampGain, 6 }, { ampBass, 7 }, { ampMid, 3 }, { ampTreble, 6 }, { ampPresence, 5.5f }, { ampDepth, 7.5f },
             { ampGate, 40 }, { ampMaster, 6.5f }, { ampLevel, -0.5f }, { cabOn, 1 }, { cabType, 3 }, { cabMic, 35 }, { cabDist, 40 } } },
-        { "Octave Panic Rig", amps, "The Noise, the whole rig: SHIFT's octaves with ANGER / FRENZY / BUZZ in front of a STEEL lead amp. Hold SHIFT A / B.",
+        { "Octave Panic Rig", amps, "The whole panic rig: SHIFT's octaves with ANGER / FRENZY / BUZZ in front of a STEEL lead amp. Hold SHIFT A / B.",
           { { rise, 25 }, { fall, 40 }, { panic, 50 }, { chaos, 20 }, { speed, 30 },
             { ampOn, 1 }, { ampChannel, 2 }, { ampGain, 7 }, { ampMid, 6.5f }, { ampTreble, 6 }, { ampGate, 40 },
             { cabOn, 1 }, { cabType, 3 }, { cabMic, 25 }, { cabDist, 10 } } },

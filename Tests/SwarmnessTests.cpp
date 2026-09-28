@@ -429,7 +429,7 @@ namespace
         check (std::abs (fastFall) < 0.5f, juce::String::formatted ("FALL 0 with RISE 1 s: home immediately (%.1f st)", fastFall));
     }
 
-    void testRainbowInterval()
+    void testTrailsInterval()
     {
         std::printf ("\nRAINBOW primary voice interval (220 Hz sine, dry removed)\n");
         for (bool raw : { false, true })
@@ -652,7 +652,7 @@ namespace
                 for (int i = 0; i < input.getNumSamples(); ++i)
                     input.setSample (ch, i, amp * (rng.nextFloat() * 2.0f - 1.0f));
 
-            for (const char* preset : { "Swollen Smoke", "Glare Scream", "Doom Cathedral", "Smoked Out", "Hive Collapse", "Noise - Octave Panic" })
+            for (const char* preset : { "Jumbo Smoke", "Glare Scream", "Doom Cathedral", "Smoked Out", "Hive Collapse", "Panic - Octave Panic" })
             {
                 SwarmnessAudioProcessor p;
                 p.getPresetManager().loadPreset (preset);
@@ -3323,7 +3323,7 @@ int main (int argc, char** argv)
     testNoiseOctaves();
     testFootswitchRelease();
     testRiseFall();
-    testRainbowInterval();
+    testTrailsInterval();
     testMagicBounded();
     testFuzzLevel();
     testGlareOctave();

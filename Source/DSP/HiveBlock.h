@@ -12,7 +12,7 @@
  *  VOICES  DRONE (PITCH interval) and QUEEN (its octave) harmonise whatever reaches the block -
  *          after SHIFT in the chain they follow the shifted note, before it they do not.
  *          TRACKING: tight .. laggy with repeating grains.
- *  TRAILS  pitch-shifting regeneration (Rainbow Machine style), shaped by a STEP pattern like a
+ *  TRAILS  pitch-shifting regeneration (a climbing pitch delay), shaped by a STEP pattern like a
  *          pattern tremolo - but its steps are the repeats. Step k = repeat k+1 after the note
  *          (restarts on every picked note, or follows the host grid with SYNC). Each step has a
  *          LEVEL (0 = a silent repeat, the tail keeps running underneath) and a MOVE:
@@ -217,7 +217,7 @@ public:
 
         for (auto* v : allVoices())
             v->setRaw (s.raw);
-        // RAW: the Rainbow-Machine-style warble - deeper and slower as TRACKING goes down
+        // RAW: a vintage pitch-delay warble - deeper and slower as TRACKING goes down
         const float loose = 1.0f - s.tracking;
         droneVoice.setRawCharacter (7.0f + 10.0f * loose, 4.0f, 0.5f);
         queenVoice.setRawCharacter (9.0f + 12.0f * loose, 3.3f, 0.5f);

@@ -53,6 +53,8 @@ public:
 
     /** "Waiting for TONE3000 in your browser...", "Downloading 3 models...", errors (message thread). */
     juce::String getStatus() const;
+    /** What the last browse was for (message thread). */
+    Target getTarget() const noexcept { return target; }
     bool isBusy() const noexcept { return isThreadRunning(); }
 
     /** Called on the message thread when a tone has been downloaded. */

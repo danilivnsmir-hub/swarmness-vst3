@@ -261,4 +261,75 @@ namespace AmpFaceplate
         g.setColour (Theme::Colours::textDim);
         g.drawFittedText (about, t.toNearestInt(), juce::Justification::topLeft, 4, 1.0f);
     }
+
+    /** The CAB's panel: speaker grille cloth behind its knobs (`type` = CabBlock type: 0 1x12 OPEN,
+        1 2x12 OPEN, 2 4x12 BRIT = salt & pepper weave, 3 4x12 MOD = black cloth, 4 IR). Artwork
+        override: cab_grille_<type>.png (1320 x 210 px) in Source/Assets/Skin. */
+    inline void drawGrille (juce::Graphics& g, juce::Rectangle<float> r, int type, bool on)
+    {
+        const float corner = 7.0f;
+        juce::Path shape;
+        shape.addRoundedRectangle (r, corner);
+        juce::Graphics::ScopedSaveState save (g);
+        g.reduceClipRegion (shape);
+
+        if (auto img = artwork ("cab_grille_" + juce::String (type) + "_png"); img.isValid())
+            g.drawImage (img, r, juce::RectanglePlacement::fillDestination);
+        else
+        {
+            const bool brit = type == 2, open = type <= 1, ir = type >= 4;
+            const juce::Colour base = brit ? juce::Colour (0xff2b2721) : open ? juce::Colour (0xff231d17) : juce::Colour (0xff141416);
+            g.setGradientFill (juce::ColourGradient (base.brighter (0.25f), r.getCentreX(), r.getY(), base.darker (0.5f), r.getCentreX(), r.getBottom(), false));
+            g.fillRect (r);
+            // the weave: two sets of fine diagonals, the threads a little uneven
+            juce::Random rng (1234 + type);
+            const juce::Colour thread = brit ? juce::Colour (0xffb8ab8c) : open ? juce::Colour (0xff8a6a3e) : juce::Colour (0xff5a5a60);
+            for (int dir = 0; dir < 2; ++dir)
+                for (float x = r.getX() - r.getHeight(); x < r.getRight(); x += 3.0f)
+                {
+                    g.setColour (thread.withAlpha ((brit ? 0.10f : 0.07f) + 0.05f * rng.nextFloat()));
+                    const float x2 = x + r.getHeight();
+                    if (dir == 0) g.drawLine (x, r.getBottom(), x2, r.getY(), 0.8f);
+                    else          g.drawLine (x, r.getY(), x2, r.getBottom(), 0.8f);
+                }
+            if (brit)   // salt & pepper flecks
+                for (int k = 0; k < (int) (r.getWidth() * r.getHeight() / 60.0f); ++k)
+                {
+                    g.setColour ((rng.nextBool() ? juce::Colour (0xffd8ccb0) : juce::Colours::black).withAlpha (0.18f));
+                    g.fillRect (r.getX() + rng.nextFloat() * r.getWidth(), r.getY() + rng.nextFloat() * r.getHeight(), 1.2f, 1.2f);
+                }
+            if (ir)     // IR: the cloth over a faint honeycomb baffle
+            {
+                g.setColour (juce::Colours::black.withAlpha (0.25f));
+                const float hs = 26.0f;
+                for (float y = r.getY() - hs; y < r.getBottom() + hs; y += hs * 0.87f)
+                    for (float x = r.getX() - hs; x < r.getRight() + hs; x += hs)
+                    {
+                        const float off = (int) ((y - r.getY()) / (hs * 0.87f)) % 2 == 0 ? 0.0f : hs * 0.5f;
+                        g.strokePath (Theme::hexagon (juce::Rectangle<float> (hs * 0.9f, hs * 0.9f).withCentre ({ x + off, y }), true), juce::PathStrokeType (1.0f));
+                    }
+            }
+            // the speakers showing through the cloth
+            const int cones = type == 0 ? 1 : type == 1 ? 2 : 4;
+            for (int k = 0; k < cones; ++k)
+            {
+                const float cx = r.getX() + r.getWidth() * ((float) k + 0.5f) / (float) cones;
+                const float rad = juce::jmin (r.getHeight() * 0.62f, r.getWidth() / (float) cones * 0.46f);
+                g.setGradientFill (juce::ColourGradient (juce::Colours::black.withAlpha (0.30f), cx, r.getCentreY(),
+                                                         juce::Colours::transparentBlack, cx + rad, r.getCentreY(), true));
+                g.fillEllipse (juce::Rectangle<float> (rad * 2.0f, rad * 2.0f).withCentre ({ cx, r.getCentreY() }));
+            }
+        }
+        // vignette + piping
+        g.setGradientFill (juce::ColourGradient (juce::Colours::transparentBlack, r.getCentreX(), r.getCentreY(),
+                                                 juce::Colours::black.withAlpha (0.45f), r.getX(), r.getY(), true));
+        g.fillRect (r);
+        if (! on)
+        {
+            g.setColour (juce::Colours::black.withAlpha (0.35f));
+            g.fillRect (r);
+        }
+        g.setColour (type == 2 ? juce::Colour (0xffc9a45c).withAlpha (on ? 0.8f : 0.4f) : Theme::Colours::panelBorder.brighter (0.2f));
+        g.strokePath (shape, juce::PathStrokeType (1.4f));
+    }
 }

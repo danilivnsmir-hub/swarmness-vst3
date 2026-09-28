@@ -63,6 +63,7 @@ public:
     double getRate() const noexcept { return rate.load(); }
 
     std::atomic<bool> active { false }, mute { false };
+    std::atomic<float> a4 { 440.0f };   // the reference pitch (saved with the session)
 
 private:
     std::array<float, kRingSize> ring {};

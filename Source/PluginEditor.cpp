@@ -110,9 +110,9 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     riseKnob  .attach (state, rise,   "RISE: time to glide into the interval when a SHIFT footswitch goes down");
     fallKnob  .attach (state, fall,   "FALL: time to glide back home when the footswitch is released");
     blendKnob .attach (state, stingMix, "MIX: dry / shifted while SHIFT is engaged. 50% = both at full level (doubled), 100% = only the shifted note");
-    panicKnob .attach (state, panic,  "ANGER (The Noise: Panic): a second voice detuned against the shifted note - sour beating, dissonant clusters");
-    chaosKnob .attach (state, chaos,  "FRENZY (The Noise: Chaos): random pitch jumps, wider and faster as you turn it up (SNAP = on 4ths / 5ths / octaves)");
-    speedKnob .attach (state, speed,  "BUZZ (The Noise: Speed): all-pass feedback + amplitude modulation - slow phasing up to ring-mod shrieks");
+    panicKnob .attach (state, panic,  "ANGER: a second voice detuned against the shifted note - sour beating, dissonant clusters");
+    chaosKnob .attach (state, chaos,  "FRENZY: random pitch jumps, wider and faster as you turn it up (SNAP = on 4ths / 5ths / octaves)");
+    speedKnob .attach (state, speed,  "BUZZ: all-pass feedback + amplitude modulation - slow phasing up to ring-mod shrieks");
     shDetuneKnob.attach (state, shDetune, "DETUNE: fine offset of the shifted note, -50..+50 cents - a sour SHIFT");
     attachButton (pitchPage, stackToggle, shStack, "STACK: holding SHIFT A and B together plays both intervals at once (a second voice splits off to B). Off = B wins");
     attachButton (pitchPage, shSnapToggle, shSnap, "SNAP: FRENZY jumps land on 4ths / 5ths / octaves (off = random in-between pitches)");
@@ -199,7 +199,7 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     oct1Switch  .setTooltip ("SHIFT A: transposes by the SHIFT A interval (hold, or click in LATCH mode) - works even while the plug-in is bypassed. Right-click: MIDI learn");
     oct2Switch  .setTooltip ("SHIFT B: transposes by the SHIFT B interval (wins over A, or adds to it with STACK) - works even while the plug-in is bypassed. Right-click: MIDI learn");
     magicSwitch .setTooltip ("VENOM: switches HIVE on and slams its trails into self-oscillation while held - works even with HIVE or the plug-in off. LINK switches bring SHIFT A / B along. Right-click: MIDI learn");
-    bypassSwitch.setTooltip ("Plug-in on / bypass. The octave and VENOM footswitches still work while bypassed, like momentary pedals. Right-click: MIDI learn");
+    bypassSwitch.setTooltip ("Plug-in on / bypass. The SHIFT and VENOM footswitches still work while bypassed, like momentary pedals. Right-click: MIDI learn");
     attachButton (*this, link1Switch, linkOct1, "LINK: pressing VENOM also engages SHIFT A");
     attachButton (*this, link2Switch, linkOct2, "LINK: pressing VENOM also engages SHIFT B");
     for (auto* c : std::initializer_list<juce::Component*> { &oct1Switch, &oct2Switch, &magicSwitch, &bypassSwitch, &inMeter, &outMeter })

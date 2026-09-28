@@ -120,7 +120,8 @@ public:
     /** TUNER: the editor opens it (active) and reads the guitar from it; MUTE silences the output while it is open. */
     TunerTap& getTuner() noexcept { return tunerTap; }
     int tone3000CabSlot = 0;   // the IR slot a TONE3000 cabinet goes to
-    juce::String getTone3000Status() const { return tone3000.getStatus(); }
+    /** The TONE3000 status line, only for the block that asked (the others stay quiet). */
+    juce::String getTone3000Status (Tone3000::Target t) const { return tone3000.getTarget() == t ? tone3000.getStatus() : juce::String(); }
     /** The previous / next capture (or IR) in the folder of the loaded one - e.g. the other models of a TONE3000 tone. */
     void stepNamModel (int direction, bool pedal = false);
     void stepCabIR (int direction, int slot = 0);

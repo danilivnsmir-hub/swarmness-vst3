@@ -6,7 +6,7 @@
 #include <array>
 
 /**
- * SHIFT - the footswitch pitch shifter (Whammy / Tallon "The Noise" style). The footswitches
+ * SHIFT - the footswitch pitch shifter (expression-pedal pitch shifter style). The footswitches
  * engage it while held (like a momentary pedal); its power button keeps SHIFT A engaged
  * (the caller passes that in as shiftA).
  *
@@ -16,9 +16,9 @@
  *  RISE / FALL        glide into the interval / back home
  *  MIX                dry / shifted, the same law as every MIX: 50% = both at full level,
  *                     100% = only the shifted note (like the pedal)
- *  ANGER              a second voice detuned against the shifted one (sour beating, "Panic")
- *  FRENZY             random pitch jumps ("Chaos"); SNAP = jumps land on 4ths / 5ths / octaves
- *  BUZZ               all-pass feedback + AM ("Speed")
+ *  ANGER              a second voice detuned against the shifted one (sour beating)
+ *  FRENZY             random pitch jumps; SNAP = jumps land on 4ths / 5ths / octaves
+ *  BUZZ               all-pass feedback + AM
  *  DETUNE, RAW        fine offset in cents; cheap-pedal-DSP character
  */
 class ShiftBlock

@@ -111,8 +111,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
             return (v > 0.0f ? "+" : "") + juce::String (v, 2) + " st";
         })));
     hive->addChild (toggle (rbSnap, "Hive Snap", true));
-    hive->addChild (percent (rbPrimary, "Drone", 60.0f));
-    hive->addChild (percent (rbSecondary, "Queen", 0.0f));
+    hive->addChild (percent (rbPrimary, "Hive Drone", 60.0f));
+    hive->addChild (percent (rbSecondary, "Hive Queen", 0.0f));
     hive->addChild (percent (rbTracking, "Hive Tracking", 80.0f));
 
     // TRAILS
@@ -166,7 +166,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     fz->addChild (percent (fuzzScoop, "Smoke Scoop", 40.0f));
     fz->addChild (percent (fuzzGlare, "Smoke Glare", 0.0f));
     fz->addChild (percent (fuzzGate, "Smoke Gate", 0.0f));
-    fz->addChild (percent (fuzzBlend, "Smoke Blend", 0.0f));
+    fz->addChild (percent (fuzzBlend, "Smoke Clean", 0.0f));
     fz->addChild (percent (fuzzSag, "Smoke Sag", 40.0f));
 
     // ------------------------------------------------------------------- FLOW
@@ -339,7 +339,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
             return (v > 0.05f ? "+" : "") + juce::String (v, 1) + " dB";
         })));
     out->addChild (std::make_unique<juce::AudioParameterFloat> (
-        pid (output), "Output", juce::NormalisableRange<float> (ParamRanges::outputMinDb, ParamRanges::outputMaxDb, 0.1f), 0.0f,
+        pid (output), "Volume", juce::NormalisableRange<float> (ParamRanges::outputMinDb, ParamRanges::outputMaxDb, 0.1f), 0.0f,
         Attr().withLabel ("dB").withStringFromValueFunction ([] (float v, int)
         {
             return (v > 0.05f ? "+" : "") + juce::String (v, 1) + " dB";

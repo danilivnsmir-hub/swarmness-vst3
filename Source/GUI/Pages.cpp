@@ -948,7 +948,7 @@ AmpCabSection::AmpCabSection (SwarmnessAudioProcessor& p)
     presenceKnob.attach (state, ampPresence, "PRESENCE: power-amp feedback - more bite and air up top");
     depthKnob   .attach (state, ampDepth,    "DEPTH: power-amp resonance - the low-end thump of a closed cabinet");
     masterKnob  .attach (state, ampMaster,   "MASTER: how hard the power amp is pushed - sag, compression and power-tube grind as it goes up");
-    gateKnob    .attach (state, ampGate,     "GATE: noise gate in front of the amp - silences hiss and hum between riffs (0 = off)");
+    gateKnob    .attach (state, ampGate,     "GATE: noise gate keyed from the guitar, on the amp's input and output - silences hiss and hum between riffs (0 = off)");
     levelKnob   .attach (state, ampLevel,    "LEVEL: AMP output level");
     for (auto* k : { &gainKnob, &bassKnob, &midKnob, &trebleKnob, &presenceKnob, &depthKnob, &masterKnob, &gateKnob, &levelKnob })
         addAndMakeVisible (k);
@@ -1012,10 +1012,12 @@ AmpCabSection::AmpCabSection (SwarmnessAudioProcessor& p)
     irToneButton.setTooltip (Tone3000::isConfigured() ? "TONE3000: pick a cabinet IR in your browser - it downloads and loads into the selected slot"
                                                       : "Open TONE3000 in the browser - thousands of free cabinet IRs");
     irToneButton.onClick = [this] { processor.browseTone3000 (Tone3000::Target::cab, Tone3000::Architecture::a1, irSlot); };
-    irPrev.setTooltip ("Previous IR in the same folder");
-    irNext.setTooltip ("Next IR in the same folder");
+    irPrev.setTooltip ("Previous IR in slot A's folder");
+    irNext.setTooltip ("Next IR in slot A's folder");
     irPrev.onClick = [this] { processor.stepCabIR (-1, 0); };
     irNext.onClick = [this] { processor.stepCabIR (1, 0); };
+    irPrev2.setTooltip ("Previous IR in slot B's folder");
+    irNext2.setTooltip ("Next IR in slot B's folder");
     irPrev2.onClick = [this] { processor.stepCabIR (-1, 1); };
     irNext2.onClick = [this] { processor.stepCabIR (1, 1); };
     addAndMakeVisible (loadIrButton);
@@ -1080,6 +1082,7 @@ void AmpCabSection::resized()
         for (auto* k : row)
             k->setBounds ((int) (cabArea.getX() + 6.0f + step * ((float) i++ + 0.5f)) - 34, 70, 68, 100);
     }
+    grilleArea = { cabArea.getX() + 10.0f, 68.0f, cabArea.getWidth() - 20.0f, 104.0f };
     curveArea = { cabArea.getX() + 14.0f, 176.0f, cabArea.getWidth() - 28.0f - 104.0f, h - 186.0f };
     {
         const int bx = (int) curveArea.getRight() + 8, by = (int) curveArea.getY(), bh = 20, gap = (int) (curveArea.getHeight() - 3 * bh) / 2;
@@ -1109,6 +1112,7 @@ void AmpCabSection::paint (juce::Graphics& g)
     // the channel's faceplate behind the knobs, and its nameplate (or the NAM card)
     const int style = namMode ? (int) AmpFaceplate::nam : juce::jlimit (0, 2, channel);
     AmpFaceplate::drawPlate (g, plateArea, style, ampOn);
+    AmpFaceplate::drawGrille (g, grilleArea, cabType, cabOn);
     if (! namMode)
     {
         static const char* about[3] { "Crystal clean: solid-state headroom to the top, a tight bottom and a glassy top - your guitar's own dynamics, "
@@ -1162,10 +1166,10 @@ void AmpCabSection::paint (juce::Graphics& g)
             auto t = row.withTrimmedLeft (28.0f).withTrimmedRight (54.0f);
             const bool has = desc[k]->isNotEmpty();
             juce::String line = has ? *desc[k] : juce::String (k == 0 ? "no IR - load or drop one here" : "empty - load a second IR to blend");
-            if (selected && (message.isNotEmpty() || toneStatus.isNotEmpty()))
-                line = message.isNotEmpty() ? message : toneStatus;
+            if (selected && (message.isNotEmpty() || toneStatusCab.isNotEmpty()))
+                line = message.isNotEmpty() ? message : toneStatusCab;
             g.setFont (font (has ? 13.0f : 12.0f, has));
-            g.setColour (selected && message.isNotEmpty() ? Colours::ledRed : selected && toneStatus.isNotEmpty() ? Colours::accent
+            g.setColour (selected && message.isNotEmpty() ? Colours::ledRed : selected && toneStatusCab.isNotEmpty() ? Colours::accent
                                                                               : has ? Colours::text : Colours::textFaint);
             g.drawFittedText (line, t.toNearestInt(), juce::Justification::centredLeft, 1, 0.8f);
         }
@@ -1201,9 +1205,14 @@ void AmpCabSection::tick()
     const float nowMic = state.getRawParameterValue (ParamIDs::cabMic)->load() * 0.01f;
     const float nowDist = state.getRawParameterValue (ParamIDs::cabDist)->load() * 0.01f;
     const auto nowNam = processor.getNamModelDescription(), nowIr = processor.getCabIRDescription(), nowIr2 = processor.getCabIRDescription (1);
-    if (const auto st = processor.getTone3000Status(); st != toneStatus)
+    if (const auto st = processor.getTone3000Status (Tone3000::Target::amp); st != toneStatus)
     {
         toneStatus = st;
+        repaint();
+    }
+    if (const auto st = processor.getTone3000Status (Tone3000::Target::cab); st != toneStatusCab)
+    {
+        toneStatusCab = st;
         repaint();
     }
     if (messageTicks > 0 && --messageTicks == 0)
@@ -1238,8 +1247,12 @@ void AmpCabSection::tick()
             k->setVisible (! namMode);
         for (auto* k : { &namInputKnob, &namBassKnob, &namMidKnob, &namTrebleKnob, &namPresenceKnob, &namDepthKnob, &namOutputKnob })
             k->setVisible (namMode);
-        for (auto* k : { &micKnob, &distKnob })
-            k->setAlpha (cabIrMode ? 0.35f : 1.0f);
+        // a block that is off: its knobs step back (still usable), like the other pages
+        for (auto* k : { &gainKnob, &bassKnob, &midKnob, &trebleKnob, &presenceKnob, &depthKnob, &masterKnob, &gateKnob, &levelKnob,
+                         &namInputKnob, &namBassKnob, &namMidKnob, &namTrebleKnob, &namPresenceKnob, &namDepthKnob, &namOutputKnob })
+            k->setAlpha (ampOn ? 1.0f : 0.45f);
+        for (auto* k : { &micKnob, &distKnob, &lowCutKnob, &highCutKnob, &cabLevelKnob, &irMixKnob })
+            k->setAlpha (cabOn ? 1.0f : 0.45f);
         repaint();
     }
 }
@@ -1372,6 +1385,8 @@ WaspSection::WaspSection (SwarmnessAudioProcessor& p)
     toneButton.onClick = [this] { tone3000Menu (processor, toneButton, Tone3000::Target::pedal); };
     clearButton.setTooltip ("Forget the pedal capture");
     clearButton.onClick = [this] { processor.clearNamModel (true); message.clear(); };
+    prevButton.setTooltip ("Previous pedal capture in the same folder");
+    nextButton.setTooltip ("Next pedal capture in the same folder");
     prevButton.onClick = [this] { processor.stepNamModel (-1, true); };
     nextButton.onClick = [this] { processor.stepNamModel (1, true); };
     liteToggle.setTooltip ("A2 captures hold two sizes of the same model: Full (best) and Lite (a fraction of the CPU)");
@@ -1579,7 +1594,7 @@ void WaspSection::tick()
 {
     const auto s = current();
     bool changed = false;
-    if (const auto st = processor.getTone3000Status(); st != toneStatus)
+    if (const auto st = processor.getTone3000Status (Tone3000::Target::pedal); st != toneStatus)
     {
         toneStatus = st;
         changed = true;

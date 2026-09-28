@@ -6,13 +6,13 @@
 #include <cstring>
 
 /**
- * SMOKE: high-gain, Muff-family fuzz voiced after the Swollen Pickle and the Cathedral,
+ * SMOKE: high-gain, three-stage jumbo fuzz,
  * oversampled to ~176-192 kHz (linear-phase FIR half-band filters).
  *
  *  VOICE : pre-clip EQ. DOWN = doom low-mids with the full bottom end, MID = classic
  *          jumbo fuzz, UP = tight low end and screaming upper mids
  *  FUZZ  : from dirty crunch to wall-of-fuzz sustain (three cascaded clipping stages
- *          with inter-stage low-passes, like the transistor/diode stages of a Muff)
+ *          with inter-stage low-passes, like the transistor/diode stages of a classic jumbo fuzz)
  *  TONE  : tilt around 800 Hz plus a fizz low-pass that opens with the tone
  *  SCOOP : mid cut depth (0 = flat mids, max = deep scoop); the centre follows VOICE
  *  GLARE : rectified octave-up mixed between the gain stages, gated so it only rips
@@ -29,7 +29,7 @@
  * Touch comes from the circuit itself, not from a volume follower: both clipping stages are
  * diode-feedback stages whose output keeps growing with the logarithm of the input, so a lighter
  * touch is rounder, less fizzy and a little quieter - a lot at low FUZZ (it cleans up), only a
- * little at full FUZZ (a Muff at max sustain is compressed; there the touch is in the texture).
+ * little at full FUZZ (a jumbo fuzz at max sustain is compressed; there the touch is in the texture).
  * The input also loads the pickup like a real fuzz input does (damped resonance, earlier roll-off).
  *
  * Built-in noise gate (always on, like the gate every high-gain rig needs): a soft

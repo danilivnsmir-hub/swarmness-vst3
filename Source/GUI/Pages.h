@@ -192,7 +192,7 @@ private:
 
     SwarmnessAudioProcessor& processor;
     juce::AudioProcessorValueTreeState& state;
-    juce::Rectangle<float> ampArea, cabArea, morphArea, curveArea, plateArea;
+    juce::Rectangle<float> ampArea, cabArea, morphArea, curveArea, plateArea, grilleArea;
 
     PowerButton ampPower, cabPower;
     SegmentedChoice channelSelector, cabSelector;
@@ -210,7 +210,7 @@ private:
     int irSlot = 0;   // the IR slot LOAD IR / TONE3000 / CLEAR act on
     juce::String cabIrDescription2;
     PillToggle namLiteToggle { "LITE" };
-    juce::String toneStatus;
+    juce::String toneStatus, toneStatusCab;   // TONE3000 progress for the AMP and for the CAB
 
     std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>> buttonAttachments;
     std::unique_ptr<juce::FileChooser> chooser;

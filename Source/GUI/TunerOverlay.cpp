@@ -13,8 +13,8 @@ TunerOverlay::TunerOverlay (TunerTap& t) : tap (t)
     closeButton.onClick = [this] { close(); };
     refDown.setTooltip ("Reference pitch down");
     refUp.setTooltip ("Reference pitch up");
-    refDown.onClick = [this] { a4 = juce::jmax (430.0f, a4 - 1.0f); repaint(); };
-    refUp.onClick = [this] { a4 = juce::jmin (450.0f, a4 + 1.0f); repaint(); };
+    refDown.onClick = [this] { a4 = juce::jmax (430.0f, a4 - 1.0f); tap.a4.store (a4); repaint(); };
+    refUp.onClick = [this] { a4 = juce::jmin (450.0f, a4 + 1.0f); tap.a4.store (a4); repaint(); };
     for (juce::Component* c : { (juce::Component*) &muteToggle, (juce::Component*) &closeButton, (juce::Component*) &refDown, (juce::Component*) &refUp })
         addAndMakeVisible (c);
     setVisible (false);
@@ -29,6 +29,7 @@ void TunerOverlay::open()
 {
     tap.mute.store (muteToggle.getToggleState());
     tap.active.store (true);
+    a4 = juce::jlimit (430.0f, 450.0f, tap.a4.load());
     midi = -1;
     silentTicks = 999;
     setVisible (true);

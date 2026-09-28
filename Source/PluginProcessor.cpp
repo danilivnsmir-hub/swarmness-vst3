@@ -1173,6 +1173,7 @@ void SwarmnessAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
     state.setProperty ("pedalNam", getNamModelFile (true).getFullPathName(), nullptr);
     state.setProperty ("cabIR", getCabIRFile().getFullPathName(), nullptr);
     state.setProperty ("cabIR2", getCabIRFile (1).getFullPathName(), nullptr);
+    state.setProperty ("tunerA4", tunerTap.a4.load(), nullptr);
     juce::StringArray bindings;
     for (const auto& b : midiBindings)
         if (const int index = b.param.load(); index >= 0 && b.kind.load() != 0)
@@ -1289,6 +1290,7 @@ void SwarmnessAudioProcessor::setStateInformation (const void* data, int sizeInB
                 loadCabIR (juce::File (cabPath));
             else
                 clearCabIR();
+            tunerTap.a4.store (juce::jlimit (430.0f, 450.0f, (float) (double) tree.getProperty ("tunerA4", 440.0)));
             const auto cabPath2 = tree.getProperty ("cabIR2").toString();
             if (cabPath2.isNotEmpty() && juce::File::isAbsolutePath (cabPath2) && juce::File (cabPath2).existsAsFile())
                 loadCabIR (juce::File (cabPath2), 1);

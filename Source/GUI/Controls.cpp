@@ -919,7 +919,7 @@ void InfoOverlay::paint (juce::Graphics& g)
     static const Item items[] =
     {
         { "SHIFT",    "Pitch shifter: on = SHIFT A all the time; the footswitches engage it while held (any interval, -24..+24 st). RISE / FALL glide, MIX = replace or double, "
-                      "STACK = A + B together play both intervals. ANGER / FRENZY / BUZZ = The Noise's Panic / Chaos / Speed." },
+                      "STACK = A + B together play both intervals. ANGER = a sour second voice, FRENZY = random jumps, BUZZ = phaser / ring-mod grind." },
         { "HIVE",     "Harmonies of whatever reaches it (after SHIFT: of the shifted note). DRONE at PITCH and QUEEN (its octave), TRACKING tight..laggy. "
                       "VENOM switches it on while held." },
         { "TRAILS",   "Repeats of the DRONE, shaped by STEPS like a pattern tremolo: each bar = one repeat (LEVEL, 0 = silent) and its MOVE "
@@ -934,7 +934,8 @@ void InfoOverlay::paint (juce::Graphics& g)
                       "before the clipping, BRIGHT = voicing, VOLUME (5 = about unity), GATE = noise gate keyed from the guitar." },
         { "AMP",      "Three amps: CLEAN = CHROME (crystal clean), CRUNCH = BRIT (barking crunch), LEAD = STEEL (tight high gain). "
                       "NAM = a Neural Amp Modeler capture with its own INPUT / EQ / OUTPUT knobs (all at 5 = the capture as it is) - LOAD .NAM or drop one, find thousands on TONE3000. GATE = noise gate keyed from the guitar (on the amp's input and output)." },
-        { "CAB",      "Speaker cabinet: four modelled cabinets (MIC = cap..edge, DISTANCE = grille..room) or your own IR (LOAD IR or drop a WAV)." },
+        { "CAB",      "Speaker cabinet: four modelled cabinets (MIC = cap..edge, DISTANCE = grille..room) or your own IRs in two slots A / B "
+                      "(LOAD IR, TONE3000 or drop a WAV on a slot; A / B MIX blends them, time-aligned; INV B flips B's phase)." },
         { "CHAIN",    "The strip under the header is the signal chain. Drag a block to reorder it (fuzz before or after the pitch, reverb into the fuzz...), "
                       "click it to open its page, click its LED to switch it on / off, right-click for MIDI learn. Drag it UP / DOWN for parallel paths A / B (an empty path = dry), "
                       "the knob at the merge balances A and B. Order and paths are saved with presets." },
