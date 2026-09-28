@@ -10,17 +10,18 @@
 
 /**
  * WASP - a tight overdrive / boost for the front of an amp (in the spirit of the modern
- * "precision" metal drives: a TS-family core with a low-end tightening control and a gate).
+ * "precision" metal drives), with a low-end tightening control and a gate.
  *
- * The core is the classic non-inverting op-amp clipper, solved as a circuit:
- *   - the gain leg (4.7k + 47 nF) only passes what is above ~720 Hz, so the lows stay clean and
- *     the clipped signal sits on top of the dry one - the mid hump and the "amp in front of an amp"
- *     feel come from there;
- *   - two silicon diodes in the feedback path clip softly; the feedback voltage is the implicit
- *     solution of  i_leg = v/Rf + 2 Is sinh(v / (n Vt))  (Newton, per sample, oversampled);
- *   - the 51 pF feedback cap rolls the clipped part off (more DRIVE = darker fizz, like the real one).
- * ATTACK tightens the low end in front of the clipper (20 Hz .. 500 Hz), BRIGHT tilts the output
- * filter, GATE is a noise gate keyed from the input, VOLUME the output level (5 = about unity).
+ * The circuit, solved per sample (oversampled):
+ *   - a non-inverting op-amp gain stage: the gain leg (R + 47 nF) only boosts the upper mids and
+ *     up, soft diodes in its feedback round the first bit of overload;
+ *   - then the hard clipper: a small series resistor into diodes to ground, more diodes on one
+ *     side than the other, so the negative half flattens first - the square, asymmetric (even
+ *     harmonics) clipping of the real pedal, not a TS's smooth compression;
+ *   - BRIGHT tilts the output filter, then a two-pole top roll-off.
+ * The values are fitted to captures of the real pedal (see Tune). ATTACK tightens the low end in
+ * front of it all (20 Hz .. 500 Hz), GATE is a noise gate keyed from the input, VOLUME the output
+ * level (5 = about unity).
  *
  * NAM mode runs a loaded pedal capture (.nam) instead, with its own INPUT / OUTPUT trims (5 = the
  * capture as it is: its own gain is the pedal's) and the same GATE.
@@ -36,6 +37,25 @@ public:
         bool nam = false;                                                   // a pedal capture instead of WASP
         float namInput = 0.5f, namOutput = 0.5f;                            // 0..1, 5 = as captured (+-18 dB)
     };
+
+    /** The circuit's values (fitted to captures of the real pedal; SwarmnessAmpLab --set wasp:k=v edits them). */
+    struct Tune
+    {
+        // fitted (SwarmnessAmpLab + CMA-ES) to three captures of the real pedal: waveforms at four levels,
+        // H2 / H3 / H5 and compression over 40 dB of input, the small-signal response
+        float rfMin = 5.539e+04f;        // DRIVE at 0 still has gain
+        float legOhms = 4707.0f;      // gain leg (with 47 nF: its corner)
+        float fbIs = 1.616e-07f;         // feedback diodes: soft, early
+        float fbAsym = 0.907f;
+        float hardRs = 516.8f;        // then the hard clipper: series resistor into diodes to ground
+        float hardIs = 1.581e-07f;
+        float hardNpos = 2.338f, hardNneg = 0.7015f;   // asymmetric: the negative side flattens first
+        float toneHz = 754.4f, brightLo = -10.29f, brightSpan = 20.0f;
+        float outBase = 2063.0f, outSpan = 5000.0f;
+        float makeup = 3.4f;          // VOLUME 5 at DRIVE ~3 = unity
+        float inDb = -14.96f;         // level into the circuit (vs our 0 dBFS = 2.5 V)
+    };
+    static Tune& tune() noexcept { static Tune t; return t; }
 
     //==============================================================================
     void prepare (double sampleRate, int maxBlockSize)
@@ -168,7 +188,7 @@ public:
     static float feedbackOhms (float drive) noexcept
     {
         const float taper = (std::exp (4.0f * drive) - 1.0f) / (std::exp (4.0f) - 1.0f);   // audio taper pot
-        return kRfMin + 500000.0f * taper;
+        return tune().rfMin + 500000.0f * taper;
     }
 
     int getOversampling() const noexcept { return 1 << osLog2; }
@@ -182,35 +202,60 @@ public:
         const double wa = 2.0 * juce::MathConstants<double>::pi * attackFor (s.attack);
         const cd hp = (jw * jw) / (jw * jw + jw * wa / 0.7071 + wa * wa);
         const double rf = feedbackOhms (s.drive);
-        const cd zLeg = (double) kLegOhms + 1.0 / (jw * 47.0e-9);
+        const auto& t = tune();
+        const cd zLeg = (double) t.legOhms + 1.0 / (jw * 47.0e-9);
         const cd zF = rf / (1.0 + jw * rf * 51.0e-12);
         const cd core = 1.0 + zF / zLeg;
-        const cd lp = 1.0 / (1.0 + jw / (2.0 * juce::MathConstants<double>::pi * 723.0));
-        const double bg = juce::Decibels::decibelsToGain (-14.0 + 20.0 * s.bright);
+        const cd lp = 1.0 / (1.0 + jw / (2.0 * juce::MathConstants<double>::pi * t.toneHz));
+        const double bg = juce::Decibels::decibelsToGain (t.brightLo + t.brightSpan * s.bright);
         const cd tone = lp + bg * (1.0 - lp);
-        const cd out1 = 1.0 / (1.0 + jw / (2.0 * juce::MathConstants<double>::pi * (5000.0 + 5000.0 * s.bright)));
+        const cd out1 = 1.0 / (1.0 + jw / (2.0 * juce::MathConstants<double>::pi * (t.outBase + t.outSpan * s.bright)));
         const cd out = out1 * out1;
-        return (float) (20.0 * std::log10 (std::abs (hp * core * tone * out) * kMakeup + 1.0e-12));
+        return (float) (20.0 * std::log10 (std::abs (hp * core * tone * out) * t.makeup * juce::Decibels::decibelsToGain (t.inDb) + 1.0e-12));
     }
 
     /** Static clipping curve above the leg's corner: output volts for input volts (editor / tests). */
     static float transferVolts (float drive, float xVolts) noexcept
     {
-        const float invR = 1.0f / feedbackOhms (drive), i = xVolts / kLegOhms;
+        const auto& t = tune();
+        const float invR = 1.0f / feedbackOhms (drive), i = xVolts / t.legOhms;
         float v = 0.0f;
         for (int it = 0; it < 60; ++it)
         {
             const float e = std::exp (juce::jlimit (-40.0f, 40.0f, v / kNVt));
-            const float f = v * invR + kIs * (e - 1.0f) - kIsNeg * (1.0f / e - 1.0f) - i;
-            const float d = invR + (kIs * e + kIsNeg / e) / kNVt;
+            const float f = v * invR + t.fbIs * (e - 1.0f) - t.fbIs * t.fbAsym * (1.0f / e - 1.0f) - i;
+            const float d = invR + (t.fbIs * e + t.fbIs * t.fbAsym / e) / kNVt;
             const float step = juce::jlimit (-0.1f, 0.1f, f / d);
             v -= step;
             if (std::abs (step) < 1.0e-7f)
                 break;
         }
-        return xVolts + v;
+        float y = railKnee (xVolts + v);
+        float h = 0.0f;
+        for (int it = 0; it < 60 && t.hardRs > 0.0f; ++it)
+            if (hardStep (h, y, 1.0f / t.hardRs, t) < 1.0e-7f)
+                break;
+        return t.hardRs > 0.0f ? h : y;
+    }
+
+    /** The op-amp's output swings to ~4.2 V on a 9 V supply: a soft knee above 3 V. */
+    static float railKnee (float y) noexcept
+    {
+        return std::abs (y) > 3.0f ? std::copysign (3.0f + 1.2f * std::tanh ((std::abs (y) - 3.0f) / 1.2f), y) : y;
+    }
+    /** One Newton step of the hard clipper: (h - y) / Rs + Is (e^(h/Np nVt) - 1) - Is (e^(-h/Nn nVt) - 1) = 0. */
+    static float hardStep (float& h, float y, float invRs, const Tune& t) noexcept
+    {
+        const float np = t.hardNpos * kNVt, nn = t.hardNneg * kNVt;
+        const float ep = std::exp (juce::jlimit (-40.0f, 40.0f, h / np)), en = std::exp (juce::jlimit (-40.0f, 40.0f, -h / nn));
+        const float f = (h - y) * invRs + t.hardIs * (ep - 1.0f) - t.hardIs * (en - 1.0f);
+        const float d = invRs + t.hardIs * (ep / np + en / nn);
+        const float step = juce::jlimit (-0.2f, 0.2f, f / d);
+        h -= step;
+        return std::abs (step);
     }
     static constexpr float kVolts = 2.5f;          // 0 dBFS = 2.5 V (same scale as AMP)
+
 
 private:
     struct ChannelState
@@ -218,21 +263,17 @@ private:
         float hpX1 = 0.0f, hpX2 = 0.0f, hpY1 = 0.0f, hpY2 = 0.0f;   // ATTACK (2nd-order high-pass)
         float legX = 0.0f, legY = 0.0f;                             // 720 Hz gain leg
         float v = 0.0f;                                             // diode voltage (Newton warm start)
+        float h = 0.0f;                                             // hard clipper node (warm start)
         float cf = 0.0f;                                            // feedback cap
         float toneLp = 0.0f, outLp = 0.0f, outLp2 = 0.0f;
         float dcX = 0.0f, dcY = 0.0f;
     };
 
-    static constexpr float kIs = 2.52e-9f;         // 1N914
-    static constexpr float kIsNeg = 0.5f * kIs;    // the other diode clips a little later: a touch of even harmonics
-    static constexpr float kRfMin = 33000.0f;      // DRIVE at 0 still has gain (x8): the TS-family mid hump and bite
     static constexpr float kNVt = 1.752f * 0.02585f;
-    static constexpr float kLegOhms = 4700.0f;
-    static constexpr float kMakeup = 0.9f;          // VOLUME 5 at DRIVE ~3 = unity
 
     float processSample (ChannelState& st, float in) noexcept
     {
-        const float x0 = in * kVolts;
+        const float x0 = in * kVolts * inGain;
 
         // ATTACK: 2nd-order high-pass in front of everything
         const float x = hb0 * x0 + hb1 * st.hpX1 + hb2 * st.hpX2 - ha1 * st.hpY1 - ha2 * st.hpY2;
@@ -242,15 +283,15 @@ private:
         // gain leg: 4.7k + 47 nF to ground from the inverting input -> current = HP720(x) / 4.7k
         const float leg = legA * (st.legY + x - st.legX);
         st.legX = x; st.legY = leg;
-        const float i = leg / kLegOhms;
+        const float i = leg * invLeg;
 
         // feedback: Rf || two diodes; solve i = v/Rf + 2 Is sinh(v / nVt)
         float v = st.v;
         for (int it = 0; it < 6; ++it)
         {
             const float e = std::exp (juce::jlimit (-40.0f, 40.0f, v / kNVt));
-            const float f = v * invRf + kIs * (e - 1.0f) - kIsNeg * (1.0f / e - 1.0f) - i;
-            const float d = invRf + (kIs * e + kIsNeg / e) / kNVt;
+            const float f = v * invRf + fbIs * (e - 1.0f) - fbIsNeg * (1.0f / e - 1.0f) - i;
+            const float d = invRf + (fbIs * e + fbIsNeg / e) / kNVt;
             const float step = juce::jlimit (-0.1f, 0.1f, f / d);
             v -= step;
             if (std::abs (step) < 1.0e-6f)
@@ -260,17 +301,24 @@ private:
 
         // 51 pF across the feedback: the clipped part loses its top as Rf grows
         st.cf += cfA * (v - st.cf);
-        float y = x + st.cf;
-        // the op-amp's output swings to ~4.2 V on a 9 V supply: a soft knee above 3 V
-        if (std::abs (y) > 3.0f)
-            y = std::copysign (3.0f + 1.2f * std::tanh ((std::abs (y) - 3.0f) / 1.2f), y);
+        float y = railKnee (x + st.cf);
+
+        // hard clipping: diodes to ground behind a series resistor, more diodes on one side
+        if (invRs > 0.0f)
+        {
+            const auto& t = tune();
+            for (int it = 0; it < 8; ++it)
+                if (hardStep (st.h, y, invRs, t) < 1.0e-6f)
+                    break;
+            y = st.h;
+        }
 
         // BRIGHT: tilt around 720 Hz (1k / 0.22 uF), then the output roll-off
         st.toneLp += toneA * (y - st.toneLp);
         y = st.toneLp + brightG * (y - st.toneLp);
         st.outLp += outA * (y - st.outLp);
         st.outLp2 += outA * (st.outLp - st.outLp2);
-        return st.outLp2 / kVolts * kMakeup;
+        return st.outLp2 / kVolts * makeup;
     }
 
     static float onePoleA (double hz, double rate) noexcept
@@ -292,13 +340,20 @@ private:
             hb0 = (float) ((1.0 + cw) * 0.5 / a0); hb1 = (float) (-(1.0 + cw) / a0); hb2 = hb0;
             ha1 = (float) (-2.0 * cw / a0);         ha2 = (float) ((1.0 - alpha) / a0);
         }
-        legA = (float) std::exp (-2.0 * juce::MathConstants<double>::pi * 720.0 / fsOs);
+        const auto& t = tune();
+        legA = (float) std::exp (-1.0 / (t.legOhms * 47.0e-9) / fsOs);   // corner 1 / (2 pi R C)
+        invLeg = 1.0f / t.legOhms;
+        fbIs = t.fbIs;
+        fbIsNeg = t.fbIs * t.fbAsym;
+        invRs = t.hardRs > 0.0f ? 1.0f / t.hardRs : 0.0f;
+        makeup = t.makeup;
+        inGain = juce::Decibels::decibelsToGain (t.inDb);
         const float rf = feedbackOhms (settings.drive);
         invRf = 1.0f / rf;
         cfA = onePoleA (1.0 / (2.0 * juce::MathConstants<double>::pi * rf * 51.0e-12), fsOs);
-        toneA = onePoleA (723.0, fsOs);
-        brightG = juce::Decibels::decibelsToGain (-14.0f + 20.0f * settings.bright);   // -14 .. +6 dB above ~720 Hz
-        outA = onePoleA (5000.0 + 5000.0 * settings.bright, fsOs);
+        toneA = onePoleA (t.toneHz, fsOs);
+        brightG = juce::Decibels::decibelsToGain (t.brightLo + t.brightSpan * settings.bright);   // -14 .. +6 dB above ~720 Hz
+        outA = onePoleA (t.outBase + t.outSpan * settings.bright, fsOs);
         dcR = (float) std::exp (-2.0 * juce::MathConstants<double>::pi * 8.0 / fs);
     }
 
@@ -340,6 +395,7 @@ private:
     std::array<ChannelState, 2> ch {};
     float attackHz = 150.0f;
     float hb0 = 1.0f, hb1 = 0.0f, hb2 = 0.0f, ha1 = 0.0f, ha2 = 0.0f;
+    float invLeg = 1.0f / 4700.0f, fbIs = 2.52e-9f, fbIsNeg = 1.26e-9f, invRs = 0.0f, makeup = 0.9f, inGain = 1.0f;
     float legA = 0.0f, invRf = 1.0f / 50000.0f, cfA = 1.0f, toneA = 0.0f, brightG = 1.0f, outA = 1.0f, dcR = 0.999f;
     float gateEnv = 0.0f, gateGain = 1.0f;
     int gateHold = 0;

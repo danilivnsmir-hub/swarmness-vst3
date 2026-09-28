@@ -595,6 +595,22 @@ int main (int argc, char** argv)
     std::vector<juce::String> args;
     for (int i = 1; i < argc; ++i)
     {
+        if (juce::String (argv[i]) == "--set" && i + 1 < argc && juce::String (argv[i + 1]).startsWith ("wasp:"))
+        {
+            // --set wasp:key=value,... edits WASP's circuit values
+            auto& t = DriveBlock::tune();
+            std::map<juce::String, float*> m { { "rfMin", &t.rfMin }, { "legOhms", &t.legOhms }, { "fbIs", &t.fbIs }, { "fbAsym", &t.fbAsym },
+                { "hardRs", &t.hardRs }, { "hardIs", &t.hardIs }, { "hardNpos", &t.hardNpos }, { "hardNneg", &t.hardNneg },
+                { "toneHz", &t.toneHz }, { "brightLo", &t.brightLo }, { "brightSpan", &t.brightSpan }, { "outBase", &t.outBase },
+                { "outSpan", &t.outSpan }, { "makeup", &t.makeup }, { "inDb", &t.inDb } };
+            for (const auto& kv : juce::StringArray::fromTokens (juce::String (argv[++i]).fromFirstOccurrenceOf (":", false, false), ",", ""))
+            {
+                const auto key = kv.upToFirstOccurrenceOf ("=", false, false).trim();
+                if (auto it = m.find (key); it != m.end()) *it->second = kv.fromFirstOccurrenceOf ("=", false, false).getFloatValue();
+                else { std::fprintf (stderr, "unknown key %s\n", key.toRawUTF8()); return 2; }
+            }
+            continue;
+        }
         if (juce::String (argv[i]) == "--set" && i + 1 < argc)
         {
             const juce::String spec (argv[++i]);

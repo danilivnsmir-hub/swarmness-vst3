@@ -1342,7 +1342,7 @@ WaspSection::WaspSection (SwarmnessAudioProcessor& p)
     addAndMakeVisible (modeSelector);
 
     volumeKnob.attach (state, drvVolume, "VOLUME: output level - 5 is about unity at a medium DRIVE; crank it to slam the amp's input");
-    driveKnob .attach (state, drvDrive,  "DRIVE: from a clean boost to a thick, compressed overdrive (two silicon diodes in the op-amp feedback)");
+    driveKnob .attach (state, drvDrive,  "DRIVE: from a tight boost to a hard, square overdrive - the op-amp's gain into diodes to ground that clip one side first (asymmetric hard clipping)");
     brightKnob.attach (state, drvBright, "BRIGHT: output voicing - darker and smoother down, more bite and pick attack up");
     attackKnob.attach (state, drvAttack, "ATTACK: tightens the low end in front of the clipping - up for chugs that stay tight on a high-gain amp, down for a full-range boost");
     gateKnob  .attach (state, drvGate,   "GATE: noise gate keyed from your guitar (0 = off) - silences the hiss of the drive and the amp behind it");
@@ -1502,7 +1502,7 @@ void WaspSection::paint (juce::Graphics& g)
                           t.removeFromTop (36.0f).toNearestInt(), juce::Justification::topLeft, 2, 0.85f);
         return;
     }
-    drawPanelTitle (g, panelArea, "WASP", "tight overdrive  -  in front of the AMP it tightens and pushes it, on its own it is a TS-style drive", s.on);
+    drawPanelTitle (g, panelArea, "WASP", "tight overdrive  -  op-amp gain into asymmetric hard-clipping diodes; in front of the AMP it tightens and pushes it", s.on);
 
     const auto curveColour = Colours::accent.withAlpha (s.on ? 0.95f : 0.4f);
     for (auto a : { responseArea, clipArea })
@@ -1540,23 +1540,31 @@ void WaspSection::paint (juce::Graphics& g)
         g.drawText ("RESPONSE", a.withHeight (14.0f), juce::Justification::topLeft, false);
     }
 
-    // clipping curve: output vs input volts (+-1.5 V in), the dry line for reference
+    // clipping curve: output vs input over a hot guitar's range (peaks up to -6 dBFS), scaled to fit;
+    // the straight line is a clean boost for reference
     {
         const auto a = clipArea.reduced (8.0f, 8.0f);
-        const float range = 1.5f, outRange = 3.2f;
+        const float range = 0.5f;
+        const float volts = DriveBlock::kVolts * juce::Decibels::decibelsToGain (DriveBlock::tune().inDb);
+        std::array<float, 81> ys {};
+        float peak = 1.0e-6f;
+        for (int i = 0; i <= 80; ++i)
+        {
+            ys[(size_t) i] = DriveBlock::transferVolts (s.drive, (-range + 2.0f * range * (float) i / 80.0f) * volts);
+            peak = juce::jmax (peak, std::abs (ys[(size_t) i]));
+        }
         auto xFor = [a, range] (float v) { return a.getCentreX() + a.getWidth() * 0.5f * v / range; };
-        auto yFor = [a, outRange] (float v) { return a.getCentreY() - a.getHeight() * 0.5f * juce::jlimit (-outRange, outRange, v) / outRange; };
+        auto yFor = [a, peak] (float v) { return a.getCentreY() - a.getHeight() * 0.46f * v / peak; };
         g.setColour (Colours::panelBorder.withAlpha (0.6f));
         g.fillRect (juce::Rectangle<float> (a.getCentreX(), a.getY(), 1.0f, a.getHeight()));
         g.fillRect (juce::Rectangle<float> (a.getX(), a.getCentreY(), a.getWidth(), 1.0f));
         juce::Path dry, p;
-        dry.startNewSubPath (xFor (-range), yFor (-range));
-        dry.lineTo (xFor (range), yFor (range));
+        dry.startNewSubPath (xFor (-range), a.getCentreY() + a.getHeight() * 0.46f);
+        dry.lineTo (xFor (range), a.getCentreY() - a.getHeight() * 0.46f);
         g.strokePath (dry, juce::PathStrokeType (1.0f));
         for (int i = 0; i <= 80; ++i)
         {
-            const float v = -range + 2.0f * range * (float) i / 80.0f;
-            const float x = xFor (v), y = yFor (DriveBlock::transferVolts (s.drive, v));
+            const float x = xFor (-range + 2.0f * range * (float) i / 80.0f), y = yFor (ys[(size_t) i]);
             if (i == 0) p.startNewSubPath (x, y); else p.lineTo (x, y);
         }
         g.setColour (curveColour);
