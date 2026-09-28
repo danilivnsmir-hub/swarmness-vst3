@@ -119,6 +119,14 @@ namespace ampsim
                 a.presenceHz = 3500.0f; a.presenceMax = 0.5f; a.depthHz = 100.0f; a.depthMax = 0.5f;
                 a.spkHz = 110.0f; a.spkQ = 1.8f; a.spkDb = 8.0f; a.coilHz = 1800.0f; a.coilDb = 5.0f;
                 a.xfHp = 45.0f; a.xfLp = 13000.0f; a.paRef = 2.35f; a.outDb = -3.0f;
+                // tone fitted to captures of the real amp (SwarmnessAmpLab, Fender Twin Reverb, both channels)
+                a.R1 = 2.471e4f; a.R2 = 1.146e6f; a.R3 = 8921.0f; a.R4 = 1.186e5f; a.C1 = 9.592e-10f; a.C2 = 5.393e-8f;
+                a.C3 = 3.305e-8f; a.voiceHz = 1319.0f; a.voiceDb = -5.06f; a.voiceQ = 0.5462f; a.brightDb = 4.549f;
+                a.brightHz = 3617.0f; a.spkHz = 68.5f; a.spkQ = 0.8886f; a.spkDb = 8.085f; a.coilHz = 2538.0f;
+                a.coilDb = 12.48f; a.xfHp = 68.54f; a.xfLp = 1.272e4f;
+                a.st[0].cathDb = -8.617f; a.st[0].cathHz = 195.1f; a.st[0].lpHz = 1.28e4f;
+                a.st[1].cathDb = -10.27f; a.st[1].cathHz = 1469.0f; a.st[1].lpHz = 1.179e4f;
+                a.outDb += 8.3f;   // level-matched to the other models at noon
                 break;
             }
             case 2: // BRIT - British crunch: hot V1a, cold-biased V1b, V2a, an extra stage, cathode follower, EL34s
