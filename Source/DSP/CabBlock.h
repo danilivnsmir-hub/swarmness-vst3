@@ -47,13 +47,11 @@ public:
         maxBlock = juce::jmax (1, maxBlockSize);
         const juce::dsp::ProcessSpec spec { sampleRate, (juce::uint32) maxBlock, 2 };
         {
-            const juce::SpinLock::ScopedLockType sl (lock);
-            if (userSource.getNumSamples() > 0)
-            {
-                pendingUser = buildUserIR (userSource, userSourceRate, fs);
-                pendingUserRate = fs;
-                userPending = true;
-            }
+            // the loaded files, resampled again for this rate
+            const juce::ScopedLock sl (buildLock);
+            for (size_t k = 0; k < 2; ++k)
+                userHost[k] = userSource[k].getNumSamples() > 0 ? buildUserIR (userSource[k], userSourceRate[k], fs) : juce::AudioBuffer<float>();
+            rebuildCombined();
         }
         commitPending();
         dryCopy.setSize (2, maxBlock, false, false, true);
@@ -96,18 +94,51 @@ public:
         pendingModelRate = irRate;
         modelPending = true;
     }
-    /** A loaded cabinet IR, one or two channels at the file's rate (message thread). It is kept, and
-        resampled to the host rate whenever that changes; levelled so its mid band sits at 0 dB. */
-    void setUserIR (juce::AudioBuffer<float>&& irBuffer, double irRate)
+    /** A loaded cabinet IR in slot A (0) or B (1), one or two channels at the file's rate (message
+        thread). It is kept, and resampled to the host rate whenever that changes; levelled so its
+        mid band sits at 0 dB. With both slots loaded the convolution runs their MIX as one IR
+        (B time-aligned to A), so two IRs cost what one does. */
+    void setUserIR (juce::AudioBuffer<float>&& irBuffer, double irRate, int slot = 0)
     {
-        const double rate = fs;
-        auto built = buildUserIR (irBuffer, irRate, rate);
-        const juce::SpinLock::ScopedLockType sl (lock);
-        userSource = std::move (irBuffer);
-        userSourceRate = irRate;
-        pendingUser = std::move (built);
-        pendingUserRate = rate;
-        userPending = true;
+        const auto k = (size_t) juce::jlimit (0, 1, slot);
+        const juce::ScopedLock sl (buildLock);
+        userHost[k] = buildUserIR (irBuffer, irRate, fs);
+        userSource[k] = std::move (irBuffer);
+        userSourceRate[k] = irRate;
+        rebuildCombined();
+    }
+
+    /** MIX of the two slots (0 = A only .. 1 = B only) and B's polarity. Off the audio thread (the
+        housekeeping thread); the combined IR is rebuilt (and cross-faded in) when they change. */
+    void setUserMix (float mix, bool invertB)
+    {
+        const juce::ScopedLock sl (buildLock);
+        if (std::abs (mix - irMix) < 0.004f && invertB == irInvertB)
+            return;
+        irMix = mix;
+        irInvertB = invertB;
+        if (userHost[0].getNumSamples() > 0 && userHost[1].getNumSamples() > 0)
+            rebuildCombined();
+    }
+
+    /** Where B's first arrival lands against A's (samples, + = B later), found by cross-correlation. */
+    static int alignmentLag (const juce::AudioBuffer<float>& a, const juce::AudioBuffer<float>& b, double rate)
+    {
+        const int maxLag = (int) (0.003 * rate), window = juce::jmin ((int) (0.012 * rate), a.getNumSamples(), b.getNumSamples());
+        int best = 0;
+        double bestV = -1.0;
+        for (int lag = -maxLag; lag <= maxLag; ++lag)
+        {
+            double acc = 0.0;
+            for (int i = 0; i < window; ++i)
+            {
+                const int j = i + lag;
+                if (j >= 0 && j < b.getNumSamples())
+                    acc += (double) a.getSample (0, i) * b.getSample (0, j);
+            }
+            if (std::abs (acc) > bestV) { bestV = std::abs (acc); best = lag; }
+        }
+        return best;
     }
 
     /** The IR as the convolution runs it: two channels at `hostRate`, levelled. */
@@ -120,11 +151,13 @@ public:
         levelIR (st, hostRate);
         return st;
     }
-    void clearUserIR()
+    void clearUserIR (int slot = 0)
     {
-        const juce::SpinLock::ScopedLockType sl (lock);
-        userSource.setSize (0, 0);
-        userCleared = true;
+        const auto k = (size_t) juce::jlimit (0, 1, slot);
+        const juce::ScopedLock sl (buildLock);
+        userSource[k].setSize (0, 0);
+        userHost[k].setSize (0, 0);
+        rebuildCombined();
     }
     bool hasModelIR() const noexcept { return modelLoaded; }
     double getSampleRate() const noexcept { return fs; }
@@ -507,6 +540,50 @@ private:
         if (std::abs (cuts[1].hz - hiCur) > 0.1f) { cuts[1].set (false, hiOff ? fs * 0.45 : hiCur, fs); cuts[1].hz = hiCur; }
     }
 
+    /** The IR the convolution runs, from the slots (caller holds buildLock). */
+    void rebuildCombined()
+    {
+        const auto& a = userHost[0];
+        const auto& b = userHost[1];
+        juce::AudioBuffer<float> out;
+        if (a.getNumSamples() > 0 && b.getNumSamples() > 0)
+        {
+            // B moved so its arrival lines up with A's (so the mix does not comb-filter), then A x (1 - MIX) + B x MIX
+            const int lag = alignmentLag (a, b, fs);
+            const int len = juce::jmax (a.getNumSamples(), b.getNumSamples() - lag);
+            out.setSize (2, juce::jmax (16, len));
+            out.clear();
+            const float ga = 1.0f - irMix, gb = irMix * (irInvertB ? -1.0f : 1.0f);
+            for (int c = 0; c < 2; ++c)
+            {
+                out.addFrom (c, 0, a, c, 0, a.getNumSamples(), ga);
+                for (int i = 0; i < out.getNumSamples(); ++i)
+                {
+                    const int j = i + lag;
+                    if (j >= 0 && j < b.getNumSamples())
+                        out.getWritePointer (c)[i] += gb * b.getSample (c, j);
+                }
+            }
+        }
+        else if (a.getNumSamples() > 0 || b.getNumSamples() > 0)
+        {
+            out.makeCopyOf (a.getNumSamples() > 0 ? a : b);
+            if (a.getNumSamples() == 0 && irInvertB)
+                out.applyGain (-1.0f);
+        }
+        const juce::SpinLock::ScopedLockType sl (lock);
+        if (out.getNumSamples() == 0)
+        {
+            userCleared = true;
+            userPending = false;
+            return;
+        }
+        pendingUser = std::move (out);
+        pendingUserRate = fs;
+        userPending = true;
+        userCleared = false;
+    }
+
     void pickUp() noexcept
     {
         const juce::GenericScopedTryLock<juce::SpinLock> sl (lock);
@@ -545,8 +622,12 @@ private:
 
     juce::SpinLock lock;
     juce::AudioBuffer<float> pendingModel, pendingUser;
-    juce::AudioBuffer<float> userSource;   // the loaded file as it was (resampled again on a rate change)
-    double userSourceRate = 44100.0;
+    // the two IR slots: as loaded (resampled again on a rate change) and at the host rate, levelled
+    juce::CriticalSection buildLock;
+    std::array<juce::AudioBuffer<float>, 2> userSource, userHost;
+    std::array<double, 2> userSourceRate { 44100.0, 44100.0 };
+    float irMix = 0.5f;
+    bool irInvertB = false;
     int userSize = -1;
     double pendingModelRate = 44100.0, pendingUserRate = 44100.0;
     bool modelPending = false, userPending = false, userCleared = false;

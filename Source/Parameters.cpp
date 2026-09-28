@@ -307,6 +307,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
         pid (cabHighCut), "Cab High Cut", skewedRange (2000.0f, 20000.0f, 7000.0f, 1.0f), 20000.0f,
         Attr().withLabel ("Hz").withStringFromValueFunction ([] (float v, int) { return v >= 19900.0f ? juce::String ("Off") : formatHz (v); })));
     cab->addChild (levelParam (cabLevel, "Cab Level"));
+    cab->addChild (percent (cabIrMix, "Cab IR Mix A/B", 50.0f));
+    cab->addChild (toggle (cabIrInvB, "Cab IR B Phase Invert", false));
 
     // ------------------------------------------------------------------ CHAIN ORDER
     auto chain = std::make_unique<Group> ("chain", "Chain", "|");

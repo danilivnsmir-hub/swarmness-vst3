@@ -176,6 +176,7 @@ public:
 
     void paint (juce::Graphics&) override;
     void resized() override;
+    void mouseDown (const juce::MouseEvent&) override;
     void tick();
 
     bool isInterestedInFileDrag (const juce::StringArray&) override;
@@ -202,7 +203,12 @@ private:
     juce::TextButton loadNamButton { "LOAD .NAM" }, toneButton { "TONE3000" }, clearNamButton { "CLEAR" };
     Knob micKnob { "MIC" }, distKnob { "DISTANCE" }, lowCutKnob { "LOW CUT" }, highCutKnob { "HIGH CUT" }, cabLevelKnob { "LEVEL", true };
     juce::TextButton loadIrButton { "LOAD IR" }, clearIrButton { "CLEAR" }, irToneButton { "TONE3000" };
-    juce::TextButton namPrev { "<" }, namNext { ">" }, irPrev { "<" }, irNext { ">" };
+    juce::TextButton namPrev { "<" }, namNext { ">" }, irPrev { "<" }, irNext { ">" }, irPrev2 { "<" }, irNext2 { ">" };
+    Knob irMixKnob { "A / B MIX" };
+    PillToggle irInvToggle { "INV B" };
+    juce::Rectangle<float> irRowA, irRowB;
+    int irSlot = 0;   // the IR slot LOAD IR / TONE3000 / CLEAR act on
+    juce::String cabIrDescription2;
     PillToggle namLiteToggle { "LITE" };
     juce::String toneStatus;
 

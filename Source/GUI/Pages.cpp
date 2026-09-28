@@ -995,22 +995,44 @@ AmpCabSection::AmpCabSection (SwarmnessAudioProcessor& p)
     for (auto* k : { &micKnob, &distKnob, &lowCutKnob, &highCutKnob, &cabLevelKnob })
         addAndMakeVisible (k);
 
-    loadIrButton.setTooltip ("Load a cabinet impulse response (WAV / AIFF / FLAC). Or drop one on the CAB panel");
+    irMixKnob.attach (state, cabIrMix, "A / B MIX: the two IR slots - 0 = only A, 50 = both equally, 100 = only B (B is time-aligned to A, "
+                                       "so the blend does not comb-filter)");
+    addChildComponent (irMixKnob);
+    irInvToggle.setTooltip ("Invert IR B's polarity - try it when a blend sounds thin (two mics out of phase)");
+    MidiLearnable::tag (irInvToggle, cabIrInvB);
+    buttonAttachments.push_back (std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (state, cabIrInvB, irInvToggle));
+    addChildComponent (irInvToggle);
+
+    loadIrButton.setTooltip ("Load a cabinet impulse response (WAV / AIFF / FLAC) into the selected slot (A or B - click a row). "
+                             "Or drop one on its row");
     loadIrButton.onClick = [this] { choose (false); };
-    clearIrButton.setTooltip ("Forget the cabinet IR");
-    clearIrButton.onClick = [this] { processor.clearCabIR(); message.clear(); };
-    irToneButton.setTooltip (Tone3000::isConfigured() ? "TONE3000: pick a cabinet IR in your browser - it downloads and loads here"
+    clearIrButton.setTooltip ("Forget the IR in the selected slot");
+    clearIrButton.onClick = [this] { processor.clearCabIR (irSlot); message.clear(); };
+    irToneButton.setTooltip (Tone3000::isConfigured() ? "TONE3000: pick a cabinet IR in your browser - it downloads and loads into the selected slot"
                                                       : "Open TONE3000 in the browser - thousands of free cabinet IRs");
-    irToneButton.onClick = [this] { processor.browseTone3000 (Tone3000::Target::cab); };
+    irToneButton.onClick = [this] { processor.browseTone3000 (Tone3000::Target::cab, Tone3000::Architecture::a1, irSlot); };
     irPrev.setTooltip ("Previous IR in the same folder");
     irNext.setTooltip ("Next IR in the same folder");
-    irPrev.onClick = [this] { processor.stepCabIR (-1); };
-    irNext.onClick = [this] { processor.stepCabIR (1); };
+    irPrev.onClick = [this] { processor.stepCabIR (-1, 0); };
+    irNext.onClick = [this] { processor.stepCabIR (1, 0); };
+    irPrev2.onClick = [this] { processor.stepCabIR (-1, 1); };
+    irNext2.onClick = [this] { processor.stepCabIR (1, 1); };
     addAndMakeVisible (loadIrButton);
     addAndMakeVisible (clearIrButton);
     addAndMakeVisible (irToneButton);
-    for (auto* b : { &irPrev, &irNext })
+    for (auto* b : { &irPrev, &irNext, &irPrev2, &irNext2 })
         addChildComponent (b);
+}
+
+void AmpCabSection::mouseDown (const juce::MouseEvent& e)
+{
+    // a click on an IR row picks the slot the buttons act on
+    if (cabIrMode && (irRowA.contains (e.position) || irRowB.contains (e.position)))
+    {
+        irSlot = irRowB.contains (e.position) ? 1 : 0;
+        clearIrButton.setEnabled ((irSlot == 0 ? cabIrDescription : cabIrDescription2).isNotEmpty());
+        repaint();
+    }
 }
 
 void AmpCabSection::resized()
@@ -1062,8 +1084,15 @@ void AmpCabSection::resized()
         loadIrButton .setBounds (bx, by, 96, bh);
         irToneButton .setBounds (bx, by + bh + gap, 96, bh);
         clearIrButton.setBounds (bx, by + 2 * (bh + gap), 96, bh);
-        irPrev.setBounds ((int) curveArea.getRight() - 50, (int) curveArea.getY() + 4, 22, 18);
-        irNext.setBounds ((int) curveArea.getRight() - 26, (int) curveArea.getY() + 4, 22, 18);
+        auto rows = curveArea.reduced (4.0f, 4.0f);
+        irRowA = rows.removeFromTop (rows.getHeight() * 0.5f);
+        irRowB = rows;
+        irPrev.setBounds ((int) irRowA.getRight() - 50, (int) irRowA.getCentreY() - 9, 22, 18);
+        irNext.setBounds ((int) irRowA.getRight() - 26, (int) irRowA.getCentreY() - 9, 22, 18);
+        irPrev2.setBounds ((int) irRowB.getRight() - 50, (int) irRowB.getCentreY() - 9, 22, 18);
+        irNext2.setBounds ((int) irRowB.getRight() - 26, (int) irRowB.getCentreY() - 9, 22, 18);
+        irInvToggle.setBounds (distKnob.getBounds().withSizeKeepingCentre (60, 22).withY (distKnob.getY() + 38));
+        irMixKnob.setBounds (micKnob.getBounds());
     }
 }
 
@@ -1115,16 +1144,32 @@ void AmpCabSection::paint (juce::Graphics& g)
     g.drawRoundedRectangle (curveArea, 5.0f, dragTarget == 2 ? 2.0f : 1.0f);
     if (cabIrMode)
     {
-        auto t = curveArea.reduced (10.0f, 6.0f);
-        g.setFont (font (13.5f, true));
-        g.setColour (cabIrDescription.isNotEmpty() ? Colours::text : Colours::textDim);
-        g.drawFittedText (cabIrDescription.isNotEmpty() ? cabIrDescription : juce::String ("no IR loaded"), t.removeFromTop (20.0f).withTrimmedRight (52.0f).toNearestInt(),
-                          juce::Justification::centredLeft, 1, 0.8f);
-        g.setFont (font (12.0f));
-        g.setColour (message.isNotEmpty() && dragTarget == 0 ? Colours::ledRed : (toneStatus.isNotEmpty() ? Colours::accent : Colours::textFaint));
-        g.drawFittedText (toneStatus.isNotEmpty() ? toneStatus
-                          : cabIrDescription.isEmpty() ? juce::String ("Load or drop a cabinet IR") : juce::String ("MIC / DISTANCE shape the modelled cabinets only"),
-                          t.toNearestInt(), juce::Justification::topLeft, 2, 1.0f);
+        // two slots: A and B (a click selects the one the buttons act on)
+        const juce::String* desc[2] { &cabIrDescription, &cabIrDescription2 };
+        for (int k = 0; k < 2; ++k)
+        {
+            const auto row = k == 0 ? irRowA : irRowB;
+            const bool selected = irSlot == k;
+            if (selected)
+            {
+                g.setColour (Colours::accent.withAlpha (0.12f));
+                g.fillRoundedRectangle (row, 4.0f);
+            }
+            g.setFont (displayFont (17.0f));
+            g.setColour (selected ? Colours::accent : Colours::textFaint);
+            g.drawText (k == 0 ? "A" : "B", row.withWidth (20.0f).translated (4.0f, 0.0f), juce::Justification::centred, false);
+            auto t = row.withTrimmedLeft (28.0f).withTrimmedRight (54.0f);
+            const bool has = desc[k]->isNotEmpty();
+            juce::String line = has ? *desc[k] : juce::String (k == 0 ? "no IR - load or drop one here" : "empty - load a second IR to blend");
+            if (selected && (message.isNotEmpty() || toneStatus.isNotEmpty()))
+                line = message.isNotEmpty() ? message : toneStatus;
+            g.setFont (font (has ? 13.0f : 12.0f, has));
+            g.setColour (selected && message.isNotEmpty() ? Colours::ledRed : selected && toneStatus.isNotEmpty() ? Colours::accent
+                                                                              : has ? Colours::text : Colours::textFaint);
+            g.drawFittedText (line, t.toNearestInt(), juce::Justification::centredLeft, 1, 0.8f);
+        }
+        g.setColour (Colours::panelBorder);
+        g.fillRect (juce::Rectangle<float> (irRowA.getX() + 6.0f, irRowA.getBottom(), irRowA.getWidth() - 12.0f, 1.0f));
     }
     else if (cabType >= 0)
     {
@@ -1154,7 +1199,7 @@ void AmpCabSection::tick()
     const int nowType = juce::roundToInt (state.getRawParameterValue (ParamIDs::cabType)->load());
     const float nowMic = state.getRawParameterValue (ParamIDs::cabMic)->load() * 0.01f;
     const float nowDist = state.getRawParameterValue (ParamIDs::cabDist)->load() * 0.01f;
-    const auto nowNam = processor.getNamModelDescription(), nowIr = processor.getCabIRDescription();
+    const auto nowNam = processor.getNamModelDescription(), nowIr = processor.getCabIRDescription(), nowIr2 = processor.getCabIRDescription (1);
     if (const auto st = processor.getTone3000Status(); st != toneStatus)
     {
         toneStatus = st;
@@ -1166,21 +1211,28 @@ void AmpCabSection::tick()
         repaint();
     }
     if (nowAmp != ampOn || nowCab != cabOn || nowChannel != channel || nowType != cabType
-        || std::abs (nowMic - mic) > 0.001f || std::abs (nowDist - dist) > 0.001f || nowNam != namDescription || nowIr != cabIrDescription)
+        || std::abs (nowMic - mic) > 0.001f || std::abs (nowDist - dist) > 0.001f || nowNam != namDescription || nowIr != cabIrDescription || nowIr2 != cabIrDescription2)
     {
         ampOn = nowAmp; cabOn = nowCab; channel = nowChannel;
-        cabType = nowType; mic = nowMic; dist = nowDist; namDescription = nowNam; cabIrDescription = nowIr;
+        cabType = nowType; mic = nowMic; dist = nowDist; namDescription = nowNam; cabIrDescription = nowIr; cabIrDescription2 = nowIr2;
         namMode = channel == AmpBlock::nam;
         cabIrMode = cabType == CabBlock::ir;
         for (auto* b : { &loadNamButton, &toneButton, &clearNamButton })
             b->setVisible (namMode);
         clearNamButton.setEnabled (namDescription.isNotEmpty());
-        clearIrButton.setEnabled (cabIrDescription.isNotEmpty());
+        clearIrButton.setEnabled ((irSlot == 0 ? cabIrDescription : cabIrDescription2).isNotEmpty());
         namPrev.setVisible (namMode && namDescription.isNotEmpty());
         namLiteToggle.setVisible (namMode && namDescription.contains (" A2,"));
         namNext.setVisible (namMode && namDescription.isNotEmpty());
         irPrev.setVisible (cabIrMode && cabIrDescription.isNotEmpty());
         irNext.setVisible (cabIrMode && cabIrDescription.isNotEmpty());
+        irPrev2.setVisible (cabIrMode && cabIrDescription2.isNotEmpty());
+        irNext2.setVisible (cabIrMode && cabIrDescription2.isNotEmpty());
+        // IR mode: MIC / DISTANCE (the modelled cabinets only) make way for the A / B blend
+        micKnob.setVisible (! cabIrMode);
+        distKnob.setVisible (! cabIrMode);
+        irMixKnob.setVisible (cabIrMode);
+        irInvToggle.setVisible (cabIrMode);
         for (auto* k : { &gainKnob, &bassKnob, &midKnob, &trebleKnob, &presenceKnob, &depthKnob, &masterKnob })
             k->setVisible (! namMode);
         for (auto* k : { &namInputKnob, &namBassKnob, &namMidKnob, &namTrebleKnob, &namPresenceKnob, &namDepthKnob, &namOutputKnob })
@@ -1213,9 +1265,13 @@ void AmpCabSection::fileDragMove (const juce::StringArray& files, int x, int)
     }
 }
 
-void AmpCabSection::filesDropped (const juce::StringArray& files, int, int)
+void AmpCabSection::filesDropped (const juce::StringArray& files, int x, int y)
 {
     dragTarget = 0;
+    // an IR dropped on a row goes to that slot (elsewhere: the selected one)
+    const juce::Point<float> at ((float) x, (float) y);
+    if (cabIrMode && irRowA.contains (at)) irSlot = 0;
+    if (cabIrMode && irRowB.contains (at)) irSlot = 1;
     for (const auto& f : files)
     {
         const juce::File file (f);
@@ -1246,7 +1302,7 @@ void AmpCabSection::loadNam (const juce::File& file)
 
 void AmpCabSection::loadCabIr (const juce::File& file)
 {
-    message = processor.loadCabIR (file);
+    message = processor.loadCabIR (file, irSlot);
     messageTicks = message.isNotEmpty() ? 150 : 0;
     if (message.isEmpty())
         setChoice (ParamIDs::cabType, CabBlock::ir);
@@ -1255,7 +1311,7 @@ void AmpCabSection::loadCabIr (const juce::File& file)
 
 void AmpCabSection::choose (bool nam)
 {
-    const auto current = nam ? processor.getNamModelFile() : processor.getCabIRFile();
+    const auto current = nam ? processor.getNamModelFile() : processor.getCabIRFile (irSlot);
     chooser = std::make_unique<juce::FileChooser> (nam ? "Load a NAM capture" : "Load a cabinet impulse response",
                                                    current.existsAsFile() ? current.getParentDirectory()
                                                                           : juce::File::getSpecialLocation (juce::File::userHomeDirectory),

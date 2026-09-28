@@ -183,6 +183,8 @@ namespace ParamIDs
     inline constexpr const char* cabLowCut   = "cabLowCut";
     inline constexpr const char* cabHighCut  = "cabHighCut";
     inline constexpr const char* cabLevel    = "cabLevel";
+    inline constexpr const char* cabIrMix    = "cabIrMix";     // two IR slots: 0 % = A only .. 100 % = B only
+    inline constexpr const char* cabIrInvB   = "cabIrInvB";    // IR B polarity inverted
 
     // OUTPUT / GLOBAL
     inline constexpr const char* input       = "input";        // input sensitivity (compensated at the output)

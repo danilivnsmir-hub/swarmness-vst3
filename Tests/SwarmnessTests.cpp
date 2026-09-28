@@ -2306,6 +2306,47 @@ namespace
             irFile.deleteFile();
         }
         {
+            // two IR slots: MIX blends them, B is time-aligned to A (no comb filter), INV B flips B
+            juce::AudioBuffer<float> a (1, 2400), b (1, 2400);
+            a.clear(); b.clear();
+            juce::Random rng (3);
+            for (int i = 48; i < 2400; ++i)
+            {
+                const float v = (rng.nextFloat() - 0.5f) * std::exp (-(i - 48) / 200.0f);
+                a.setSample (0, i, v);
+                if (i + 30 < 2400) b.setSample (0, i + 30, v);   // the same cabinet, 30 samples later (a mic further back)
+            }
+            auto run = [&] (float mix, bool inv, bool withB)
+            {
+                CabBlock cb;
+                CabBlock::Settings st;
+                st.on = true; st.type = CabBlock::ir; st.lowCutHz = 20.0f; st.highCutHz = 20000.0f;
+                cb.setParams (st);
+                cb.setUserIR (juce::AudioBuffer<float> (a), 48000.0, 0);
+                if (withB) cb.setUserIR (juce::AudioBuffer<float> (b), 48000.0, 1);
+                cb.setUserMix (mix, inv);
+                cb.prepare (48000.0, 256);
+                juce::AudioBuffer<float> x (2, 4096);
+                x.clear();
+                x.setSample (0, 0, 1.0f); x.setSample (1, 0, 1.0f);
+                for (int start = 0; start < 4096; start += 256)
+                {
+                    float* ptr[2] { x.getWritePointer (0, start), x.getWritePointer (1, start) };
+                    cb.process (ptr, 2, 256);
+                }
+                return x;
+            };
+            const auto onlyA = run (0.5f, false, false), blend = run (0.5f, false, true), allB = run (1.0f, false, true);
+            const auto inverted = run (0.5f, true, true);
+            // aligned and levelled, the blend of a cabinet with its own delayed copy is that cabinet
+            const double blendVsA = nullDb (blend, onlyA, 0, 0, 4096);
+            const double bVsA = nullDb (allB, onlyA, 0, 0, 4096);
+            const double invLevel = juce::Decibels::gainToDecibels (inverted.getRMSLevel (0, 0, 4096) / (onlyA.getRMSLevel (0, 0, 4096) + 1.0e-12f));
+            check (blendVsA < -40.0 && bVsA < -40.0 && invLevel < -40.0,
+                   juce::String::formatted ("IR A / B: B aligned to A (blend %.0f dB, B alone %.0f dB off A), INV B cancels (%.0f dB)",
+                                            blendVsA, bVsA, invLevel));
+        }
+        {
             // IR resampling keeps the top octave (a linear interpolator loses 1-2 dB there)
             juce::AudioBuffer<float> src (1, 4410);
             juce::Random rng (5);
@@ -3011,6 +3052,9 @@ int main (int argc, char** argv)
             p.getAPVTS().getParameter (ParamIDs::drvNam)->setValueNotifyingHost (1.0f);
             p.getAPVTS().getParameter (ParamIDs::drvOn)->setValueNotifyingHost (1.0f);
             p.loadNamModel (namExample ("A2.nam"), true);
+            p.getAPVTS().getParameter (ParamIDs::cabType)->setValueNotifyingHost (1.0f);
+            for (int k = 0; k < 2 && argc >= 8 + k; ++k)   // optional IRs for slots A and B
+                p.loadCabIR (juce::File (argv[7 + k]), k);
         }
         p.setUiMini (mini);
         std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
