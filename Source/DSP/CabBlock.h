@@ -361,7 +361,20 @@ private:
         };
         const double m = juce::jlimit (0.0f, 1.0f, mic), d = juce::jlimit (0.0f, 1.0f, distance);
         const double close = juce::jmin (1.0, d / 0.6);
-        return at (base, hz) + 1.1 * (m - 0.3) * at (micEdgeDb, hz) + (close - 0.3) * at (distRoomDb, hz);
+        return at (base, hz) + 1.1 * (m - 0.3) * at (micEdgeDb, hz) + (close - 0.3) * at (distRoomDb, hz) + topLiftDb (hz);
+    }
+
+    /** The cabinets' top against the median of ~250 real guitar-cab IRs: 5..10 kHz came out 4-6 dB
+        dark (a dull top makes the mids stick out - boxy, nasal), so it is lifted back. */
+    static double topLiftDb (double hz) noexcept
+    {
+        static const double pts[][2] { { 4000.0, 0.0 }, { 5000.0, 3.0 }, { 6300.0, 4.5 }, { 8000.0, 4.0 }, { 10000.0, 3.0 }, { 14000.0, 0.0 } };
+        if (hz <= pts[0][0] || hz >= pts[5][0])
+            return 0.0;
+        int i = 0;
+        while (hz > pts[i + 1][0]) ++i;
+        const double t = std::log (hz / pts[i][0]) / std::log (pts[i + 1][0] / pts[i][0]);
+        return pts[i][1] + t * (pts[i + 1][1] - pts[i][1]);
     }
 
     static double bellDb (double hz, double f0, double q, double db) noexcept
@@ -374,7 +387,7 @@ private:
     static double rippleDb (int type, float mic, double hz) noexcept
     {
         juce::Random rng (7 + 31 * type);
-        const double amount = 8.0 * (1.0 - 0.4 * juce::jlimit (0.0f, 1.0f, mic));
+        const double amount = 6.0 * (1.0 - 0.4 * juce::jlimit (0.0f, 1.0f, mic));   // real IRs: ~2 dB rms, peaks ~5 dB
         double db = 0.0;
         for (int k = 0; k < 24; ++k)
         {
