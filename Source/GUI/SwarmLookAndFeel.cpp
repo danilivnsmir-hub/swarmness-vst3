@@ -54,6 +54,74 @@ void SwarmLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int wi
     const float angle  = startAngle + sliderPos * (endAngle - startAngle);
     auto polar = [&] (float r, float a) { return juce::Point<float> (centre.x + r * std::sin (a), centre.y - r * std::cos (a)); };
 
+    // Artwork (Skin.h): a fixed base with its own scale ticks and a cap turning with the value; the value
+    // arc goes round the outside, the light stays put on top of the cap
+    const juce::String capArt = size >= 80.0f && Skin::has ("knob_big_cap") ? "knob_big_cap"
+                              : size < 48.0f && Skin::has ("knob_cap_small") ? "knob_cap_small" : "knob_cap";
+    if (Skin::has ("knob_base") && Skin::has (capArt))
+    {
+        const float arcR = radius - arcThick * 0.5f;
+        const auto baseRect = juce::Rectangle<float> (2.0f * (arcR - arcThick * 0.5f - 1.0f), 2.0f * (arcR - arcThick * 0.5f - 1.0f)).withCentre (centre);
+
+        juce::Path track;
+        track.addCentredArc (centre.x, centre.y, arcR, arcR, 0.0f, startAngle, endAngle, true);
+        g.setColour (Colours::inset.withAlpha (0.85f));
+        g.strokePath (track, juce::PathStrokeType (arcThick, juce::PathStrokeType::curved, juce::PathStrokeType::butt));
+
+        const float from = bipolar ? (startAngle + endAngle) * 0.5f : startAngle;
+        if (std::abs (angle - from) > 0.001f && enabled)
+        {
+            juce::Path value;
+            value.addCentredArc (centre.x, centre.y, arcR, arcR, 0.0f, juce::jmin (from, angle), juce::jmax (from, angle), true);
+            g.setColour (Colours::accent.withAlpha (hover ? 0.35f : 0.22f));
+            g.strokePath (value, juce::PathStrokeType (arcThick + 5.0f, juce::PathStrokeType::curved, juce::PathStrokeType::butt));
+            juce::ColourGradient grad (Colours::accentDeep, bounds.getBottomLeft(), Colours::accentBright, bounds.getTopRight(), false);
+            grad.addColour (0.5, Colours::accent);
+            g.setGradientFill (grad);
+            g.strokePath (value, juce::PathStrokeType (arcThick, juce::PathStrokeType::curved, juce::PathStrokeType::butt));
+        }
+
+        const float dim = enabled ? 1.0f : 0.55f;
+        Skin::draw (g, "knob_base", baseRect, dim);
+
+        // the cap (its hexagon is 96 of its 112 px) fills the base's well
+        const auto capRect = baseRect.withSizeKeepingCentre (baseRect.getWidth() * 0.78f, baseRect.getWidth() * 0.78f);
+        juce::Path shadow;
+        shadow.addEllipse (capRect.reduced (capRect.getWidth() * 0.1f));
+        juce::DropShadow (juce::Colours::black.withAlpha (0.7f), (int) (size * 0.08f), { 0, (int) (size * 0.03f) }).drawForPath (g, shadow);
+        Skin::drawRotated (g, capArt, capRect, angle, dim);
+
+        // fixed light over the turning cap: honey sheen from the top left, shade to the bottom right
+        const float hexW = capRect.getWidth() * 96.0f / 112.0f;
+        auto hex = hexagon (juce::Rectangle<float> (hexW, hexW * 0.866f).withCentre (centre));
+        hex.applyTransform (juce::AffineTransform::rotation (angle, centre.x, centre.y));
+        juce::ColourGradient light (juce::Colours::white.withAlpha (hover ? 0.16f : 0.09f), capRect.getX(), capRect.getY(),
+                                    juce::Colours::black.withAlpha (0.28f), capRect.getRight(), capRect.getBottom(), false);
+        light.addColour (0.45, juce::Colours::transparentWhite);
+        light.addColour (0.55, juce::Colours::transparentBlack);
+        g.setGradientFill (light);
+        g.fillPath (hex);
+
+        // the painted pointer, traced bolder so the setting reads at a glance (same place: 46..79% out)
+        const float apothem = hexW * 0.866f * 0.5f;
+        const juce::Line<float> pointer (polar (apothem * 0.40f, angle), polar (apothem * 0.84f, angle));
+        const float pw = juce::jmax (2.0f, size * 0.045f);
+        const juce::PathStrokeType stroke (pw, juce::PathStrokeType::curved, juce::PathStrokeType::rounded);
+        juce::Path p;
+        p.startNewSubPath (pointer.getStart());
+        p.lineTo (pointer.getEnd());
+        g.setColour (juce::Colours::black.withAlpha (0.6f));
+        g.strokePath (p, juce::PathStrokeType (pw + 1.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        if (hover && enabled)
+        {
+            g.setColour (Colours::accent.withAlpha (0.35f));
+            g.strokePath (p, juce::PathStrokeType (pw + 4.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        }
+        g.setColour (enabled ? (hover ? Colours::accentBright.brighter (0.3f) : Colours::accentBright) : Colours::textFaint);
+        g.strokePath (p, stroke);
+        return;
+    }
+
     // --- Scale ticks (bone scratches)
     for (int i = 0; i <= 10; ++i)
     {
