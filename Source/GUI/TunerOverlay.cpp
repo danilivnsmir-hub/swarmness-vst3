@@ -146,14 +146,23 @@ void TunerOverlay::resized()
 
 void TunerOverlay::mouseDown (const juce::MouseEvent& e)
 {
-    if (! panelArea.contains (e.position))
+    if (! panelArea.expanded (44.0f).contains (e.position))   // (the artwork's case goes round the panel)
         close();
 }
 
 void TunerOverlay::paint (juce::Graphics& g)
 {
     g.fillAll (Colours::background.withAlpha (0.82f));
-    drawPanel (g, panelArea, 14.0f);
+    // artwork: the hive-cased meter; its glass window (image px 100..1215 x 175..585 of 1320 x 800) is the
+    // panel, the case goes round the outside at 0.4 UI units per image pixel
+    {
+        const float s = 0.4f;
+        const juce::BorderSize<float> glass { 175.0f, 100.0f, 800.0f - 585.0f, 1320.0f - 1215.0f };
+        const auto caseArea = panelArea.withTrimmedLeft (-glass.getLeft() * s).withTrimmedRight (-glass.getRight() * s)
+                                       .withTrimmedTop (-glass.getTop() * s).withTrimmedBottom (-glass.getBottom() * s);
+        if (! Skin::drawSliced (g, "tuner_panel", caseArea, glass, s))
+            drawPanel (g, panelArea, 14.0f);
+    }
     {
         auto row = panelArea.reduced (22.0f, 0.0f).withTrimmedTop (14.0f).withHeight (26.0f);
         drawSectionTitle (g, row, "TUNER", midi >= 0);
@@ -221,6 +230,26 @@ void TunerOverlay::paint (juce::Graphics& g)
                                                    meterArea.getCentreY() - size * 0.55f, size, size * 1.1f);
             const auto hex = hexagon (r, true);
             const float lit = juce::jmax (0.0f, 1.0f - std::abs ((float) i - pos));
+            // artwork: dark / honey-lit cells, the centre one gold-rimmed; the glows stay in code
+            if (Skin::has ("tuner_cell_off") && Skin::has ("tuner_cell_on") && Skin::has ("tuner_cell_center"))
+            {
+                const auto cell = r.withSizeKeepingCentre (r.getWidth() * 1.1f, r.getHeight() * 1.1f);
+                if (centre && glow > 0.02f)
+                {
+                    g.setColour (Colours::ledGreen.withAlpha (0.35f * glow));
+                    g.fillEllipse (cell.expanded (6.0f));
+                }
+                if (lit > 0.0f)
+                {
+                    const auto c = std::abs (i - 10) <= 1 ? Colours::accentBright : Colours::accent;
+                    g.setColour (c.withAlpha (0.3f * lit));
+                    g.fillEllipse (cell.expanded (4.0f));
+                }
+                Skin::drawFitted (g, centre ? "tuner_cell_center" : "tuner_cell_off", cell);
+                if (lit > 0.0f)
+                    Skin::drawFitted (g, "tuner_cell_on", cell, juce::RectanglePlacement::centred, lit);
+                continue;
+            }
             g.setColour (Colours::inset);
             g.fillPath (hex);
             if (lit > 0.0f)
