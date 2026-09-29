@@ -146,7 +146,7 @@ void TunerOverlay::resized()
 
 void TunerOverlay::mouseDown (const juce::MouseEvent& e)
 {
-    if (! panelArea.expanded (44.0f).contains (e.position))   // (the artwork's case goes round the panel)
+    if (! panelArea.expanded (Skin::has ("tuner_panel") ? 44.0f : 0.0f).contains (e.position))   // (the artwork's case goes round the panel)
         close();
 }
 
