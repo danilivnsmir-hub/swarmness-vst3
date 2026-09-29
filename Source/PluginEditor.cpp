@@ -460,77 +460,102 @@ void MainPanel::paintBackdrop (juce::Graphics& g)
 {
     const float H = (float) getBaseHeight();
     const auto all = juce::Rectangle<float> ((float) baseWidth, H);
-    g.setGradientFill (juce::ColourGradient (Colours::backgroundHi, baseWidth * 0.5f, H * 0.45f,
-                                             Colours::background, 0.0f, H, true));
-    g.fillAll();
-
-    // Honeycomb wall
-    drawHoneycomb (g, all, 30.0f, Colours::accent.withAlpha (0.045f), 1.4f);
-
-    // The necro-bee, looming behind everything
-    if (emblem.isValid())
+    const bool wallArt = Skin::has ("bg_main");
+    if (wallArt)
     {
-        const float h = 640.0f, w = h * (float) emblem.getWidth() / (float) emblem.getHeight();
-        g.setOpacity (0.2f);
-        g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
-        g.drawImage (emblem, juce::Rectangle<float> (w, h).withCentre ({ baseWidth * 0.5f, H * 0.52f }),
-                     juce::RectanglePlacement::centred);
-        g.setOpacity (1.0f);
+        // the full view's wall (the mini view shows its top)
+        g.fillAll (Colours::background);
+        Skin::drawFitted (g, "bg_main", juce::Rectangle<float> ((float) baseWidth, (float) baseHeight),
+                          juce::RectanglePlacement::fillDestination);
+    }
+    else
+    {
+        g.setGradientFill (juce::ColourGradient (Colours::backgroundHi, baseWidth * 0.5f, H * 0.45f,
+                                                 Colours::background, 0.0f, H, true));
+        g.fillAll();
+
+        // Honeycomb wall
+        drawHoneycomb (g, all, 30.0f, Colours::accent.withAlpha (0.045f), 1.4f);
     }
 
-    drawGrime (g, all, 0.6f);
+    // The necro-bee, looming behind everything (the artwork is already drawn faint)
+    if (! Skin::drawFitted (g, "bg_emblem", juce::Rectangle<float> (640.0f * 1000.0f / 1290.0f, 640.0f).withCentre ({ baseWidth * 0.5f, H * 0.52f })))
+        if (emblem.isValid())
+        {
+            const float h = 640.0f, w = h * (float) emblem.getWidth() / (float) emblem.getHeight();
+            g.setOpacity (0.2f);
+            g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
+            g.drawImage (emblem, juce::Rectangle<float> (w, h).withCentre ({ baseWidth * 0.5f, H * 0.52f }),
+                         juce::RectanglePlacement::centred);
+            g.setOpacity (1.0f);
+        }
 
-    // Vignette
-    g.setGradientFill (juce::ColourGradient (juce::Colours::transparentBlack, baseWidth * 0.5f, H * 0.5f,
-                                             juce::Colours::black.withAlpha (0.75f), 0.0f, 0.0f, true));
-    g.fillAll();
+    if (! wallArt)
+    {
+        drawGrime (g, all, 0.6f);
+
+        // Vignette
+        g.setGradientFill (juce::ColourGradient (juce::Colours::transparentBlack, baseWidth * 0.5f, H * 0.5f,
+                                                 juce::Colours::black.withAlpha (0.75f), 0.0f, 0.0f, true));
+        g.fillAll();
+    }
 
     // Header
     {
         const auto header = juce::Rectangle<float> (0.0f, 0.0f, (float) baseWidth, 64.0f);
-        g.setGradientFill (juce::ColourGradient (juce::Colour (0xf01a130d), 0.0f, 0.0f,
-                                                 juce::Colour (0xf00b0806), 0.0f, header.getBottom(), false));
-        g.fillRect (header);
-        drawHoneycomb (g, header, 9.0f, Colours::accent.withAlpha (0.05f), 0.8f);
-
-        // Honey line with drips
-        juce::ColourGradient line (Colours::accentDeep.withAlpha (0.0f), 0.0f, 0.0f, Colours::accentDeep.withAlpha (0.0f), (float) baseWidth, 0.0f, false);
-        line.addColour (0.2, Colours::accent);
-        line.addColour (0.5, Colours::accentBright);
-        line.addColour (0.8, Colours::accent);
-        g.setGradientFill (line);
-        g.fillRect (0.0f, header.getBottom() - 2.0f, (float) baseWidth, 2.0f);
-
-        juce::Random rng (1337);
-        for (int i = 0; i < 11; ++i)
+        // artwork: the bar's plain middle stretches so its honey edge lands on the header's bottom,
+        // the drips below it hang over the top of the page
+        const float barTop = 16.0f, barBottom = 64.0f;   // image rows of the plain middle
+        const auto bar = Skin::naturalSize ("header_bar");
+        const float drips = (bar.getHeight() / Skin::unitsPerPixel - barBottom) * Skin::unitsPerPixel;   // honey edge + drips, UI units
+        if (! Skin::drawSliced (g, "header_bar", header.withHeight (header.getBottom() - 9.0f + drips),
+                                { barTop, 0.0f, bar.getHeight() / Skin::unitsPerPixel - barBottom, 0.0f }))
         {
-            const float x = 180.0f + rng.nextFloat() * ((float) baseWidth - 240.0f);
-            const float len = 3.0f + std::pow (rng.nextFloat(), 2.0f) * 16.0f;
-            const float w = 1.5f + rng.nextFloat() * 2.0f;
-            const float top = header.getBottom() - 1.0f;
-            juce::Path drip;
-            drip.startNewSubPath (x - w, top);
-            drip.quadraticTo (x - w * 0.4f, top + len * 0.6f, x - w * 0.5f, top + len);
-            drip.addCentredArc (x, top + len, w * 0.5f, w * 0.6f, 0.0f, -juce::MathConstants<float>::halfPi,
-                                juce::MathConstants<float>::halfPi, false);
-            drip.quadraticTo (x + w * 0.4f, top + len * 0.6f, x + w, top);
-            drip.closeSubPath();
-            const float t = x / (float) baseWidth;
-            g.setColour ((t > 0.3f && t < 0.7f ? Colours::accentBright : Colours::accent).withAlpha (0.35f + 0.5f * (1.0f - std::abs (t - 0.5f) * 2.0f)));
-            g.fillPath (drip);
+            g.setGradientFill (juce::ColourGradient (juce::Colour (0xf01a130d), 0.0f, 0.0f,
+                                                     juce::Colour (0xf00b0806), 0.0f, header.getBottom(), false));
+            g.fillRect (header);
+            drawHoneycomb (g, header, 9.0f, Colours::accent.withAlpha (0.05f), 0.8f);
+
+            // Honey line with drips
+            juce::ColourGradient line (Colours::accentDeep.withAlpha (0.0f), 0.0f, 0.0f, Colours::accentDeep.withAlpha (0.0f), (float) baseWidth, 0.0f, false);
+            line.addColour (0.2, Colours::accent);
+            line.addColour (0.5, Colours::accentBright);
+            line.addColour (0.8, Colours::accent);
+            g.setGradientFill (line);
+            g.fillRect (0.0f, header.getBottom() - 2.0f, (float) baseWidth, 2.0f);
+
+            juce::Random rng (1337);
+            for (int i = 0; i < 11; ++i)
+            {
+                const float x = 180.0f + rng.nextFloat() * ((float) baseWidth - 240.0f);
+                const float len = 3.0f + std::pow (rng.nextFloat(), 2.0f) * 16.0f;
+                const float w = 1.5f + rng.nextFloat() * 2.0f;
+                const float top = header.getBottom() - 1.0f;
+                juce::Path drip;
+                drip.startNewSubPath (x - w, top);
+                drip.quadraticTo (x - w * 0.4f, top + len * 0.6f, x - w * 0.5f, top + len);
+                drip.addCentredArc (x, top + len, w * 0.5f, w * 0.6f, 0.0f, -juce::MathConstants<float>::halfPi,
+                                    juce::MathConstants<float>::halfPi, false);
+                drip.quadraticTo (x + w * 0.4f, top + len * 0.6f, x + w, top);
+                drip.closeSubPath();
+                const float t = x / (float) baseWidth;
+                g.setColour ((t > 0.3f && t < 0.7f ? Colours::accentBright : Colours::accent).withAlpha (0.35f + 0.5f * (1.0f - std::abs (t - 0.5f) * 2.0f)));
+                g.fillPath (drip);
+            }
         }
 
-        if (logo.isValid())
-        {
-            const float h = 70.0f;   // breaks out of the header a little, like the pedal's artwork
-            const float lw = h * (float) logo.getWidth() / (float) logo.getHeight();
-            g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
-            g.drawImage (logo, juce::Rectangle<float> (10.0f, 1.0f, lw, h), juce::RectanglePlacement::centred);
-        }
+        const float logoH = 70.0f;   // breaks out of the header a little, like the pedal's artwork
+        if (! Skin::drawFitted (g, "logo", juce::Rectangle<float> (10.0f, 1.0f, 200.0f, logoH), juce::RectanglePlacement::xLeft | juce::RectanglePlacement::yMid))
+            if (logo.isValid())
+            {
+                const float lw = logoH * (float) logo.getWidth() / (float) logo.getHeight();
+                g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
+                g.drawImage (logo, juce::Rectangle<float> (10.0f, 1.0f, lw, logoH), juce::RectanglePlacement::centred);
+            }
     }
 
     // Footswitch plate (pedalboard strip behind the stomps and LINK switches) and the scene strip
-    drawPanel (g, footswitchArea, 12.0f);
+    drawPanel (g, footswitchArea, 12.0f, true);
     drawPanel (g, sceneBar.getBounds().toFloat(), 10.0f);
 
     g.setFont (font (13.0f));

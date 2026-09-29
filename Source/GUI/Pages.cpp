@@ -202,8 +202,7 @@ void EqGraph::paint (juce::Graphics& g)
     {
         grid = juce::Image (juce::Image::ARGB, getWidth(), getHeight(), true);
         juce::Graphics gg (grid);
-        gg.setColour (Colours::inset);
-        gg.fillRoundedRectangle (r, 6.0f);
+        drawInset (gg, r, 6.0f);
         drawHoneycomb (gg, r, 11.0f, Colours::accent.withAlpha (0.03f), 0.8f);
 
         gg.setFont (font (11.5f, true));
@@ -620,8 +619,7 @@ void TailView::tick (float wetLevel)
 void TailView::paint (juce::Graphics& g)
 {
     const auto r = getLocalBounds().toFloat();
-    g.setColour (Colours::inset);
-    g.fillRoundedRectangle (r, 6.0f);
+    drawInset (g, r, 6.0f);
     drawHoneycomb (g, r, 12.0f, Colours::accent.withAlpha (0.03f), 0.8f);
 
     auto& s = processor.getAPVTS();
@@ -803,8 +801,7 @@ void ReverbPage::paint (juce::Graphics& g)
 
     // IR box
     const auto box = irArea;
-    g.setColour (Colours::inset);
-    g.fillRoundedRectangle (box, 6.0f);
+    drawInset (g, box, 6.0f);
     g.setColour (dragHover ? Colours::accentBright : (irMode ? Colours::accent.withAlpha (0.6f) : Colours::panelBorder));
     g.drawRoundedRectangle (box, 6.0f, dragHover ? 2.0f : 1.0f);
 
@@ -1123,8 +1120,7 @@ void AmpCabSection::paint (juce::Graphics& g)
     }
     else
     {
-        g.setColour (Colours::inset);
-        g.fillRoundedRectangle (morphArea, 6.0f);
+        drawInset (g, morphArea, 6.0f);
     }
     g.setColour (dragTarget == 1 ? Colours::accentBright : Colours::panelBorder);
     g.drawRoundedRectangle (morphArea, 6.0f, dragTarget == 1 ? 2.0f : 1.0f);
@@ -1143,8 +1139,7 @@ void AmpCabSection::paint (juce::Graphics& g)
     }
 
     // CAB: the response of the modelled cabinet, or the loaded IR
-    g.setColour (Colours::inset);
-    g.fillRoundedRectangle (curveArea, 5.0f);
+    drawInset (g, curveArea, 5.0f);
     g.setColour (dragTarget == 2 ? Colours::accentBright : Colours::panelBorder);
     g.drawRoundedRectangle (curveArea, 5.0f, dragTarget == 2 ? 2.0f : 1.0f);
     if (cabIrMode)
@@ -1502,8 +1497,7 @@ void WaspSection::paint (juce::Graphics& g)
     if (s.nam)
     {
         drawPanelTitle (g, panelArea, "WASP", "pedal capture  -  any overdrive, boost or fuzz as a NAM capture, in front of the AMP", s.on);
-        g.setColour (Colours::inset);
-        g.fillRoundedRectangle (cardArea, 6.0f);
+        drawInset (g, cardArea, 6.0f);
         g.setColour (dragOver ? Colours::accentBright : Colours::panelBorder);
         g.drawRoundedRectangle (cardArea, 6.0f, dragOver ? 2.0f : 1.0f);
         auto t = cardArea.reduced (14.0f, 10.0f);
@@ -1523,8 +1517,7 @@ void WaspSection::paint (juce::Graphics& g)
     const auto curveColour = Colours::accent.withAlpha (s.on ? 0.95f : 0.4f);
     for (auto a : { responseArea, clipArea })
     {
-        g.setColour (Colours::inset);
-        g.fillRoundedRectangle (a, 5.0f);
+        drawInset (g, a, 5.0f);
         g.setColour (Colours::panelBorder);
         g.drawRoundedRectangle (a, 5.0f, 1.0f);
     }

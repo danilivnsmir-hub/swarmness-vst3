@@ -2,15 +2,16 @@
 
 #include <JuceHeader.h>
 #include "Theme.h"
+#include "Skin.h"
 
 /**
  * The AMP's faceplates: each channel's amp gets its own panel behind its knobs and a nameplate with
  * a little head, so switching CLEAN / CRUNCH / LEAD / NAM looks like switching amps.
  *
- * Everything is drawn in code. Artwork can replace it without touching code: a PNG in
- * Source/Assets/Skin/ named amp_plate_<style>.png (the panel behind the knobs, 1380 x 220 px) or
+ * Everything is drawn in code. Artwork (Skin.h) replaces it without touching code:
+ * amp_plate_<style>.png (the panel behind the knobs, 220 px high, drawn 9-slice) and
  * amp_head_<style>.png (the head on the nameplate, 300 x 200 px, transparent), style = chrome, brit,
- * steel or nam, is picked up by the build and drawn instead.
+ * steel or nam.
  */
 namespace AmpFaceplate
 {
@@ -20,15 +21,6 @@ namespace AmpFaceplate
     {
         static const char* names[] { "chrome", "brit", "steel", "nam" };
         return names[juce::jlimit (0, 3, style)];
-    }
-
-    /** Optional artwork from Source/Assets/Skin (see above); an invalid image when there is none. */
-    inline juce::Image artwork (const juce::String& resourceName)
-    {
-        int size = 0;
-        if (const auto* data = BinaryData::getNamedResource (resourceName.toRawUTF8(), size))
-            return juce::ImageCache::getFromMemory (data, size);
-        return {};
     }
 
     inline void screw (juce::Graphics& g, juce::Point<float> c, float r, juce::Colour metal, float angle)
@@ -59,13 +51,18 @@ namespace AmpFaceplate
         juce::Path shape;
         shape.addRoundedRectangle (r, corner);
 
-        if (auto img = artwork (juce::String ("amp_plate_") + styleName (style) + "_png"); img.isValid())
+        // artwork: its own frame and hardware stay put (9-slice), slim and pushed out a little so the
+        // knob captions and values sit on the plate, not on the frame; off = a shade darker
+        if (Skin::drawNine (g, juce::String ("amp_plate_") + styleName (style), r.expanded (5.0f), 44.0f, 0.45f))
         {
-            juce::Graphics::ScopedSaveState s (g);
-            g.reduceClipRegion (shape);
-            g.drawImage (img, r, juce::RectanglePlacement::fillDestination);
+            if (! on)
+            {
+                g.setColour (juce::Colours::black.withAlpha (0.35f));
+                g.fillRoundedRectangle (r.reduced (2.0f), corner);
+            }
+            return;
         }
-        else
+
         {
             juce::Graphics::ScopedSaveState s (g);
             g.reduceClipRegion (shape);
@@ -176,11 +173,8 @@ namespace AmpFaceplate
     /** A small amp head (the nameplate's picture). */
     inline void drawHead (juce::Graphics& g, juce::Rectangle<float> r, int style, bool on)
     {
-        if (auto img = artwork (juce::String ("amp_head_") + styleName (style) + "_png"); img.isValid())
-        {
-            g.drawImage (img, r, juce::RectanglePlacement::centred);
+        if (Skin::drawFitted (g, juce::String ("amp_head_") + styleName (style), r, juce::RectanglePlacement::centred, on ? 1.0f : 0.6f))
             return;
-        }
         const auto body = r.withSizeKeepingCentre (juce::jmin (r.getWidth(), r.getHeight() * 1.55f), r.getHeight() * 0.86f);
         const auto tolex = style == chrome ? juce::Colour (0xff1e2023) : style == brit ? juce::Colour (0xff15110e)
                          : style == steel ? juce::Colour (0xff111114) : juce::Colour (0xff120d18);
@@ -238,8 +232,7 @@ namespace AmpFaceplate
     inline void drawNameplate (juce::Graphics& g, juce::Rectangle<float> card, int style, const juce::String& name,
                                const juce::String& about, bool on)
     {
-        g.setColour (Theme::Colours::inset);
-        g.fillRoundedRectangle (card, 6.0f);
+        Theme::drawInset (g, card, 6.0f);
         auto t = card.reduced (18.0f, 12.0f);
         const auto head = t.removeFromRight (150.0f).withTrimmedTop (2.0f).withTrimmedBottom (2.0f);
         drawHead (g, head, style, on);
@@ -264,18 +257,23 @@ namespace AmpFaceplate
 
     /** The CAB's panel: speaker grille cloth behind its knobs (`type` = CabBlock type: 0 1x12 OPEN,
         1 2x12 OPEN, 2 4x12 BRIT = salt & pepper weave, 3 4x12 MOD = black cloth, 4 IR). Artwork
-        override: cab_grille_<type>.png (1320 x 210 px) in Source/Assets/Skin. */
+        (Skin.h): cab_grille_<type>.png, 210 px high, drawn 9-slice. */
     inline void drawGrille (juce::Graphics& g, juce::Rectangle<float> r, int type, bool on)
     {
         const float corner = 7.0f;
         juce::Path shape;
         shape.addRoundedRectangle (r, corner);
+
+        if (Skin::drawNine (g, "cab_grille_" + juce::String (type), r.expanded (4.0f), 24.0f, 0.6f))
+        {
+            // the cloth a shade darker under the light captions (the light weave most), more when off
+            g.setColour (juce::Colours::black.withAlpha ((type == 2 ? 0.38f : 0.18f) + (on ? 0.0f : 0.3f)));
+            g.fillRoundedRectangle (r.reduced (3.0f), corner);
+            return;
+        }
+
         juce::Graphics::ScopedSaveState save (g);
         g.reduceClipRegion (shape);
-
-        if (auto img = artwork ("cab_grille_" + juce::String (type) + "_png"); img.isValid())
-            g.drawImage (img, r, juce::RectanglePlacement::fillDestination);
-        else
         {
             const bool brit = type == 2, open = type <= 1, ir = type >= 4;
             const juce::Colour base = brit ? juce::Colour (0xff2b2721) : open ? juce::Colour (0xff231d17) : juce::Colour (0xff141416);

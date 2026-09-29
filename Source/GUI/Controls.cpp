@@ -591,8 +591,11 @@ void PitchScope::paint (juce::Graphics& g)
 {
     const auto r = getLocalBounds().toFloat();
     const auto frame = chamfered (r, 6.0f);
-    g.setColour (Colours::inset);
-    g.fillPath (frame);
+    if (! Skin::drawNine (g, "panel_inset", r, 20.0f, 0.6f))
+    {
+        g.setColour (Colours::inset);
+        g.fillPath (frame);
+    }
     {
         juce::Graphics::ScopedSaveState save (g);
         g.reduceClipRegion (frame);

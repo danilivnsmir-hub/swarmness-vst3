@@ -2,6 +2,7 @@
 
 #include <JuceHeader.h>
 #include "BinaryData.h"
+#include "Skin.h"
 
 /**
  * Colours, fonts and drawing helpers shared by every GUI component.
@@ -159,11 +160,16 @@ namespace Theme
         }
     }
 
-    /** Armoured, grimy plate with a faint honeycomb and a scorched honey border. */
-    inline void drawPanel (juce::Graphics& g, juce::Rectangle<float> r, float corner = 10.0f)
+    /** Armoured, grimy plate with a faint honeycomb and a scorched honey border.
+        Artwork (Skin.h): panel.png, or panel_footboard.png for the footswitch plate (`footboard`). */
+    inline void drawPanel (juce::Graphics& g, juce::Rectangle<float> r, float corner = 10.0f, bool footboard = false)
     {
         const auto plate = chamfered (r, corner);
         juce::DropShadow (juce::Colours::black.withAlpha (0.8f), 18, { 0, 6 }).drawForPath (g, plate);
+
+        if (footboard ? Skin::drawNine (g, "panel_footboard", r, 48.0f, 0.7f)
+                      : Skin::drawNine (g, "panel", r, 40.0f, 0.7f))
+            return;
 
         g.setGradientFill (juce::ColourGradient (Colours::panelHi.withAlpha (0.94f), r.getX(), r.getY(),
                                                  Colours::panel.withAlpha (0.94f), r.getX(), r.getBottom(), false));
@@ -191,6 +197,16 @@ namespace Theme
         g.drawLine (r.getX() + corner, r.getY() + 1.0f, r.getX() + corner + 7.0f, r.getY() + 1.0f, 2.0f);
         g.drawLine (r.getRight() - 1.0f, r.getY() + corner + 7.0f, r.getRight() - 1.0f, r.getY() + corner, 2.0f);
         g.drawLine (r.getRight() - corner, r.getY() + 1.0f, r.getRight() - corner - 7.0f, r.getY() + 1.0f, 2.0f);
+    }
+
+    /** A sunken window for graphs, curves and text (artwork: panel_inset.png). */
+    inline void drawInset (juce::Graphics& g, juce::Rectangle<float> r, float corner = 6.0f)
+    {
+        if (! Skin::drawNine (g, "panel_inset", r, 20.0f, 0.6f))
+        {
+            g.setColour (Colours::inset);
+            g.fillRoundedRectangle (r, corner);
+        }
     }
 
     /** Section title: hex LED + spiky metal lettering in the honey gradient when active. */
