@@ -1,8 +1,8 @@
 ; Inno Setup script for Swarmness (Windows x64)
-; Build: ISCC.exe /DAppVersion=2.0.0 /DBuildDir=<path to build\Swarmness_artefacts\Release> Swarmness.iss
+; Build: ISCC.exe /DAppVersion=1.0.0 /DBuildDir=<path to build\Swarmness_artefacts\Release> Swarmness.iss
 
 #ifndef AppVersion
-  #define AppVersion "2.0.0"
+  #define AppVersion "1.0.0"
 #endif
 #ifndef BuildDir
   #define BuildDir "..\..\build\Swarmness_artefacts\Release"

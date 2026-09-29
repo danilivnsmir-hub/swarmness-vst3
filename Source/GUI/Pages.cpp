@@ -444,8 +444,8 @@ EqPage::EqPage (SwarmnessAudioProcessor& p)
         auto f = std::make_unique<Fader> (level ? juce::String ("LEVEL") : juce::String (combCaptions[b]), true);
         f->setCompact (true);
         f->attach (state, level ? geqLevel : geqBands[b],
-                   level ? juce::String ("LEVEL: output of the COMB EQ, +-12 dB")
-                         : "COMB " + juce::String (combCaptions[b]) + " Hz band, +-12 dB (double-click = 0)");
+                   level ? juce::String ("LEVEL: output of the COMB EQ, +/-12 dB")
+                         : "COMB " + juce::String (combCaptions[b]) + " Hz band, +/-12 dB (double-click = 0)");
         f->getSlider().setDoubleClickReturnValue (true, 0.0);
         addAndMakeVisible (*f);
         combFaders.push_back (std::move (f));
@@ -479,7 +479,7 @@ EqPage::EqPage (SwarmnessAudioProcessor& p)
         if (node >= 1 && node <= 5)
             selectBand (node - 1);
     };
-    carveGraph.setTooltip ("Drag the nodes (SHIFT = fine), mouse wheel on a bell = Q, double-click = reset. "
+    carveGraph.setTooltip ("Drag the nodes (hold Shift = fine), mouse wheel on a bell = Q, double-click = reset. "
                            "LC / HC = 24 dB/oct low / high cut. Behind the curve: the plug-in's output spectrum");
     addAndMakeVisible (carveGraph);
 
@@ -932,7 +932,7 @@ AmpCabSection::AmpCabSection (SwarmnessAudioProcessor& p)
     attachButton (cabPower, ParamIDs::cabOn, "CAB on / off");
 
     channelSelector.setTooltip ("CLEAN = CHROME (crystal clean), CRUNCH = BRIT (barking crunch), LEAD = STEEL (tight high gain). "
-                                "NAM: a Neural Amp Modeler capture (.nam) - load one below, or find thousands on TONE3000");
+                                "NAM: a Neural Amp Modeler capture (.nam) - load one below, or browse captures on TONE3000");
     cabSelector.setTooltip ("Modelled cabinets: 1x12 / 2x12 open-back combos, 4x12 BRIT (warm, mid-forward) and 4x12 MOD (tight, aggressive upper mids). "
                             "IR = your cabinet impulse response");
     addAndMakeVisible (channelSelector);
@@ -951,13 +951,13 @@ AmpCabSection::AmpCabSection (SwarmnessAudioProcessor& p)
         addAndMakeVisible (k);
 
     // NAM mode: its own knobs, 5 = neutral (the capture's own level, flat EQ)
-    namInputKnob   .attach (state, namInput,    "INPUT: level into the capture, 5 = its own level (+-18 dB) - lower cleans it up, higher drives it harder");
-    namBassKnob    .attach (state, namBass,     "BASS: post EQ low shelf, 5 = flat (+-12 dB)");
-    namMidKnob     .attach (state, namMid,      "MID: post EQ at 650 Hz, 5 = flat (+-12 dB)");
-    namTrebleKnob  .attach (state, namTreble,   "TREBLE: post EQ high shelf, 5 = flat (+-12 dB)");
-    namPresenceKnob.attach (state, namPresence, "PRESENCE: post EQ air above 5 kHz, 5 = flat (+-7 dB)");
-    namDepthKnob   .attach (state, namDepth,    "DEPTH: post EQ low thump at 85 Hz, 5 = flat (+-7 dB)");
-    namOutputKnob  .attach (state, namOutput,   "OUTPUT: level after the capture, 5 = unity (+-18 dB)");
+    namInputKnob   .attach (state, namInput,    "INPUT: level into the capture, 5 = its own level (+/-18 dB) - lower cleans it up, higher drives it harder");
+    namBassKnob    .attach (state, namBass,     "BASS: post EQ low shelf, 5 = flat (+/-12 dB)");
+    namMidKnob     .attach (state, namMid,      "MID: post EQ at 650 Hz, 5 = flat (+/-12 dB)");
+    namTrebleKnob  .attach (state, namTreble,   "TREBLE: post EQ high shelf, 5 = flat (+/-12 dB)");
+    namPresenceKnob.attach (state, namPresence, "PRESENCE: post EQ air above 5 kHz, 5 = flat (+/-7 dB)");
+    namDepthKnob   .attach (state, namDepth,    "DEPTH: post EQ low thump at 85 Hz, 5 = flat (+/-7 dB)");
+    namOutputKnob  .attach (state, namOutput,   "OUTPUT: level after the capture, 5 = unity (+/-18 dB)");
     for (auto* k : { &namInputKnob, &namBassKnob, &namMidKnob, &namTrebleKnob, &namPresenceKnob, &namDepthKnob, &namOutputKnob })
         addChildComponent (k);
 
@@ -965,7 +965,7 @@ AmpCabSection::AmpCabSection (SwarmnessAudioProcessor& p)
     loadNamButton.setTooltip ("Load a Neural Amp Modeler capture (.nam). Or drop one on the AMP panel");
     loadNamButton.onClick = [this] { choose (true); };
     toneButton.setTooltip (Tone3000::isConfigured()
-                               ? "TONE3000: browse thousands of free NAM captures in your browser - pick one and it downloads and loads here "
+                               ? "TONE3000: browse NAM captures in your browser - pick one and it downloads and loads here "
                                  "(all models of the tone; step through them with < >)"
                                : "Open TONE3000 in the browser - the free library of NAM captures and cabinet IRs. Download a .nam, then load or drop it here");
     toneButton.onClick = [this] { tone3000Menu (processor, toneButton, Tone3000::Target::amp); };
@@ -1007,7 +1007,7 @@ AmpCabSection::AmpCabSection (SwarmnessAudioProcessor& p)
     clearIrButton.setTooltip ("Forget the IR in the selected slot");
     clearIrButton.onClick = [this] { processor.clearCabIR (irSlot); message.clear(); };
     irToneButton.setTooltip (Tone3000::isConfigured() ? "TONE3000: pick a cabinet IR in your browser - it downloads and loads into the selected slot"
-                                                      : "Open TONE3000 in the browser - thousands of free cabinet IRs");
+                                                      : "Open TONE3000 in the browser to browse cabinet IRs");
     irToneButton.onClick = [this] { processor.browseTone3000 (Tone3000::Target::cab, Tone3000::Architecture::a1, irSlot); };
     irPrev.setTooltip ("Previous IR in slot A's folder");
     irNext.setTooltip ("Next IR in slot A's folder");
@@ -1355,8 +1355,8 @@ WaspSection::WaspSection (SwarmnessAudioProcessor& p)
     brightKnob.attach (state, drvBright, "BRIGHT: output voicing - darker and smoother down, more bite and pick attack up");
     attackKnob.attach (state, drvAttack, "ATTACK: tightens the low end in front of the clipping - up for chugs that stay tight on a high-gain amp, down for a full-range boost");
     gateKnob  .attach (state, drvGate,   "GATE: noise gate keyed from your guitar (0 = off) - silences the hiss of the drive and the amp behind it");
-    namInputKnob .attach (state, drvNamInput,  "INPUT: level into the pedal capture, 5 = as captured (+-18 dB) - more = the pedal's DRIVE");
-    namOutputKnob.attach (state, drvNamOutput, "OUTPUT: level after the capture, 5 = as captured (+-18 dB) - the pedal's LEVEL");
+    namInputKnob .attach (state, drvNamInput,  "INPUT: level into the pedal capture, 5 = as captured (+/-18 dB) - more = the pedal's DRIVE");
+    namOutputKnob.attach (state, drvNamOutput, "OUTPUT: level after the capture, 5 = as captured (+/-18 dB) - the pedal's LEVEL");
     for (auto* k : { &volumeKnob, &driveKnob, &brightKnob, &attackKnob, &gateKnob })
         addAndMakeVisible (k);
     for (auto* k : { &namInputKnob, &namOutputKnob })

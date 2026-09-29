@@ -309,14 +309,15 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
                     transport.ppq = *q;
         }
 
-    // ---- INPUT gain (how hard everything after it is hit)
+    // ---- INPUT gain (how hard everything after it is hit). A NaN / Inf from the host never gets in:
+    // once inside a feedback loop (CRYPT, the HIVE trails, the AMP) it would silence the plug-in.
     inputGainSmoothed.setTargetValue (juce::Decibels::decibelsToGain (p.input->load()));
     for (int i = 0; i < numSamples; ++i)
     {
         const float g = inputGainSmoothed.getNextValue();
         inputGainTrack[(size_t) i] = g;
         for (int ch = 0; ch < numChannels; ++ch)
-            audio[ch][i] *= g;
+            audio[ch][i] = std::isfinite (audio[ch][i]) ? audio[ch][i] * g : 0.0f;
     }
 
     for (int ch = 0; ch < numChannels; ++ch)
@@ -1072,6 +1073,8 @@ void SwarmnessAudioProcessor::handleMidi (const juce::MidiBuffer& midi)
 {
     for (const auto meta : midi)
     {
+        if (meta.numBytes > 3)
+            continue;   // SysEx and the like: not ours (and a MidiMessage of it would allocate)
         const auto msg = meta.getMessage();
         const bool isCC = msg.isController(), isNote = msg.isNoteOnOrOff();
         if (! isCC && ! isNote)

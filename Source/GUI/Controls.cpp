@@ -938,6 +938,18 @@ void PresetBar::saveAs()
                 if (safe->presets.isFactoryPreset (name))
                     juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Save Preset",
                                                             "\"" + name + "\" is a factory preset name. Please choose another name.");
+                else if (safe->presets.isUserPreset (name) && name != safe->presets.getCurrentPresetName())
+                    juce::AlertWindow::showOkCancelBox (juce::MessageBoxIconType::QuestionIcon, "Save Preset",
+                                                        "A preset named \"" + name + "\" already exists. Replace it?", "Replace", "Cancel",
+                                                        safe.getComponent(),
+                                                        juce::ModalCallbackFunction::create ([safe, name] (int replace)
+                                                        {
+                                                            if (replace == 1 && safe != nullptr)
+                                                            {
+                                                                safe->presets.saveUserPreset (name);
+                                                                safe->refresh();
+                                                            }
+                                                        }));
                 else
                     safe->presets.saveUserPreset (name);
                 safe->refresh();
@@ -1034,33 +1046,52 @@ void InfoOverlay::paint (juce::Graphics& g)
         { "WASP",     "Tight overdrive in front of the AMP (asymmetric hard clipping): DRIVE = tight boost .. square overdrive, ATTACK = how tight the low end is "
                       "before the clipping, BRIGHT = voicing, VOLUME (5 = about unity), GATE = noise gate keyed from the guitar." },
         { "AMP",      "Three amps: CLEAN = CHROME (crystal clean), CRUNCH = BRIT (barking crunch), LEAD = STEEL (tight high gain). "
-                      "NAM = a Neural Amp Modeler capture with its own INPUT / EQ / OUTPUT knobs (all at 5 = the capture as it is) - LOAD .NAM or drop one, find thousands on TONE3000. GATE = noise gate keyed from the guitar (on the amp's input and output)." },
+                      "NAM = a Neural Amp Modeler capture with its own INPUT / EQ / OUTPUT knobs (all at 5 = the capture as it is) - LOAD .NAM, drop one or browse captures on TONE3000. GATE = noise gate keyed from the guitar (on the amp's input and output)." },
         { "CAB",      "Speaker cabinet: four modelled cabinets (MIC = cap..edge, DISTANCE = grille..room) or your own IRs in two slots A / B "
                       "(LOAD IR, TONE3000 or drop a WAV on a slot; A / B MIX blends them, time-aligned; INV B flips B's phase)." },
         { "CHAIN",    "The strip under the header is the signal chain. Drag a block to reorder it (fuzz before or after the pitch, reverb into the fuzz...), "
                       "click it to open its page, click its LED to switch it on / off, right-click for MIDI learn. Drag it UP / DOWN for parallel paths A / B (an empty path = dry), "
                       "the knob at the merge balances A and B. Order and paths are saved with presets." },
-        { "EQ",       "COMB = 10-band graphic EQ (+-12 dB) with LEVEL. CARVE = parametric: 24 dB/oct LOW / HIGH CUT, shelves and 3 bells - drag the nodes, "
+        { "EQ",       "COMB = 10-band graphic EQ (+/-12 dB) with LEVEL. CARVE = parametric: 24 dB/oct LOW / HIGH CUT, shelves and 3 bells - drag the nodes, "
                       "wheel = Q, double-click = reset; the output spectrum runs behind the curve." },
         { "CRYPT",    "Reverb: ROOM / PLATE / HALL / ABYSS or your own IR (LOAD IR or drop a file). DUCK dips the tail while you play, "
                       "LOW CUT keeps it out of the low end. Switching it off lets the tail ring out." },
         { "MIDI",     "Right-click ANY control for MIDI learn: switches toggle on each press, selectors step, knobs follow the CC. "
                       "One pedal can drive several controls (e.g. ON and WINGS)." },
+        { "LIVE",     "SCENES A..D = four versions of the sound inside one preset (click to switch; right-click = MIDI learn or copy the current scene there). "
+                      "TUNE = the tuner (MUTE silences the output while it is open). MINI = a small window with the chain, scenes and footswitches for playing live." },
         { "LEVELS",   "INPUT = input gain: how hard the effects and amps are hit (aim for the green zone of the IN meter). "
                       "VOLUME = output level. Footswitches: MOMENTARY = while held, LATCH = click on / off (they work even while bypassed)." },
         { "PRESETS",  "FACTORY / USER tabs pick the bank that the list and the < > arrows browse. SAVE stores your sound in USER "
                       "(an edited factory preset becomes a new user preset). Hover the name for the preset's description." },
     };
 
-    for (const auto& item : items)
+    // each row as tall as its text needs; the type shrinks a little if the whole list would not fit
+    const float bodyW = r.getWidth() - 120.0f;
+    float size = 15.0f;
+    std::vector<int> lines;
+    for (;; size -= 0.5f)
     {
-        auto row = r.removeFromTop (juce::jmin (42.0f, r.getHeight()));
+        lines.clear();
+        float total = 0.0f;
+        for (const auto& item : items)
+        {
+            const float w = juce::GlyphArrangement::getStringWidth (font (size), item.body) * 1.08f;   // (word wrap)
+            lines.push_back (juce::jmax (1, (int) std::ceil (w / bodyW)));
+            total += juce::jmax (22.0f, (float) lines.back() * size * 1.2f) + 5.0f;
+        }
+        if (total <= r.getHeight() || size <= 12.0f)
+            break;
+    }
+    for (size_t i = 0; i < std::size (items); ++i)
+    {
+        auto row = r.removeFromTop (juce::jmin (juce::jmax (22.0f, (float) lines[i] * size * 1.2f) + 5.0f, r.getHeight()));
         g.setFont (displayFont (19.0f));
         g.setColour (Colours::accentBright);
-        g.drawText (item.title, row.removeFromLeft (120.0f), juce::Justification::topLeft, false);
-        g.setFont (font (15.0f));
+        g.drawText (items[i].title, row.removeFromLeft (120.0f), juce::Justification::topLeft, false);
+        g.setFont (font (size));
         g.setColour (Colours::text);
-        g.drawFittedText (item.body, row.toNearestInt(), juce::Justification::topLeft, 3, 1.0f);
+        g.drawFittedText (items[i].body, row.toNearestInt(), juce::Justification::topLeft, lines[i] + 1, 1.0f);
     }
 
     g.setFont (font (14.0f));

@@ -9,7 +9,7 @@ Swarmness includes or links the following third-party components.
 | Rajdhani font (Indian Type Foundry) | GUI text | SIL Open Font License 1.1 — `Source/Assets/Fonts/OFL.txt` |
 | [libDaisy](https://github.com/electro-smith/libDaisy) (pedal firmware only, fetched at build time) | Daisy Seed hardware support | MIT |
 | Metal Mania font (Open Window) | GUI titles | SIL Open Font License 1.1 — `Source/Assets/Fonts/OFL-MetalMania.txt` |
-| [NeuralAmpModelerCore](https://github.com/sdatkinson/NeuralAmpModelerCore) (fetched at build time, unmodified) | AMP block: playing `.nam` captures | MIT — Copyright (c) 2023 Steven Atkinson |
+| [NeuralAmpModelerCore](https://github.com/sdatkinson/NeuralAmpModelerCore) (fetched at build time, unmodified) | AMP and WASP blocks: playing `.nam` captures | MIT — Copyright (c) 2023 Steven Atkinson |
 | [nlohmann/json](https://github.com/nlohmann/json) (bundled with NeuralAmpModelerCore) | reading `.nam` files | MIT — Copyright (c) 2013-2022 Niels Lohmann |
 | [Eigen](https://eigen.tuxfamily.org) (fetched at build time, unmodified, built with `EIGEN_MPL2_ONLY`) | linear algebra for NAM | Mozilla Public License 2.0 — source: https://gitlab.com/libeigen/eigen |
 

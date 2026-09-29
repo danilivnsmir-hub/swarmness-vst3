@@ -76,7 +76,13 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     switchModeSelector.setTooltip ("Footswitches: MOMENTARY = active only while held, LATCH = click on / click off");
     addAndMakeVisible (infoButton);
     infoButton.setTooltip ("Help");
-    infoButton.onClick = [this] { infoOverlay.setVisible (true); infoOverlay.toFront (false); };
+    infoButton.onClick = [this]
+    {
+        if (mini)
+            setMini (false);   // the help needs the full window
+        infoOverlay.setVisible (true);
+        infoOverlay.toFront (false);
+    };
     addAndMakeVisible (miniButton);
     miniButton.setTooltip ("MINI: a small window with just the chain, the scenes and the footswitches - for playing live. Click again for the full view");
     miniButton.onClick = [this] { setMini (! mini); };
@@ -188,7 +194,7 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     rigPage.addAndMakeVisible (ampCab);
 
     // OUTPUT
-    inputKnob .attach (state, input,  "INPUT: input gain - how hard everything is hit (SMOKE, AMP, tracking) and louder. Aim for peaks in the green zone of the IN meter");
+    inputKnob .attach (state, input,  "INPUT: input gain - how hard SMOKE, WASP, the AMP and the pitch tracking are hit. Aim for peaks in the green zone of the IN meter");
     addAndMakeVisible (inputKnob);
     inMeter.setTargetZone (-18.0f, -6.0f);
     inMeter.setTooltip ("Input level after INPUT - aim for peaks in the green zone");
@@ -212,7 +218,7 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     addChildComponent (infoOverlay);
     addChildComponent (tunerOverlay);
     addAndMakeVisible (tunerButton);
-    tunerButton.setTooltip ("TUNER (MUTE silences the output while it is open)");
+    tunerButton.setTooltip ("TUNE: open the tuner (MUTE silences the output while it is open)");
     tunerButton.onClick = [this] { tunerOverlay.open(); };
 
     mini = processor.getUiMini();

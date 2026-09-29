@@ -287,13 +287,14 @@ namespace Chain
 
     using Order = std::array<int, numBlocks>;
 
-    /** Blocks sorted by slot value (stable: ties keep the default order). */
+    /** Blocks sorted by slot value (ties keep the default order). The default slots all differ, so this is a
+        total order and std::sort needs no stable_sort (which allocates - this runs on the audio thread). */
     inline Order orderFromSlots (const std::array<float, numBlocks>& slots) noexcept
     {
         Order order;
         for (int i = 0; i < numBlocks; ++i)
             order[(size_t) i] = i;
-        std::stable_sort (order.begin(), order.end(), [&] (int a, int b)
+        std::sort (order.begin(), order.end(), [&] (int a, int b)
         {
             const int sa = juce::roundToInt (slots[(size_t) a]), sb = juce::roundToInt (slots[(size_t) b]);
             return sa != sb ? sa < sb : defaultSlots[a] < defaultSlots[b];

@@ -145,8 +145,41 @@ void Tone3000::cancel()
     signalThreadShouldExit();
     if (listener != nullptr)
         listener->close();
+    {
+        const juce::ScopedLock sl (requestLock);
+        if (liveRequest != nullptr)
+            liveRequest->cancel();
+    }
     stopThread (5000);
     listener.reset();
+}
+
+std::unique_ptr<juce::WebInputStream> Tone3000::openRequest (const juce::URL& url, bool post, const juce::String& headers,
+                                                             int timeoutMs, int& httpStatus)
+{
+    httpStatus = 0;
+    auto stream = std::make_unique<juce::WebInputStream> (url, post);
+    stream->withExtraHeaders (headers).withConnectionTimeout (timeoutMs);
+    {
+        const juce::ScopedLock sl (requestLock);
+        if (threadShouldExit())
+            return {};
+        liveRequest = stream.get();
+    }
+    const bool connected = stream->connect (nullptr);
+    httpStatus = stream->getStatusCode();
+    if (! connected || threadShouldExit())
+    {
+        endRequest();
+        return {};
+    }
+    return stream;
+}
+
+void Tone3000::endRequest()
+{
+    const juce::ScopedLock sl (requestLock);
+    liveRequest = nullptr;
 }
 
 bool Tone3000::receiveCallback (juce::StringPairArray& params)
@@ -189,28 +222,23 @@ bool Tone3000::receiveCallback (juce::StringPairArray& params)
 
 juce::var Tone3000::apiGet (const juce::String& path, const juce::String& token, int& httpStatus)
 {
-    httpStatus = 0;
-    auto stream = juce::URL (kApi + path).createInputStream (
-        juce::URL::InputStreamOptions (juce::URL::ParameterHandling::inAddress)
-            .withExtraHeaders ("Authorization: Bearer " + token + "\r\nAccept: application/json")
-            .withConnectionTimeoutMs (15000)
-            .withProgressCallback ([this] (int, int) { return ! threadShouldExit(); })
-            .withStatusCode (&httpStatus));
+    auto stream = openRequest (juce::URL (kApi + path), false, "Authorization: Bearer " + token + "\r\nAccept: application/json",
+                               15000, httpStatus);
     if (stream == nullptr)
         return {};
-    return juce::JSON::parse (stream->readEntireStreamAsString());
+    const auto text = stream->readEntireStreamAsString();
+    endRequest();
+    return juce::JSON::parse (text);
 }
 
 bool Tone3000::downloadTo (const juce::String& url, const juce::String& token, const juce::File& dest)
 {
     int httpStatus = 0;
-    auto stream = juce::URL (url).createInputStream (
-        juce::URL::InputStreamOptions (juce::URL::ParameterHandling::inAddress)
-            .withExtraHeaders ("Authorization: Bearer " + token)
-            .withConnectionTimeoutMs (30000)
-            .withProgressCallback ([this] (int, int) { return ! threadShouldExit(); })
-            .withStatusCode (&httpStatus));
-    if (stream == nullptr || httpStatus >= 400)
+    auto stream = openRequest (juce::URL (url), false, "Authorization: Bearer " + token, 30000, httpStatus);
+    if (stream == nullptr)
+        return false;
+    const juce::ScopeGuard done { [this] { endRequest(); } };
+    if (httpStatus >= 400)
         return false;
     // in small chunks, so closing the plug-in (or a new browse) never waits on a big download
     juce::MemoryOutputStream data;
@@ -260,13 +288,14 @@ void Tone3000::run()
     int httpStatus = 0;
     juce::String token;
     {
-        auto stream = juce::URL (kApi + "/api/v1/oauth/token").withPOSTData (form).createInputStream (
-            juce::URL::InputStreamOptions (juce::URL::ParameterHandling::inPostData)
-                .withExtraHeaders ("Content-Type: application/x-www-form-urlencoded\r\nAccept: application/json")
-                .withConnectionTimeoutMs (15000)
-                .withStatusCode (&httpStatus));
+        auto stream = openRequest (juce::URL (kApi + "/api/v1/oauth/token").withPOSTData (form), true,
+                                   "Content-Type: application/x-www-form-urlencoded\r\nAccept: application/json", 15000, httpStatus);
         if (stream != nullptr)
-            token = juce::JSON::parse (stream->readEntireStreamAsString())["access_token"].toString();
+        {
+            const auto text = stream->readEntireStreamAsString();
+            endRequest();
+            token = juce::JSON::parse (text)["access_token"].toString();
+        }
     }
     if (token.isEmpty())
     {

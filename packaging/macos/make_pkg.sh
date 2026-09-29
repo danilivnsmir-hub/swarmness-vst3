@@ -16,12 +16,15 @@ trap 'rm -rf "$WORK"' EXIT
 stage() {  # stage <name> <bundle> <install location>
   mkdir -p "$WORK/$1/root"
   cp -R "$2" "$WORK/$1/root/"
-  # Never relocate: always install to the standard plug-in folders.
+  # Never relocate: always install to the standard plug-in folders. And always replace what is there,
+  # whatever its version (the numbering restarted at 1.0.0 after the 3.x betas).
   pkgbuild --analyze --root "$WORK/$1/root" "$WORK/$1.plist"
   i=0
   while /usr/libexec/PlistBuddy -c "Print :$i" "$WORK/$1.plist" >/dev/null 2>&1; do
-    /usr/libexec/PlistBuddy -c "Delete :$i:BundleIsRelocatable" "$WORK/$1.plist" >/dev/null 2>&1 || true
-    /usr/libexec/PlistBuddy -c "Add :$i:BundleIsRelocatable bool false" "$WORK/$1.plist"
+    for key in BundleIsRelocatable BundleIsVersionChecked; do
+      /usr/libexec/PlistBuddy -c "Delete :$i:$key" "$WORK/$1.plist" >/dev/null 2>&1 || true
+      /usr/libexec/PlistBuddy -c "Add :$i:$key bool false" "$WORK/$1.plist"
+    done
     i=$((i + 1))
   done
   pkgbuild --root "$WORK/$1/root" --component-plist "$WORK/$1.plist" --identifier "$ID.$1" --version "$VERSION" \

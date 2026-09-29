@@ -166,7 +166,7 @@ namespace ampsim
                 a.outDb += 7.6f;   // level-matched to the other models at noon
                 break;
             }
-            case 3: // CITRUS - thick British fuzz-crunch: four hot stages, big coupling caps, dark, low feedback
+            case 3: // thick fuzz-crunch: four hot stages, big coupling caps, dark, low feedback
             {
                 a.st[0] = triode (300.0f, 1.5f * k, 0.0f, 1 * M, 68 * k, 1 * M, 0.0f, 14000.0f, 1.0f);
                 a.st[1] = triode (300.0f, 1.5f * k, 0.0f, 470 * k, 150 * k, 1 * M, 47 * n, 7000.0f, 0.15f);

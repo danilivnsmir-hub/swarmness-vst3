@@ -8,7 +8,7 @@ Picked up by the code:
 - panel, panel_footboard, panel_inset                      - section panels, footswitch board, graph windows (9-slice)
 - knob_base, knob_cap, knob_cap_small, knob_big_cap         - knobs: fixed base with its ticks at -135..+135 deg,
                                                              cap turning with the value (pointer straight up)
-- power_off, power_on, led_off, led_amber, led_green, led_red
+- power_off, power_on, led_off, led_amber, led_red          - block power buttons, footswitch LEDs
 - button_normal, button_hover, button_down                 - header / IR / capture buttons (9-slice)
 - arrow_left, arrow_right                                   - the < > buttons (arrow drawn in)
 - pill_off, pill_on, segment_bg, segment_on                 - toggles and segmented selectors
@@ -20,5 +20,5 @@ Picked up by the code:
 - cab_grille_0 .. cab_grille_4                              - CAB grille cloth, 210 px high (9-slice)
 - tuner_panel, tuner_cell_off, tuner_cell_on, tuner_cell_center
 
-Not used yet: knob_cap_hover (hover is drawn), icon_<block> (for a future mini view).
+Not used yet: knob_cap_hover (hover is drawn), led_green, icon_<block>.
 Keep everything behind text dark enough for the light captions on top of it.

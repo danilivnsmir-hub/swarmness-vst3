@@ -128,7 +128,7 @@ namespace Skin
     inline juce::Rectangle<float> naturalSize (const juce::String& name)
     {
         if (auto* a = detail::Cache::get().find (name))
-            return { a->levels.front().getWidth() * unitsPerPixel, a->levels.front().getHeight() * unitsPerPixel };
+            return { (float) a->levels.front().getWidth() * unitsPerPixel, (float) a->levels.front().getHeight() * unitsPerPixel };
         return {};
     }
 
@@ -161,8 +161,7 @@ namespace Skin
         if (a == nullptr || dest.isEmpty())
             return false;
         const auto& full = a->levels.front();
-        const auto [img, px] = a->pick (dest.getWidth() * detail::deviceScale (g) / (float) full.getWidth());
-        juce::ignoreUnused (px);
+        const juce::Image* const img = a->pick (dest.getWidth() * detail::deviceScale (g) / (float) full.getWidth()).first;
         juce::Graphics::ScopedSaveState s (g);
         g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
         g.setOpacity (alpha);
@@ -179,7 +178,9 @@ namespace Skin
             (0 = that direction stretches whole); `scale` = screen pixels per image pixel for the edges. */
         inline juce::Image compose (Art& a, int W, int H, juce::BorderSize<float> border, float scale)
         {
-            const auto [src, s] = a.pick (scale);
+            const auto picked = a.pick (scale);
+            const juce::Image* const src = picked.first;
+            const float s = picked.second;   // screen pixels per pixel of that copy
             const float k = (float) src->getWidth() / (float) a.levels.front().getWidth();   // level pixels per full pixel
             const int sw = src->getWidth(), sh = src->getHeight();
             // edges in the source copy (never more than the whole) and on screen (shrunk to fit if need be)

@@ -56,14 +56,6 @@ public:
         return channel >= 0 && channel < 3 ? referenceName (channel, (int) channelSide (channel)) : "NAM";
     }
 
-    static const char* modelName (int channel, float character) noexcept
-    {
-        static const char* names[3][3] { { "CHROME", "GLASSHOUSE", "VELVET" },
-                                         { "BRIT", "MARMALADE", "CITRUS" },
-                                         { "STEEL", "IRONHIVE", "SLUDGE" } };
-        if (channel < 0 || channel > 2) return "NAM";
-        return names[channel][character < 0.3f ? 0 : (character > 0.7f ? 2 : 1)];
-    }
     static const char* referenceName (int channel, int side) noexcept
     {
         static const char* names[3][2] { { "CHROME", "VELVET" }, { "BRIT", "CITRUS" }, { "STEEL", "SLUDGE" } };

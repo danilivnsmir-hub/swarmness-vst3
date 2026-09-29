@@ -950,8 +950,8 @@ namespace
         dir.getChildFile ("Mine.swpreset").replaceWithText (R"({"name":"Mine","plugin":"Swarmness","version":"3.0.0","parameters":{"fuzzOn":1}})");
         const int moved = PresetManager::moveUnsupportedPresets (dir);
         check (moved == 1 && ! dir.getChildFile ("Chainsaw Massacre.swpreset").exists() && dir.getChildFile ("Mine.swpreset").exists()
-               && dir.getChildFile ("Swarmness 1.x (unsupported)").getChildFile ("Chainsaw Massacre.swpreset").exists(),
-               "1.x preset moved to 'Swarmness 1.x (unsupported)', current presets stay");
+               && dir.getChildFile ("Old presets (unsupported)").getChildFile ("Chainsaw Massacre.swpreset").exists(),
+               "old (1.x numbering) preset moved to 'Old presets (unsupported)', current presets stay");
         dir.deleteRecursively();
     }
 
@@ -1228,9 +1228,46 @@ namespace
             const auto order2 = b.getRequestedChainOrder();
             auto pos2 = [&order2] (int block) { return (int) (std::find (order2.begin(), order2.end(), block) - order2.begin()); };
             check (pos2 (Chain::smoke) > pos2 (Chain::swarm), "old user preset with SMOKE POST: SMOKE lands after SWARM");
+
+            // importing it again never replaces the user preset of the same name
+            b.getPresetManager().importPreset (file);
+            check (b.getPresetManager().isUserPreset ("Legacy Post") && b.getPresetManager().isUserPreset ("Legacy Post (2)")
+                       && b.getPresetManager().getCurrentPresetName() == "Legacy Post (2)",
+                   "importing a preset with an existing name keeps both (\"Legacy Post (2)\")");
+            b.getPresetManager().deleteUserPreset ("Legacy Post (2)");
             b.getPresetManager().deleteUserPreset ("Legacy Post");
             file.deleteFile();
         }
+    }
+
+    void testNonFiniteInput()
+    {
+        std::printf ("\nNon-finite input\n");
+        SwarmnessAudioProcessor p;
+        p.prepareToPlay (48000.0, 256);
+        for (auto* id : { ParamIDs::fuzzOn, ParamIDs::swarmOn, ParamIDs::revOn, ParamIDs::rbOn })
+            setParam (p, id, 1.0f);
+        juce::MidiBuffer midi;
+        juce::AudioBuffer<float> bad (2, 256);
+        bad.clear();
+        bad.setSample (0, 10, std::numeric_limits<float>::quiet_NaN());
+        bad.setSample (1, 20, std::numeric_limits<float>::infinity());
+        p.processBlock (bad, midi);
+        auto guitar = makeGuitar (48000.0, 256 * 40);
+        float peak = 0.0f;
+        bool finite = true;
+        for (int start = 0; start < guitar.getNumSamples(); start += 256)
+        {
+            juce::AudioBuffer<float> b (2, 256);
+            for (int ch = 0; ch < 2; ++ch)
+                b.copyFrom (ch, 0, guitar, juce::jmin (ch, guitar.getNumChannels() - 1), start, 256);
+            p.processBlock (b, midi);
+            for (int ch = 0; ch < 2; ++ch)
+                for (int i = 0; i < 256; ++i)
+                    finite = finite && std::isfinite (b.getSample (ch, i));
+            peak = juce::jmax (peak, b.getMagnitude (0, 256));
+        }
+        check (finite && peak > 0.01f, juce::String::formatted ("a NaN / Inf from the host doesn't silence it (peak after: %.3f)", peak));
     }
 
     void setLanes (SwarmnessAudioProcessor& p, std::initializer_list<std::pair<int, int>> lanes)
@@ -1966,7 +2003,7 @@ namespace
                 minDb = juce::jmin (minDb, db);
                 maxDb = juce::jmax (maxDb, db);
                 check (allFinite (out) && out.getMagnitude (0, 0, out.getNumSamples()) < 2.0f,
-                       juce::String::formatted ("%-10s: bounded, %.1f dB RMS", AmpBlock::modelName (chn, character), db));
+                       juce::String::formatted ("%-6s %.1f: bounded, %.1f dB RMS", AmpBlock::channelModel (chn), character, db));
             }
         check (maxDb - minDb < 3.0, juce::String::formatted ("the three amps at noon within %.1f dB of each other", maxDb - minDb));
 
@@ -2839,7 +2876,7 @@ int main (int argc, char** argv)
         for (int chn = 0; chn < 3; ++chn)
             for (float character : { 0.0f, 0.5f, 1.0f })
             {
-                std::printf ("%-11s", AmpBlock::modelName (chn, character));
+                std::printf ("%-6s %.1f ", AmpBlock::channelModel (chn), character);
                 for (float gain : { 0.0f, 0.2f, 0.5f, 0.8f, 1.0f })
                 {
                     AmpBlock::Settings s;
@@ -2931,7 +2968,7 @@ int main (int argc, char** argv)
                 };
                 const auto pin = spectrum (noise), pout = spectrum (renderAmp (s, noise));
                 const double ref = band (pout, 1000.0) - band (pin, 1000.0);
-                std::printf ("%-11s", AmpBlock::modelName (chn, character));
+                std::printf ("%-6s %.1f ", AmpBlock::channelModel (chn), character);
                 for (double b : bands) std::printf (" %+6.1f", band (pout, b) - band (pin, b) - ref);
                 // aliasing: a 3520 Hz sine at full gain; everything that is not a harmonic of it
                 s.gain = 1.0f;
@@ -3180,6 +3217,7 @@ int main (int argc, char** argv)
         p.setUiMini (mini);
         std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
         const bool tunerShot = argc >= 7 && juce::String (argv[6]) == "tuner";
+        const bool infoShot = argc >= 7 && juce::String (argv[6]) == "info";
         editor->setSize (juce::roundToInt (MainPanel::baseWidth * scale), juce::roundToInt ((mini ? MainPanel::miniHeight : MainPanel::baseHeight) * scale));
 
         // Feed a little audio so meters and the pitch trace show activity.
@@ -3215,6 +3253,21 @@ int main (int argc, char** argv)
                 }
                 for (int k = 0; k < 20; ++k)
                     t->timerCallbackForTests();
+            }
+        }
+        if (infoShot)   // the help overlay
+        {
+            std::function<InfoOverlay* (juce::Component&)> find = [&] (juce::Component& c) -> InfoOverlay*
+            {
+                if (auto* o = dynamic_cast<InfoOverlay*> (&c)) return o;
+                for (auto* ch : c.getChildren())
+                    if (auto* o = find (*ch)) return o;
+                return nullptr;
+            };
+            if (auto* o = find (*editor))
+            {
+                o->setVisible (true);
+                o->toFront (false);
             }
         }
         auto image = editor->createComponentSnapshot (editor->getLocalBounds(), true, 1.0f);
@@ -3345,6 +3398,7 @@ int main (int argc, char** argv)
     testHiveBlock();
     testChainOrder();
     testParallelRouting();
+    testNonFiniteInput();
     testGraphicEq();
     testParametricEq();
     testReverb();

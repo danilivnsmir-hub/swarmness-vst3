@@ -28,7 +28,7 @@ PresetManager::PresetManager (juce::AudioProcessorValueTreeState& state)
 
 int PresetManager::moveUnsupportedPresets (const juce::File& dir)
 {
-    // Swarmness 1.x wrote presets into the same folder (normalised values, no "plugin" tag).
+    // The first Swarmness versions (the old 1.x / 2.x numbering) wrote presets into the same folder (normalised values, no "plugin" tag).
     // They cannot be read any more: move them into a sub-folder instead of listing broken presets.
     int moved = 0;
     for (const auto& f : dir.findChildFiles (juce::File::findFiles, false, "*" + extension))
@@ -36,7 +36,7 @@ int PresetManager::moveUnsupportedPresets (const juce::File& dir)
         const auto json = juce::JSON::parse (f);
         if (json["plugin"].toString() == "Swarmness")
             continue;
-        const auto oldDir = dir.getChildFile ("Swarmness 1.x (unsupported)");
+        const auto oldDir = dir.getChildFile ("Old presets (unsupported)");
         oldDir.createDirectory();
         if (f.moveFileTo (oldDir.getNonexistentChildFile (f.getFileNameWithoutExtension(), extension, false)))
             ++moved;
@@ -227,14 +227,14 @@ void PresetManager::initialiseFactoryPresets()
           { { ampOn, 1 }, { ampChannel, 0 }, { ampGain, 5 }, { ampBass, 4 }, { ampMid, 4 }, { ampTreble, 6.5f }, { ampLevel, 0 },
             { cabOn, 1 }, { cabType, 1 }, { cabMic, 15 }, { cabDist, 30 }, { cabLowCut, 90 },
             { swarmOn, 1 }, { swarmMix, 45 }, { swarmDepth, 55 }, { revOn, 1 }, { revType, 2 }, { revMix, 32 }, { revDecay, 4.5f } } },
-        { "Brit Crunch", amps, "CRUNCH: bright, barking upper mids and a tight bottom - rock rhythm into the British 4x12. Roll the guitar's volume back to clean it up.",
+        { "Brit Crunch", amps, "CRUNCH: bright, barking upper mids and a tight bottom - rock rhythm into the BRIT 4x12. Roll the guitar's volume back to clean it up.",
           { { ampOn, 1 }, { ampChannel, 1 }, { ampGain, 5 }, { ampBass, 5 }, { ampMid, 7 }, { ampTreble, 6.5f }, { ampPresence, 6 }, { ampLevel, -5 }, { ampMaster, 6 },
             { cabOn, 1 }, { cabType, 2 }, { cabMic, 30 }, { cabDist, 10 } } },
         { "Brit Doom", amps, "CRUNCH with the gain up and the lows in: thick, compressed low-mids for doom and stoner riffs. DEPTH for the thump, a dark ABYSS in the gaps.",
           { { ampOn, 1 }, { ampChannel, 1 }, { ampGain, 8 }, { ampBass, 7 }, { ampMid, 6.5f }, { ampTreble, 4.5f }, { ampDepth, 7 }, { ampMaster, 7 }, { ampLevel, -12.5f }, { ampGate, 35 },
             { cabOn, 1 }, { cabType, 2 }, { cabMic, 45 }, { cabDist, 25 },
             { revOn, 1 }, { revType, 3 }, { revMix, 20 }, { revDecay, 6 }, { revDuck, 60 }, { revLowCut, 200 } } },
-        { "Steel Lead", amps, "LEAD: tight, cutting American high gain. GATE keeps the stops clean, PRESENCE and DEPTH up for modern metal.",
+        { "Steel Lead", amps, "LEAD: tight, cutting modern high gain. GATE keeps the stops clean, PRESENCE and DEPTH up for modern metal.",
           { { ampOn, 1 }, { ampChannel, 2 }, { ampGain, 5 }, { ampBass, 5 }, { ampMid, 5 }, { ampTreble, 6.5f }, { ampPresence, 5.5f }, { ampDepth, 6 },
             { ampGate, 35 }, { ampMaster, 5.5f }, { ampLevel, 2 }, { cabOn, 1 }, { cabType, 3 }, { cabMic, 25 }, { cabDist, 10 }, { cabLowCut, 80 } } },
         { "Hornet Lead", amps, "WASP boosting the LEAD amp, bright and tight, with the modern 4x12 miked close to the cap: a lead rig dialled in by ear.",
@@ -662,6 +662,10 @@ bool PresetManager::importPreset (const juce::File& file)
     name = sanitiseName (name);
     if (isFactoryPreset (name))
         name << " (imported)";
+    // never over an existing user preset: "Name (2)", "Name (3)"...
+    const auto base = name;
+    for (int k = 2; isUserPreset (name); ++k)
+        name = base + " (" + juce::String (k) + ")";
 
     applyValues (values, true);
     loadScenesFromJson (json);
@@ -698,9 +702,12 @@ PresetManager::ValueMap PresetManager::captureSceneValues() const
 
 void PresetManager::resetScenes()
 {
-    for (auto& sc : scenes) sc.clear();
-    for (auto& sc : savedScenes) sc.clear();
-    currentScene = 0;
+    {
+        const juce::ScopedLock sl (lock);
+        for (auto& sc : scenes) sc.clear();
+        for (auto& sc : savedScenes) sc.clear();
+        currentScene = 0;
+    }
     if (auto* p = apvts.getParameter (ParamIDs::scene))
         p->setValueNotifyingHost (0.0f);
 }
@@ -708,6 +715,7 @@ void PresetManager::resetScenes()
 void PresetManager::loadScenesFromJson (const juce::var& json)
 {
     resetScenes();
+    const juce::ScopedLock sl (lock);
     scenes[0] = captureSceneValues();
     if (auto* list = json["scenes"].getArray())
         for (int k = 1; k < juce::jmin (kScenes, list->size()); ++k)
@@ -731,6 +739,7 @@ void PresetManager::loadScenesFromJson (const juce::var& json)
 
 juce::var PresetManager::presetJson (const juce::String& name)
 {
+    const juce::ScopedLock sl (lock);
     scenes[(size_t) currentScene] = captureSceneValues();
     auto values = captureValues();
     for (const auto& [id, v] : scenes[0])
@@ -756,25 +765,32 @@ juce::var PresetManager::presetJson (const juce::String& name)
 
 bool PresetManager::isSceneUsed (int index) const
 {
+    const juce::ScopedLock sl (lock);
     return index == currentScene || ! scenes[(size_t) juce::jlimit (0, kScenes - 1, index)].empty();
 }
 
 void PresetManager::selectScene (int index)
 {
     index = juce::jlimit (0, kScenes - 1, index);
-    if (index == currentScene)
-        return;
-    scenes[(size_t) currentScene] = captureSceneValues();
-    if (scenes[(size_t) index].empty())
+    ValueMap target;
     {
-        // a new scene starts as a copy of the one you come from
-        scenes[(size_t) index] = scenes[(size_t) currentScene];
-        if (savedScenes[(size_t) index].empty())
-            savedScenes[(size_t) index] = scenes[(size_t) index];
+        const juce::ScopedLock sl (lock);
+        if (index == currentScene)
+            return;
+        scenes[(size_t) currentScene] = captureSceneValues();
+        if (scenes[(size_t) index].empty())
+        {
+            // a new scene starts as a copy of the one you come from
+            scenes[(size_t) index] = scenes[(size_t) currentScene];
+            if (savedScenes[(size_t) index].empty())
+                savedScenes[(size_t) index] = scenes[(size_t) index];
+        }
+        currentScene = index;
+        target = scenes[(size_t) index];
     }
-    currentScene = index;
     // only what differs: parameters already on the scene's value are left alone
-    for (const auto& [id, v] : scenes[(size_t) index])
+    // (outside the lock: the host hears about these changes and may save meanwhile)
+    for (const auto& [id, v] : target)
         if (auto* p = apvts.getParameter (id))
             if (std::abs (p->convertFrom0to1 (p->getValue()) - v) > 1.0e-5f * juce::jmax (1.0f, std::abs (v)))
             {
@@ -791,6 +807,7 @@ void PresetManager::selectScene (int index)
 void PresetManager::copyCurrentSceneTo (int index)
 {
     index = juce::jlimit (0, kScenes - 1, index);
+    const juce::ScopedLock sl (lock);
     if (index != currentScene)
         scenes[(size_t) index] = captureSceneValues();
 }
@@ -805,6 +822,7 @@ void PresetManager::syncSceneSnapshot()
 
 juce::var PresetManager::scenesToVar()
 {
+    const juce::ScopedLock sl (lock);
     scenes[(size_t) currentScene] = captureSceneValues();
     juce::Array<juce::var> list;
     for (const auto& sc : scenes)
@@ -819,6 +837,7 @@ juce::var PresetManager::scenesToVar()
 
 void PresetManager::scenesFromVar (const juce::var& v, int current)
 {
+    const juce::ScopedLock sl (lock);
     for (auto& sc : scenes) sc.clear();
     if (auto* list = v.getArray())
         for (int k = 0; k < juce::jmin (kScenes, list->size()); ++k)

@@ -74,11 +74,18 @@ private:
     bool receiveCallback (juce::StringPairArray& params);
     juce::var apiGet (const juce::String& path, const juce::String& token, int& status);
     bool downloadTo (const juce::String& url, const juce::String& token, const juce::File& dest);
+    /** Opens the one live request (connected; null when it failed or we are stopping). cancel() aborts it at
+        once - connecting and reading alike - so closing the plug-in never has to kill the thread.
+        Call endRequest() before the stream goes away. */
+    std::unique_ptr<juce::WebInputStream> openRequest (const juce::URL&, bool post, const juce::String& headers, int timeoutMs, int& status);
+    void endRequest();
 
     Target target = Target::amp;
     Architecture architecture = Architecture::a1;
     juce::String verifier, state;
     std::unique_ptr<juce::StreamingSocket> listener;
+    juce::CriticalSection requestLock;
+    juce::WebInputStream* liveRequest = nullptr;   // guarded by requestLock
     mutable juce::CriticalSection statusLock;
     juce::String status;
     std::shared_ptr<std::atomic<bool>> alive = std::make_shared<std::atomic<bool>> (true);

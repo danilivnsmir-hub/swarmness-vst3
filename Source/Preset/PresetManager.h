@@ -51,11 +51,12 @@ public:
     /**
      * Scenes: every preset holds up to four versions of its sound (A..D). Edits belong to the
      * scene you are in; a scene you enter for the first time starts as a copy of the one you
-     * came from. The chain order / routing is shared by all scenes. Message thread only.
+     * came from. The chain order / routing is shared by all scenes. Message thread, except that
+     * hosts may save the session (scenesToVar) from any thread: the scenes are guarded by `lock`.
      */
     static constexpr int kScenes = 4;
     void selectScene (int index);
-    int getCurrentScene() const noexcept { return currentScene; }
+    int getCurrentScene() const { const juce::ScopedLock sl (lock); return currentScene; }
     bool isSceneUsed (int index) const;
     /** Copies the scene you are in over another one. */
     void copyCurrentSceneTo (int index);
@@ -64,7 +65,7 @@ public:
     void scenesFromVar (const juce::var&, int current);
 
     static juce::File getPresetsDirectory();
-    /** Moves presets of Swarmness 1.x (unreadable) out of the user bank; returns how many. */
+    /** Moves presets of the first Swarmness versions (unreadable) out of the user bank; returns how many. */
     static int moveUnsupportedPresets (const juce::File& dir);
 
     using ValueMap = std::map<juce::String, float>;

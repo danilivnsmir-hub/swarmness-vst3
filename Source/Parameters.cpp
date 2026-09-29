@@ -99,7 +99,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     hive->addChild (cents (shDetune, "Shift Detune"));
 
     // VOICES
-    hive->addChild (toggle (rbOn, "Hive Voices On", false));
+    hive->addChild (toggle (rbOn, "Hive On", false));
     hive->addChild (std::make_unique<juce::AudioParameterFloat> (
         pid (rbPitch), "Hive Pitch", juce::NormalisableRange<float> (-12.0f, 12.0f, 0.01f), 7.0f,
         Attr().withLabel ("st").withStringFromValueFunction ([] (float v, int)
