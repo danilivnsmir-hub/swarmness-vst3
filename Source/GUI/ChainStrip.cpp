@@ -239,10 +239,25 @@ void ChainStrip::paint (juce::Graphics& g)
     const float cy = geo.cableY;
     const auto cable = Colours::accentDeep.withAlpha (0.6f);
 
-    g.setFont (displayFont (17.0f));
-    g.setColour (Colours::textDim);
-    g.drawText ("IN", juce::Rectangle<float> (0.0f, 0.0f, 30.0f, bounds.getHeight()), juce::Justification::centredLeft, false);
-    g.drawText ("OUT", juce::Rectangle<float> (bounds.getRight() - 40.0f, 0.0f, 40.0f, bounds.getHeight()), juce::Justification::centredRight, false);
+    // IN / OUT: jacks with the word under them (artwork: chain_in / chain_out), or just the word
+    if (Skin::has ("chain_in") && Skin::has ("chain_out"))
+    {
+        const auto inJack = juce::Rectangle<float> (24.0f, 24.0f).withCentre ({ 12.0f, cy - 4.0f });
+        const auto outJack = juce::Rectangle<float> (24.0f, 24.0f).withCentre ({ bounds.getRight() - 14.0f, cy - 4.0f });
+        Skin::draw (g, "chain_in", inJack);
+        Skin::draw (g, "chain_out", outJack);
+        g.setFont (font (11.5f, true));
+        g.setColour (Colours::textDim);
+        g.drawText ("IN", inJack.withY (inJack.getBottom()).withHeight (13.0f).expanded (6.0f, 0.0f), juce::Justification::centred, false);
+        g.drawText ("OUT", outJack.withY (outJack.getBottom()).withHeight (13.0f).expanded (8.0f, 0.0f), juce::Justification::centred, false);
+    }
+    else
+    {
+        g.setFont (displayFont (17.0f));
+        g.setColour (Colours::textDim);
+        g.drawText ("IN", juce::Rectangle<float> (0.0f, 0.0f, 30.0f, bounds.getHeight()), juce::Justification::centredLeft, false);
+        g.drawText ("OUT", juce::Rectangle<float> (bounds.getRight() - 40.0f, 0.0f, 40.0f, bounds.getHeight()), juce::Justification::centredRight, false);
+    }
 
     auto arrow = [&g] (float x, float y)
     {
@@ -252,16 +267,27 @@ void ChainStrip::paint (juce::Graphics& g)
         g.fillPath (a);
     };
 
-    // Cables: the main line with a detour through each split
+    // Cables: the main line with a detour through each split (artwork: chain_connector, a wire that stretches)
+    const bool wireArt = Skin::has ("chain_connector");
+    auto hcable = [&] (float x0, float x1, float y)
+    {
+        if (x1 <= x0)
+            return;
+        if (! (wireArt && Skin::drawThree (g, "chain_connector", juce::Rectangle<float> (x0, y - 2.5f, x1 - x0, 5.0f), 6.0f)))
+        {
+            g.setColour (cable);
+            g.fillRect (juce::Rectangle<float> (x0, y - 1.0f, x1 - x0, 2.0f));
+        }
+    };
     g.setColour (cable);
     const float left = 26.0f, right = bounds.getRight() - 34.0f;
     float x = left;
     for (const auto& sp : geo.splits)
     {
-        g.fillRect (juce::Rectangle<float> (x, cy - 1.0f, sp.splitX - x, 2.0f));
-        g.setColour (cable);
+        hcable (x, sp.splitX, cy);
         for (float y : { geo.laneAY, geo.laneBY })
-            g.fillRect (juce::Rectangle<float> (sp.splitX, y - 1.0f, sp.mergeX - sp.splitX, 2.0f));
+            hcable (sp.splitX, sp.mergeX, y);
+        g.setColour (wireArt ? juce::Colour (0xffa0582a) : cable);
         g.fillRect (juce::Rectangle<float> (sp.splitX - 1.0f, geo.laneAY, 2.0f, geo.laneBY - geo.laneAY));
         g.fillRect (juce::Rectangle<float> (sp.mergeX - 1.0f, geo.laneAY, 2.0f, geo.laneBY - geo.laneAY));
 
@@ -286,8 +312,7 @@ void ChainStrip::paint (juce::Graphics& g)
         g.setColour (cable);
         x = sp.mergeX;
     }
-    g.setColour (cable);
-    g.fillRect (juce::Rectangle<float> (x, cy - 1.0f, right - x, 2.0f));
+    hcable (x, right, cy);
 
     // Arrow heads on the main cable (in front of every series tile and at the output)
     for (int b = 0; b < Chain::numBlocks; ++b)
@@ -311,31 +336,58 @@ void ChainStrip::paint (juce::Graphics& g)
         if (floating)
             juce::DropShadow (juce::Colours::black.withAlpha (0.9f), 14, { 0, 5 }).drawForPath (g, shape);
 
-        g.setGradientFill (juce::ColourGradient (hi ? Colours::panelHi.brighter (0.25f) : Colours::panelHi, r.getX(), r.getY(),
-                                                 Colours::inset, r.getX(), r.getBottom(), false));
-        g.fillPath (shape);
-        if (on)
+        // artwork: off / on / open (honey-filled); the hexagon's body is 84 of the image's 124 px high,
+        // its glow spills over the tile. Its points are 0.42 of its height, like hexCapsule.
+        const auto tileArt = hi ? "chain_hex_selected" : on ? "chain_hex_on" : "chain_hex_off";
+        const bool art = Skin::has (tileArt);
+        if (art)
         {
-            g.setColour (Colours::accent.withAlpha (0.10f));
-            g.fillPath (shape);
-        }
-
-        if (hi)
-        {
-            g.setColour (Colours::accent.withAlpha (0.25f));
-            g.strokePath (shape, juce::PathStrokeType (4.0f));
-            g.setGradientFill (honeyGradient (r));
-            g.strokePath (shape, juce::PathStrokeType (1.6f));
+            const float px = r.getHeight() / 84.0f;   // UI units per image pixel
+            Skin::drawThree (g, tileArt, juce::Rectangle<float> (r.getX() - 11.0f * px, r.getY() - 20.0f * px,
+                                                                  r.getWidth() + 23.0f * px, 124.0f * px), 50.0f);
+            if (hov || floating)
+            {
+                g.setColour (Colours::accentBright.withAlpha (0.55f));
+                g.strokePath (shape, juce::PathStrokeType (1.2f));
+            }
         }
         else
         {
-            g.setColour ((hov || floating) ? Colours::accent.withAlpha (0.7f) : Colours::panelBorder.brighter (0.2f));
-            g.strokePath (shape, juce::PathStrokeType (1.2f));
+            g.setGradientFill (juce::ColourGradient (hi ? Colours::panelHi.brighter (0.25f) : Colours::panelHi, r.getX(), r.getY(),
+                                                     Colours::inset, r.getX(), r.getBottom(), false));
+            g.fillPath (shape);
+            if (on)
+            {
+                g.setColour (Colours::accent.withAlpha (0.10f));
+                g.fillPath (shape);
+            }
+
+            if (hi)
+            {
+                g.setColour (Colours::accent.withAlpha (0.25f));
+                g.strokePath (shape, juce::PathStrokeType (4.0f));
+                g.setGradientFill (honeyGradient (r));
+                g.strokePath (shape, juce::PathStrokeType (1.6f));
+            }
+            else
+            {
+                g.setColour ((hov || floating) ? Colours::accent.withAlpha (0.7f) : Colours::panelBorder.brighter (0.2f));
+                g.strokePath (shape, juce::PathStrokeType (1.2f));
+            }
         }
+        // on the honey-filled open tile everything is dark
+        const bool dark = art && hi;
 
         // power LED (PITCH: activity only)
         const auto led = ledRect (r);
-        if (on)
+        if (dark)
+        {
+            g.setColour (Colours::background.withAlpha (on ? 0.9f : 0.0f));
+            g.fillPath (hexagon (led));
+            g.setColour (Colours::background.withAlpha (0.8f));
+            g.strokePath (hexagon (led), juce::PathStrokeType (1.2f));
+        }
+        else if (on)
         {
             g.setColour (Colours::accent.withAlpha (0.35f));
             g.fillPath (hexagon (led.expanded (3.0f)));
@@ -356,16 +408,18 @@ void ChainStrip::paint (juce::Graphics& g)
         if (half)
         {
             g.setFont (displayFont (16.0f));
-            if (on || hi) g.setGradientFill (honeyGradient (text)); else g.setColour (Colours::textDim);
+            if (dark) g.setColour (Colours::background);
+            else if (on || hi) g.setGradientFill (honeyGradient (text)); else g.setColour (Colours::textDim);
             g.drawFittedText (Chain::names[b], text.translated (0.0f, 1.0f).toNearestInt(), juce::Justification::centredLeft, 1, 0.5f);
             return;
         }
         g.setFont (displayFont (19.0f));
         const auto nameArea = text.withTrimmedBottom (text.getHeight() * 0.42f).translated (0.0f, 2.0f);
-        if (on || hi) g.setGradientFill (honeyGradient (nameArea)); else g.setColour (Colours::textDim);
+        if (dark) g.setColour (Colours::background);
+        else if (on || hi) g.setGradientFill (honeyGradient (nameArea)); else g.setColour (Colours::textDim);
         g.drawFittedText (Chain::names[b], nameArea.toNearestInt(), juce::Justification::bottomLeft, 1, 0.55f);
         g.setFont (font (9.5f, true));
-        g.setColour (hi ? Colours::text.withAlpha (0.8f) : Colours::textFaint);
+        g.setColour (dark ? Colours::background.withAlpha (0.75f) : hi ? Colours::text.withAlpha (0.8f) : Colours::textFaint);
         g.drawFittedText (Chain::subtitles[b], text.withTrimmedTop (text.getHeight() * 0.58f).toNearestInt(), juce::Justification::topLeft, 1, 0.5f);
     };
 
