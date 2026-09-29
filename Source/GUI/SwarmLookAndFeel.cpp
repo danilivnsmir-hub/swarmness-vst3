@@ -284,6 +284,25 @@ void SwarmLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& bu
     const bool on = button.getToggleState();
     const auto plate = chamfered (r, 5.0f);
 
+    // artwork: < and > are the arrow buttons (the arrow is drawn in), the rest the bevelled button
+    // (9-slice) - normal, hover (also = on), down
+    const auto text = button.getButtonText();
+    const float dim = button.isEnabled() ? 1.0f : 0.45f;
+    if ((text == "<" || text == ">") && Skin::has ("arrow_left"))
+    {
+        const float side = juce::jmin (r.getWidth(), r.getHeight()) + 2.0f;
+        Skin::draw (g, text == "<" ? "arrow_left" : "arrow_right", r.withSizeKeepingCentre (side, side), isDown ? dim * 0.75f : dim);
+        if (isMouseOver && ! isDown)
+        {
+            g.setColour (Colours::accent.withAlpha (0.18f));
+            g.fillRoundedRectangle (r.withSizeKeepingCentre (side, side).reduced (side * 0.14f), 3.0f);
+        }
+        return;
+    }
+    const auto art = isDown ? "button_down" : (isMouseOver || on) ? "button_hover" : "button_normal";
+    if (Skin::drawNine (g, art, r.expanded (1.0f), 20.0f, juce::jmin (1.0f, r.getHeight() / 32.0f) * 0.8f, dim))
+        return;
+
     auto base = on ? Colours::accent.withAlpha (0.25f) : Colours::panelHi;
     if (isDown)           base = base.darker (0.3f);
     else if (isMouseOver) base = base.brighter (0.15f);
@@ -302,6 +321,8 @@ juce::Font SwarmLookAndFeel::getTextButtonFont (juce::TextButton&, int buttonHei
 
 void SwarmLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& button, bool isMouseOver, bool)
 {
+    if ((button.getButtonText() == "<" || button.getButtonText() == ">") && Skin::has ("arrow_left"))
+        return;   // the arrow is in the artwork
     g.setFont (getTextButtonFont (button, button.getHeight()));
     const bool on = button.getToggleState();
     g.setColour ((on || isMouseOver) ? Colours::accentBright : Colours::text.withAlpha (button.isEnabled() ? 0.9f : 0.4f));

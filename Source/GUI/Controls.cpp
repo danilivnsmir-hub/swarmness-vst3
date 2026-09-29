@@ -160,6 +160,17 @@ void PowerButton::paintButton (juce::Graphics& g, bool isMouseOver, bool)
     const float rad = juce::jmin (r.getWidth(), r.getHeight()) * 0.5f;
     const auto hexR = juce::Rectangle<float> (rad * 2.0f, rad * 2.0f).withCentre (c);
 
+    // artwork: the round power button, its symbol lit when on
+    if (Skin::draw (g, on ? "power_on" : "power_off", hexR.expanded (2.0f)))
+    {
+        if (isMouseOver)
+        {
+            g.setColour (Colours::accent.withAlpha (0.35f));
+            g.drawEllipse (hexR.reduced (1.0f), 1.2f);
+        }
+        return;
+    }
+
     if (on)
     {
         g.setColour (Colours::accent.withAlpha (0.3f));
@@ -193,21 +204,39 @@ void PillToggle::paintButton (juce::Graphics& g, bool isMouseOver, bool)
     const bool on = getToggleState();
     const auto shape = hexCapsule (r);
 
-    if (on)
+    // artwork: the pill, honey-filled when on (then the LED and the lettering go dark)
+    const bool art = Skin::drawThree (g, on ? "pill_on" : "pill_off", r.expanded (1.0f, 1.0f), 22.0f);
+    if (art)
     {
-        g.setGradientFill (honeyGradient (r, 0.28f));
-        g.fillPath (shape);
+        if (isMouseOver)
+        {
+            g.setColour ((on ? juce::Colours::white : Colours::accent).withAlpha (0.12f));
+            g.fillRoundedRectangle (r.reduced (2.0f), r.getHeight() * 0.5f);
+        }
     }
     else
     {
-        g.setColour (Colours::inset);
-        g.fillPath (shape);
+        if (on)
+        {
+            g.setGradientFill (honeyGradient (r, 0.28f));
+            g.fillPath (shape);
+        }
+        else
+        {
+            g.setColour (Colours::inset);
+            g.fillPath (shape);
+        }
+        g.setColour (on ? Colours::accent.withAlpha (0.9f) : (isMouseOver ? Colours::textFaint : Colours::panelBorder.brighter (0.2f)));
+        g.strokePath (shape, juce::PathStrokeType (1.0f));
     }
-    g.setColour (on ? Colours::accent.withAlpha (0.9f) : (isMouseOver ? Colours::textFaint : Colours::panelBorder.brighter (0.2f)));
-    g.strokePath (shape, juce::PathStrokeType (1.0f));
 
     const auto led = juce::Rectangle<float> (8.0f, 7.0f).withCentre ({ r.getX() + r.getHeight() * 0.5f + 3.0f, r.getCentreY() });
-    if (on)
+    if (art && on)
+    {
+        g.setColour (Colours::background.withAlpha (0.85f));
+        g.fillPath (hexagon (led));
+    }
+    else if (on)
     {
         g.setColour (Colours::accent.withAlpha (0.4f));
         g.fillPath (hexagon (led.expanded (3.0f)));
@@ -218,7 +247,7 @@ void PillToggle::paintButton (juce::Graphics& g, bool isMouseOver, bool)
     g.fillPath (hexagon (led));
 
     g.setFont (font (14.0f, true));
-    g.setColour (on ? Colours::text : Colours::textDim);
+    g.setColour (art && on ? Colours::background : on ? Colours::text : Colours::textDim);
     g.drawText (getButtonText(), r.withTrimmedLeft (r.getHeight() * 0.5f + 9.0f).withTrimmedRight (7.0f),
                 juce::Justification::centred, false);
 }
@@ -281,10 +310,15 @@ void SegmentedChoice::paint (juce::Graphics& g)
 {
     const auto r = getLocalBounds().toFloat().reduced (0.5f);
     const auto outline = hexCapsule (r);
-    g.setColour (Colours::inset);
-    g.fillPath (outline);
-    g.setColour (Colours::panelBorder.brighter (0.2f));
-    g.strokePath (outline, juce::PathStrokeType (1.0f));
+    // artwork: the slot with bevelled ends and an amber plate on the chosen segment
+    const bool art = Skin::drawThree (g, "segment_bg", r.expanded (1.0f), 28.0f);
+    if (! art)
+    {
+        g.setColour (Colours::inset);
+        g.fillPath (outline);
+        g.setColour (Colours::panelBorder.brighter (0.2f));
+        g.strokePath (outline, juce::PathStrokeType (1.0f));
+    }
 
     const float w = r.getWidth() / (float) labels.size();
     for (int i = 0; i < labels.size(); ++i)
@@ -295,10 +329,13 @@ void SegmentedChoice::paint (juce::Graphics& g)
         {
             juce::Graphics::ScopedSaveState save (g);
             g.reduceClipRegion (hexCapsule (r.reduced (2.5f)));
-            g.setColour (Colours::accent.withAlpha (0.3f));
-            g.fillRect (seg.expanded (1.0f));
-            g.setGradientFill (honeyGradient (seg));
-            g.fillRect (seg);
+            if (! Skin::drawNine (g, "segment_on", seg.expanded (1.0f), 12.0f, juce::jmin (1.0f, seg.getHeight() / 24.0f)))
+            {
+                g.setColour (Colours::accent.withAlpha (0.3f));
+                g.fillRect (seg.expanded (1.0f));
+                g.setGradientFill (honeyGradient (seg));
+                g.fillRect (seg);
+            }
         }
         else if (i == hovered)
         {
@@ -308,7 +345,7 @@ void SegmentedChoice::paint (juce::Graphics& g)
             g.fillRect (seg);
         }
 
-        if (i > 0 && i != selected && i - 1 != selected)
+        if (i > 0 && i != selected && i - 1 != selected && ! art)
         {
             g.setColour (Colours::panelBorder);
             g.drawVerticalLine ((int) seg.getX() - 2, seg.getY() + 5.0f, seg.getBottom() - 5.0f);
@@ -582,6 +619,10 @@ void LevelMeter::paint (juce::Graphics& g)
     g.setFont (displayFont (17.0f));
     g.setColour (Colours::textDim);
     g.drawText (caption, r.removeFromLeft (32.0f), juce::Justification::centredLeft, false);
+
+    // artwork: the sunken slot; the segments sit inside its rim
+    if (Skin::drawThree (g, "meter_bg", r, 20.0f))
+        r = r.reduced (8.0f, 0.0f);
 
     const float barH = juce::jmin (6.0f, (r.getHeight() - 4.0f) * 0.5f);
     const float zeroDb = juce::jmap (0.0f, -60.0f, 6.0f, 0.0f, 1.0f);
