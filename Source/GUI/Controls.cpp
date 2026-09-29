@@ -386,22 +386,46 @@ void Footswitch::paint (juce::Graphics& g)
     auto r = getLocalBounds().toFloat();
     const bool lit = (inverse ? ! value : value) || externallyLit;
 
-    // Hex LED jewel
+    // Hex LED jewel (artwork: led_off / led_amber / led_red; a colour without artwork tints the lens)
     const auto led = juce::Rectangle<float> (13.0f, 12.0f).withCentre ({ r.getCentreX(), r.getY() + 8.0f });
     r.removeFromTop (18.0f);
-    if (lit)
+    const auto ledArt = ! lit ? juce::String ("led_off")
+                              : ledColour == Colours::ledRed ? juce::String ("led_red")
+                              : ledColour == Colours::accent ? juce::String ("led_amber") : juce::String ("led_off");
+    if (Skin::has (ledArt))
+    {
+        const auto lens = led.withSizeKeepingCentre (16.0f, 16.0f);
+        if (lit)
+        {
+            g.setGradientFill (juce::ColourGradient (ledColour.withAlpha (0.55f), lens.getCentre(), ledColour.withAlpha (0.0f),
+                                                     lens.getCentre().translated (16.0f, 0.0f), true));
+            g.fillEllipse (lens.expanded (12.0f));
+        }
+        Skin::draw (g, ledArt, lens);
+        if (lit && ledArt == "led_off")
+        {
+            g.setColour (ledColour.withAlpha (0.85f));
+            g.fillEllipse (lens.reduced (4.5f));
+            g.setColour (juce::Colours::white.withAlpha (0.5f));
+            g.fillEllipse (lens.reduced (6.5f).translated (-1.0f, -1.0f));
+        }
+    }
+    else if (lit)
     {
         juce::ColourGradient glow (ledColour.withAlpha (0.7f), led.getCentre(),
                                    ledColour.withAlpha (0.0f), led.getCentre().translated (18.0f, 0.0f), true);
         g.setGradientFill (glow);
         g.fillEllipse (led.expanded (13.0f));
     }
-    g.setColour (lit ? ledColour : ledColour.withAlpha (0.16f));
-    g.fillPath (hexagon (led, true));
-    g.setColour (juce::Colours::black.withAlpha (0.6f));
-    g.strokePath (hexagon (led, true), juce::PathStrokeType (1.0f));
-    g.setColour (juce::Colours::white.withAlpha (lit ? 0.6f : 0.1f));
-    g.fillEllipse (led.reduced (4.0f).translated (-1.0f, -1.5f));
+    if (! Skin::has (ledArt))
+    {
+        g.setColour (lit ? ledColour : ledColour.withAlpha (0.16f));
+        g.fillPath (hexagon (led, true));
+        g.setColour (juce::Colours::black.withAlpha (0.6f));
+        g.strokePath (hexagon (led, true), juce::PathStrokeType (1.0f));
+        g.setColour (juce::Colours::white.withAlpha (lit ? 0.6f : 0.1f));
+        g.fillEllipse (led.reduced (4.0f).translated (-1.0f, -1.5f));
+    }
 
     // Caption in the metal font
     auto text = r.removeFromBottom (20.0f);
@@ -419,41 +443,64 @@ void Footswitch::paint (juce::Graphics& g)
     auto outer = r.withSizeKeepingCentre (size, size);
     const auto c = outer.getCentre();
 
-    const auto nut = hexagon (outer, true);
-    juce::DropShadow (juce::Colours::black.withAlpha (0.85f), 14, { 0, 6 }).drawForPath (g, nut);
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff3a2c20), c.x, outer.getY(),
-                                             juce::Colour (0xff0b0806), c.x, outer.getBottom(), false));
-    g.fillPath (nut);
-    g.setColour (lit ? ledColour.withAlpha (0.75f) : Colours::panelBorder.brighter (0.25f));
-    g.strokePath (nut, juce::PathStrokeType (lit ? 1.6f : 1.2f));
-
-    auto inner = outer.reduced (size * 0.19f).translated (0.0f, pressed ? 1.5f : 0.0f);
-    if (lit)
+    // artwork: the stomp up / down (ON has its own, red-rimmed one), lit = a glow in its colour round it
+    const auto art = juce::String (inverse ? "footswitch_bypass_" : "footswitch_") + (pressed ? "down" : "up");
+    if (Skin::has (art))
     {
-        g.setColour (ledColour.withAlpha (0.28f));
-        g.fillEllipse (inner.expanded (4.0f));
+        const auto area = outer.expanded (size * 0.12f);
+        if (lit)
+        {
+            g.setGradientFill (juce::ColourGradient (ledColour.withAlpha (0.45f), c, ledColour.withAlpha (0.0f),
+                                                     c.translated (size * 0.62f, 0.0f), true));
+            g.fillEllipse (area);
+        }
+        Skin::draw (g, art, area);
+        if (lit)
+        {
+            // round the stomp's hexagon: 168 x 155 of the image's 184 px
+            const auto body = area.withSizeKeepingCentre (area.getWidth() * 168.0f / 184.0f, area.getHeight() * 155.0f / 184.0f);
+            g.setColour (ledColour.withAlpha (0.6f));
+            g.strokePath (hexagon (body.expanded (1.5f)), juce::PathStrokeType (1.6f));
+        }
     }
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff54442f), inner.getX(), inner.getY(),
-                                             juce::Colour (0xff120d09), inner.getRight(), inner.getBottom(), false));
-    g.fillEllipse (inner);
-    g.setColour (juce::Colours::black.withAlpha (0.7f));
-    g.drawEllipse (inner, 1.2f);
-
-    // machined rings + engraved hex, warm edge light
-    for (float k : { 0.14f, 0.28f })
+    else
     {
-        g.setColour (Colours::accentBright.withAlpha (0.07f));
-        g.drawEllipse (inner.reduced (size * k * 0.5f), 0.8f);
+        const auto nut = hexagon (outer, true);
+        juce::DropShadow (juce::Colours::black.withAlpha (0.85f), 14, { 0, 6 }).drawForPath (g, nut);
+        g.setGradientFill (juce::ColourGradient (juce::Colour (0xff3a2c20), c.x, outer.getY(),
+                                                 juce::Colour (0xff0b0806), c.x, outer.getBottom(), false));
+        g.fillPath (nut);
+        g.setColour (lit ? ledColour.withAlpha (0.75f) : Colours::panelBorder.brighter (0.25f));
+        g.strokePath (nut, juce::PathStrokeType (lit ? 1.6f : 1.2f));
+
+        auto inner = outer.reduced (size * 0.19f).translated (0.0f, pressed ? 1.5f : 0.0f);
+        if (lit)
+        {
+            g.setColour (ledColour.withAlpha (0.28f));
+            g.fillEllipse (inner.expanded (4.0f));
+        }
+        g.setGradientFill (juce::ColourGradient (juce::Colour (0xff54442f), inner.getX(), inner.getY(),
+                                                 juce::Colour (0xff120d09), inner.getRight(), inner.getBottom(), false));
+        g.fillEllipse (inner);
+        g.setColour (juce::Colours::black.withAlpha (0.7f));
+        g.drawEllipse (inner, 1.2f);
+
+        // machined rings + engraved hex, warm edge light
+        for (float k : { 0.14f, 0.28f })
+        {
+            g.setColour (Colours::accentBright.withAlpha (0.07f));
+            g.drawEllipse (inner.reduced (size * k * 0.5f), 0.8f);
+        }
+        const auto engraved = hexagon (inner.reduced (inner.getWidth() * 0.3f), true);
+        g.setColour (juce::Colours::black.withAlpha (0.5f));
+        g.strokePath (engraved, juce::PathStrokeType (1.4f), juce::AffineTransform::translation (0.0f, 1.0f));
+        g.setColour ((lit ? ledColour : Colours::accent).withAlpha (lit ? 0.7f : 0.25f));
+        g.strokePath (engraved, juce::PathStrokeType (1.1f));
+        g.setGradientFill (juce::ColourGradient (Colours::accentBright.withAlpha (lit ? 0.45f : 0.2f), inner.getX(), inner.getY(),
+                                                 juce::Colours::transparentBlack, inner.getCentreX(), inner.getCentreY(), false));
+        g.drawEllipse (inner.reduced (1.0f), 1.2f);
+        drawGrime (g, inner, 3.0f);
     }
-    const auto engraved = hexagon (inner.reduced (inner.getWidth() * 0.3f), true);
-    g.setColour (juce::Colours::black.withAlpha (0.5f));
-    g.strokePath (engraved, juce::PathStrokeType (1.4f), juce::AffineTransform::translation (0.0f, 1.0f));
-    g.setColour ((lit ? ledColour : Colours::accent).withAlpha (lit ? 0.7f : 0.25f));
-    g.strokePath (engraved, juce::PathStrokeType (1.1f));
-    g.setGradientFill (juce::ColourGradient (Colours::accentBright.withAlpha (lit ? 0.45f : 0.2f), inner.getX(), inner.getY(),
-                                             juce::Colours::transparentBlack, inner.getCentreX(), inner.getCentreY(), false));
-    g.drawEllipse (inner.reduced (1.0f), 1.2f);
-    drawGrime (g, inner, 3.0f);
 
     if (learning)
     {
@@ -481,6 +528,16 @@ void MiniSwitch::paintButton (juce::Graphics& g, bool isMouseOver, bool)
     g.setFont (font (11.5f, true));
     g.setColour (on ? Colours::accentBright : Colours::textDim);
     g.drawText (getButtonText(), text, juce::Justification::centred, false);
+
+    // artwork: the toggle, lever up = on
+    if (Skin::has ("toggle_up"))
+    {
+        // as drawn, nudged up so the nut sits above the caption
+        const auto art = Skin::naturalSize ("toggle_up");
+        Skin::draw (g, on ? "toggle_up" : "toggle_down", art.withCentre ({ r.getCentreX(), art.getHeight() * 0.5f - 3.0f }),
+                    isMouseOver ? 1.0f : 0.92f);
+        return;
+    }
 
     // Hex nut + slot
     const auto slot = r.withSizeKeepingCentre (14.0f, juce::jmin (30.0f, r.getHeight() - 2.0f));
@@ -1310,7 +1367,15 @@ void SceneBar::paint (juce::Graphics& g)
         const auto r = buttonArea (k);
         const bool current = k == shownCurrent, used = shownUsed[(size_t) k];
         auto shape = chamfered (r, 7.0f);
-        if (current)
+        if (Skin::drawThree (g, current ? "scene_on" : "scene_off", r, 34.0f))
+        {
+            if (! current && used)
+            {
+                g.setColour (Colours::accent.withAlpha (0.45f));
+                g.strokePath (chamfered (r.reduced (3.0f), 6.0f), juce::PathStrokeType (1.0f));
+            }
+        }
+        else if (current)
         {
             g.setGradientFill (juce::ColourGradient (Colours::accentBright, r.getX(), r.getY(), Colours::accentDeep, r.getX(), r.getBottom(), false));
             g.fillPath (shape);
@@ -1320,8 +1385,11 @@ void SceneBar::paint (juce::Graphics& g)
             g.setColour (Colours::inset);
             g.fillPath (shape);
         }
-        g.setColour (current ? Colours::accentBright : (used ? Colours::accent.withAlpha (0.8f) : Colours::panelBorder));
-        g.strokePath (shape, juce::PathStrokeType (current ? 1.6f : 1.2f));
+        if (! Skin::has ("scene_on"))
+        {
+            g.setColour (current ? Colours::accentBright : (used ? Colours::accent.withAlpha (0.8f) : Colours::panelBorder));
+            g.strokePath (shape, juce::PathStrokeType (current ? 1.6f : 1.2f));
+        }
 
         g.setFont (displayFont (20.0f));
         g.setColour (current ? Colours::background : (used ? Colours::text : Colours::textFaint));
