@@ -149,7 +149,7 @@ namespace AmpFaceplate
         }
 
         // piping / edge and the hardware
-        const auto piping = style == chrome ? juce::Colour (0xffb9bec4) : style == brit ? juce::Colour (0xffc9a24a)
+        const auto piping = style == chrome ? juce::Colour (0xffb9bec4) : style == brit ? juce::Colour (0xffd9861c)
                           : style == steel ? Theme::Colours::accent : Theme::Colours::venom;
         g.setColour (piping.withAlpha (on ? 0.75f : 0.35f));
         g.drawRoundedRectangle (r.reduced (3.0f), corner - 2.0f, style == brit ? 2.0f : 1.4f);
@@ -161,7 +161,7 @@ namespace AmpFaceplate
         {
             if (style == steel) hexBolt (g, c, 4.5f);
             else if (style == chrome) screw (g, c, 3.6f, juce::Colour (0xff9aa0a6), 0.6f + c.x * 0.01f);
-            else if (style == brit) screw (g, c, 3.6f, juce::Colour (0xffb08a3a), 0.3f + c.y * 0.02f);
+            else if (style == brit) screw (g, c, 3.6f, juce::Colour (0xff8c8f94), 0.3f + c.y * 0.02f);
         }
         if (style == steel)
         {
@@ -178,7 +178,7 @@ namespace AmpFaceplate
         const auto body = r.withSizeKeepingCentre (juce::jmin (r.getWidth(), r.getHeight() * 1.55f), r.getHeight() * 0.86f);
         const auto tolex = style == chrome ? juce::Colour (0xff1e2023) : style == brit ? juce::Colour (0xff15110e)
                          : style == steel ? juce::Colour (0xff111114) : juce::Colour (0xff120d18);
-        const auto trim = style == chrome ? juce::Colour (0xffc4c9cf) : style == brit ? juce::Colour (0xffc9a24a)
+        const auto trim = style == chrome ? juce::Colour (0xffc4c9cf) : style == brit ? juce::Colour (0xffd9861c)
                         : style == steel ? Theme::Colours::accent : Theme::Colours::venom;
         // shadow, box
         g.setColour (juce::Colours::black.withAlpha (0.55f));
@@ -238,8 +238,8 @@ namespace AmpFaceplate
         drawHead (g, head, style, on);
         t.removeFromRight (10.0f);
 
-        const auto metalTop = style == chrome ? juce::Colour (0xfff2f4f7) : style == brit ? juce::Colour (0xfff3d27a) : Theme::Colours::accentBright;
-        const auto metalBottom = style == chrome ? juce::Colour (0xff8c939b) : style == brit ? juce::Colour (0xff9a6d1f) : Theme::Colours::accentDeep;
+        const auto metalTop = style == chrome ? juce::Colour (0xfff2f4f7) : style == brit ? juce::Colour (0xfff0b25a) : Theme::Colours::accentBright;
+        const auto metalBottom = style == chrome ? juce::Colour (0xff8c939b) : style == brit ? juce::Colour (0xff8a4f14) : Theme::Colours::accentDeep;
         auto titleArea = t.removeFromTop (40.0f);
         g.setFont (Theme::displayFont (34.0f));
         g.setColour (juce::Colours::black.withAlpha (0.7f));
@@ -327,7 +327,7 @@ namespace AmpFaceplate
             g.setColour (juce::Colours::black.withAlpha (0.35f));
             g.fillRect (r);
         }
-        g.setColour (type == 2 ? juce::Colour (0xffc9a45c).withAlpha (on ? 0.8f : 0.4f) : Theme::Colours::panelBorder.brighter (0.2f));
+        g.setColour (type == 2 ? juce::Colour (0xffd9861c).withAlpha (on ? 0.8f : 0.4f) : Theme::Colours::panelBorder.brighter (0.2f));
         g.strokePath (shape, juce::PathStrokeType (1.4f));
     }
 }

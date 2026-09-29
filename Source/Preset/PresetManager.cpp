@@ -218,6 +218,9 @@ void PresetManager::initialiseFactoryPresets()
             { fuzzOn, 1 }, { fuzzVoice, 1 }, { fuzz, 85 }, { fuzzScoop, 55 },
             { swarmOn, 1 }, { swarmDepth, 65 }, { swarmMix, 50 },
             { revOn, 1 }, { revType, 2 }, { revDecay, 3.5f }, { revMix, 100 } } },
+        { "Chug Room", space, "SMOKE with a tight ROOM that ducks hard while you play - space between the chugs, dry and punchy on them.",
+          { { fuzzOn, 1 }, { fuzzVoice, 2 }, { fuzz, 70 }, { fuzzScoop, 45 }, { fuzzGate, 15 },
+            { revOn, 1 }, { revType, 0 }, { revDecay, 1.1f }, { revMix, 35 }, { revDuck, 80 }, { revLowCut, 250 } } },
         // ------------------------------------------------------------- amps & cabs (CLEAN = CHROME, CRUNCH = BRIT, LEAD = STEEL)
         { "Glass Clean", amps, "CLEAN: the crystal clean into an open 2x12, a little SWARM and a HALL behind it.",
           { { ampOn, 1 }, { ampChannel, 0 }, { ampGain, 3.5f }, { ampBass, 4.5f }, { ampMid, 5 }, { ampTreble, 6 }, { ampLevel, 9 }, { ampMaster, 4.5f },
@@ -261,10 +264,6 @@ void PresetManager::initialiseFactoryPresets()
           { { rbOn, 1 }, { rbRaw, 0 }, { rbPitch, 1 }, { rbPrimary, 100 }, { rbTracking, 100 }, { rbMix, 50 },
             { ampOn, 1 }, { ampChannel, 2 }, { ampGain, 7 }, { ampBass, 6.5f }, { ampMid, 4 }, { ampTreble, 5.5f }, { ampGate, 45 }, { ampLevel, 3 },
             { cabOn, 1 }, { cabType, 3 }, { cabMic, 30 }, { cabDist, 15 } } },
-
-        { "Chug Room", space, "SMOKE with a tight ROOM that ducks hard while you play - space between the chugs, dry and punchy on them.",
-          { { fuzzOn, 1 }, { fuzzVoice, 2 }, { fuzz, 70 }, { fuzzScoop, 45 }, { fuzzGate, 15 },
-            { revOn, 1 }, { revType, 0 }, { revDecay, 1.1f }, { revMix, 35 }, { revDuck, 80 }, { revLowCut, 250 } } },
     };
 
     // expand the step-pattern shortcuts

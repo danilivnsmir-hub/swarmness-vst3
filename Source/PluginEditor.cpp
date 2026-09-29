@@ -126,7 +126,7 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     pitchScope.setTooltip ("Live SHIFT transposition (with FRENZY / ANGER movement)");
 
     // HIVE - VOICES
-    attachButton (pitchPage, hivePower, rbOn, "HIVE on/off (voices + trails). The VENOM footswitch switches it on while held, like a momentary pedal");
+    attachButton (pitchPage, hivePower, rbOn, "HIVE on / off (voices + trails). The VENOM footswitch switches it on while held, like a momentary pedal");
     attachButton (pitchPage, snapToggle, rbSnap, "SNAP: PITCH in whole semitones, and FRENZY jumps land on 4ths / 5ths / octaves (off = atonal in-between pitches)");
     pitchKnob    .attach (state, rbPitch,     "PITCH: DRONE interval, -12..+12 semitones (SNAP = whole semitones). Also how far an UP / DOWN step moves a repeat");
     pitchKnob.setSnap ([this] (double v) { return paramOn (ParamIDs::rbSnap) ? std::round (v) : v; });
@@ -158,7 +158,7 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     pitchPage.addChildComponent (rbDivKnob);
 
     // SWARM
-    attachButton (fxPage, swarmPower, swarmOn,   "Swarm chorus on/off");
+    attachButton (fxPage, swarmPower, swarmOn,   "SWARM chorus on / off");
     attachButton (fxPage, deepToggle, swarmDeep, "Deep mode: 8 voices with feedback");
     swarmDepthKnob.attach (state, swarmDepth, "Modulation depth");
     swarmRateKnob .attach (state, swarmRate,  "Modulation rate");
@@ -167,7 +167,7 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
         fxPage.addAndMakeVisible (c);
 
     // FUZZ
-    attachButton (fxPage, fuzzPower, fuzzOn,   "SMOKE fuzz on/off");
+    attachButton (fxPage, fuzzPower, fuzzOn,   "SMOKE fuzz on / off");
     fuzzVoiceSelector.setTooltip ("VOICE: DOWN = doom low-mids and full bottom, MID = jumbo fuzz, UP = tight, screaming upper mids");
     fuzzKnob     .attach (state, fuzz,      "FUZZ: from dirty crunch to wall-of-fuzz sustain");
     fuzzToneKnob .attach (state, fuzzTone,  "TONE: dark <-> bright (also opens the fizz)");
@@ -181,7 +181,7 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
         fxPage.addAndMakeVisible (c);
 
     // FLOW
-    attachButton (fxPage, flowPower,  flowOn,   "WINGS gate on/off");
+    attachButton (fxPage, flowPower,  flowOn,   "WINGS gate on / off");
     attachButton (fxPage, hardToggle, flowHard, "Hard stutter gate (off = smooth tremolo)");
     attachButton (fxPage, syncToggle, flowSync, "Sync to host tempo");
     flowAmountKnob.attach (state, flowAmount, "Gate depth");

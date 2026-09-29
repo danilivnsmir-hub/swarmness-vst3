@@ -306,6 +306,11 @@ private:
     std::array<juce::File, 2> cabIRFile;
     std::array<juce::String, 2> namDescription;
     std::array<juce::String, 2> cabIRDescription;
+    // Files a restored session refers to that could not be loaded (another machine, an unplugged drive...):
+    // kept, so the next save still refers to them. Keys: reverbIR, namModel, pedalNam, cabIR, cabIR2 (irInfoLock).
+    std::map<juce::String, juce::String> missingFiles;
+    void restoreFileReference (const juce::String& key, const juce::String& path);
+    juce::String fileReference (const juce::String& key, const juce::File& loaded) const;
     int cabModelKey = -1;   // type / mic / distance / rate the modelled cabinet IR was built for
     double cabModelRate = 0.0;
     juce::CriticalSection cabModelLock;

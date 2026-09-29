@@ -423,8 +423,8 @@ EqPage::EqPage (SwarmnessAudioProcessor& p)
         buttonAttachments.push_back (std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (state, id, b));
         MidiLearnable::tag (b, id);
     };
-    attachPower (combPower, geqOn, "COMB graphic EQ on/off");
-    attachPower (carvePower, peqOn, "CARVE parametric EQ on/off");
+    attachPower (combPower, geqOn, "COMB graphic EQ on / off");
+    attachPower (carvePower, peqOn, "CARVE parametric EQ on / off");
 
     // COMB
     combGraph.response = [this] (double f)
@@ -745,7 +745,7 @@ ReverbPage::ReverbPage (SwarmnessAudioProcessor& p)
     setBufferedToImage (true);
 
     addAndMakeVisible (power);
-    power.setTooltip ("CRYPT reverb on/off. Switching it off lets the tail ring out");
+    power.setTooltip ("CRYPT reverb on / off. Switching it off lets the tail ring out");
     powerAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (state, revOn, power);
     MidiLearnable::tag (power, revOn);
 

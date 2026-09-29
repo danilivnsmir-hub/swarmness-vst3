@@ -34,7 +34,17 @@ namespace
     {
         if (hz >= 1000.0f)
             return juce::String (hz / 1000.0f, 2) + " kHz";
+        if (hz >= 100.0f)
+            return juce::String (juce::roundToInt (hz)) + " Hz";
         return juce::String (hz, hz < 10.0f ? 2 : 1) + " Hz";
+    }
+
+    /** "+3.0 dB", "0.0 dB" (never "-0.0"), "-6.5 dB". */
+    juce::String formatDb (float v)
+    {
+        if (std::abs (v) < 0.05f)
+            v = 0.0f;
+        return (v > 0.0f ? "+" : "") + juce::String (v, 1) + " dB";
     }
 
     Attr hzAttr()
@@ -63,7 +73,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     using namespace ParamIDs;
     Layout layout;
 
-    // ------------------------------------------------------------------ NOISE
+    // ------------------------------------------------------------------ SHIFT and HIVE
+    // (two groups, SHIFT first: the flat parameter order is the one hosts have always seen)
+    auto shift = std::make_unique<Group> ("shift", "Shift", "|");
     auto hive = std::make_unique<Group> ("hive", "Hive", "|");
     auto intervalParam = [] (const char* id, const juce::String& name, int def)
     {
@@ -82,21 +94,21 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     };
 
     // SHIFT
-    hive->addChild (toggle (oct1, "Shift A (footswitch)", false));
-    hive->addChild (toggle (oct2, "Shift B (footswitch)", false));
-    hive->addChild (intervalParam (shiftA, "Shift A Interval", 12));
-    hive->addChild (intervalParam (shiftB, "Shift B Interval", 24));
-    hive->addChild (glideTime (rise, "Rise"));
-    hive->addChild (glideTime (fall, "Fall"));
-    hive->addChild (toggle (shOn, "Shift On", false));
-    hive->addChild (percent (stingMix, "Shift Mix", 100.0f));
-    hive->addChild (toggle (shStack, "Shift Stack A+B", false));
-    hive->addChild (percent (panic, "Shift Anger", 0.0f));
-    hive->addChild (percent (chaos, "Shift Frenzy", 0.0f));
-    hive->addChild (percent (speed, "Shift Buzz", 0.0f));
-    hive->addChild (toggle (shSnap, "Shift Snap", true));
-    hive->addChild (toggle (shRaw, "Shift Raw", true));
-    hive->addChild (cents (shDetune, "Shift Detune"));
+    shift->addChild (toggle (oct1, "Shift A (footswitch)", false));
+    shift->addChild (toggle (oct2, "Shift B (footswitch)", false));
+    shift->addChild (intervalParam (shiftA, "Shift A Interval", 12));
+    shift->addChild (intervalParam (shiftB, "Shift B Interval", 24));
+    shift->addChild (glideTime (rise, "Rise"));
+    shift->addChild (glideTime (fall, "Fall"));
+    shift->addChild (toggle (shOn, "Shift On", false));
+    shift->addChild (percent (stingMix, "Shift Mix", 100.0f));
+    shift->addChild (toggle (shStack, "Shift Stack A+B", false));
+    shift->addChild (percent (panic, "Shift Anger", 0.0f));
+    shift->addChild (percent (chaos, "Shift Frenzy", 0.0f));
+    shift->addChild (percent (speed, "Shift Buzz", 0.0f));
+    shift->addChild (toggle (shSnap, "Shift Snap", true));
+    shift->addChild (toggle (shRaw, "Shift Raw", true));
+    shift->addChild (cents (shDetune, "Shift Detune"));
 
     // VOICES
     hive->addChild (toggle (rbOn, "Hive On", false));
@@ -183,7 +195,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     {
         return Attr().withLabel ("dB").withStringFromValueFunction ([] (float v, int)
         {
-            return (v > 0.05f ? "+" : "") + juce::String (v, 1) + " dB";
+            return formatDb (v);
         });
     };
     auto gainParam = [&] (const char* id, const juce::String& name, float maxDb)
@@ -274,13 +286,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     amp->addChild (knob10 (ampMaster, "Amp Master", 5.0f));
     amp->addChild (percent (ampGate, "Amp Gate", 0.0f));
     amp->addChild (levelParam (ampLevel, "Amp Level"));
-    amp->addChild (knob10 (namInput, "NAM Input", 5.0f));
+    amp->addChild (knob10 (namInput, "Amp NAM Input", 5.0f));
     amp->addChild (knob10 (namBass, "NAM Bass", 5.0f));
     amp->addChild (knob10 (namMid, "NAM Mid", 5.0f));
     amp->addChild (knob10 (namTreble, "NAM Treble", 5.0f));
     amp->addChild (knob10 (namPresence, "NAM Presence", 5.0f));
     amp->addChild (knob10 (namDepth, "NAM Depth", 5.0f));
-    amp->addChild (knob10 (namOutput, "NAM Output", 5.0f));
+    amp->addChild (knob10 (namOutput, "Amp NAM Output", 5.0f));
     amp->addChild (toggle (namLite, "NAM A2 Lite", false));
 
     // ------------------------------------------------------------------ WASP
@@ -336,13 +348,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
         pid (input), "Input", juce::NormalisableRange<float> (ParamRanges::inputMinDb, ParamRanges::inputMaxDb, 0.1f), 0.0f,
         Attr().withLabel ("dB").withStringFromValueFunction ([] (float v, int)
         {
-            return (v > 0.05f ? "+" : "") + juce::String (v, 1) + " dB";
+            return formatDb (v);
         })));
     out->addChild (std::make_unique<juce::AudioParameterFloat> (
         pid (output), "Volume", juce::NormalisableRange<float> (ParamRanges::outputMinDb, ParamRanges::outputMaxDb, 0.1f), 0.0f,
         Attr().withLabel ("dB").withStringFromValueFunction ([] (float v, int)
         {
-            return (v > 0.05f ? "+" : "") + juce::String (v, 1) + " dB";
+            return formatDb (v);
         })));
     out->addChild (std::make_unique<juce::AudioParameterChoice> (pid (switchMode), "Footswitch Mode", ParamChoices::switchModes, 0));
     // meta: switching the scene changes other parameters
@@ -350,7 +362,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
                                                                  juce::AudioParameterChoiceAttributes().withMeta (true)));
     out->addChild (toggle (bypass, "Bypass", false));
 
-    layout.add (std::move (hive), std::move (swarm), std::move (fz), std::move (flow),
+    layout.add (std::move (shift), std::move (hive), std::move (swarm), std::move (fz), std::move (flow),
                 std::move (comb), std::move (carve), std::move (crypt), std::move (amp), std::move (cab), std::move (drv), std::move (chain), std::move (out));
     return layout;
 }

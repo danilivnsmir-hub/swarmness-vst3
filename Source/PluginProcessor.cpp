@@ -96,17 +96,12 @@ SwarmnessAudioProcessor::SwarmnessAudioProcessor()
     presetManager = std::make_unique<PresetManager> (apvts);
     presetManager->onSaveExtras = [this] (juce::DynamicObject& json)
     {
-        const auto ir = getReverbIRFile();
-        if (ir != juce::File())
-            json.setProperty ("reverbIR", ir.getFullPathName());
-        if (const auto nam = getNamModelFile(); nam != juce::File())
-            json.setProperty ("namModel", nam.getFullPathName());
-        if (const auto pedal = getNamModelFile (true); pedal != juce::File())
-            json.setProperty ("pedalNam", pedal.getFullPathName());
-        if (const auto cabIr = getCabIRFile(); cabIr != juce::File())
-            json.setProperty ("cabIR", cabIr.getFullPathName());
-        if (const auto cabIr2 = getCabIRFile (1); cabIr2 != juce::File())
-            json.setProperty ("cabIR2", cabIr2.getFullPathName());
+        const std::pair<const char*, juce::File> files[] { { "reverbIR", getReverbIRFile() }, { "namModel", getNamModelFile() },
+                                                           { "pedalNam", getNamModelFile (true) }, { "cabIR", getCabIRFile() },
+                                                           { "cabIR2", getCabIRFile (1) } };
+        for (const auto& [key, file] : files)
+            if (const auto ref = fileReference (key, file); ref.isNotEmpty())
+                json.setProperty (key, ref);
     };
     presetManager->onLoadExtras = [this] (const juce::var& json)
     {
@@ -779,6 +774,7 @@ juce::String SwarmnessAudioProcessor::loadReverbIR (const juce::File& file)
     reverbIREnvelope = std::move (envelope);
     reverbIRSeconds = seconds;
     reverbIRFile = file;
+    missingFiles.erase ("reverbIR");
     reverbIRDescription = file.getFileNameWithoutExtension() + "  -  " + juce::String ((double) irLength / reader->sampleRate, 1) + " s, "
                         + (channels > 1 ? "stereo" : "mono");
     return {};
@@ -789,6 +785,7 @@ void SwarmnessAudioProcessor::clearReverbIR()
     crypt.clearImpulseResponse();
     const juce::ScopedLock sl (irInfoLock);
     reverbIRFile = juce::File();
+    missingFiles.erase ("reverbIR");
     reverbIRDescription.clear();
     reverbIREnvelope.clear();
     reverbIRSeconds = 0.0;
@@ -848,6 +845,7 @@ juce::String SwarmnessAudioProcessor::loadNamModel (const juce::File& file, bool
 
     const juce::ScopedLock sl (irInfoLock);
     namFile[pedal ? 1 : 0] = file;
+    missingFiles.erase (pedal ? "pedalNam" : "namModel");
     namDescription[pedal ? 1 : 0] = desc;
     return {};
 }
@@ -858,6 +856,7 @@ void SwarmnessAudioProcessor::clearNamModel (bool pedal)
     else       amp.setNamModel (nullptr);
     const juce::ScopedLock sl (irInfoLock);
     namFile[pedal ? 1 : 0] = juce::File();
+    missingFiles.erase (pedal ? "pedalNam" : "namModel");
     namDescription[pedal ? 1 : 0].clear();
 }
 
@@ -911,6 +910,7 @@ juce::String SwarmnessAudioProcessor::loadCabIR (const juce::File& file, int slo
 
     const juce::ScopedLock sl (irInfoLock);
     cabIRFile[(size_t) slot] = file;
+    missingFiles.erase (slot == 1 ? "cabIR2" : "cabIR");
     cabIRDescription[(size_t) slot] = desc;
     return {};
 }
@@ -921,7 +921,44 @@ void SwarmnessAudioProcessor::clearCabIR (int slot)
     cab.clearUserIR (slot);
     const juce::ScopedLock sl (irInfoLock);
     cabIRFile[(size_t) slot] = juce::File();
+    missingFiles.erase (slot == 1 ? "cabIR2" : "cabIR");
     cabIRDescription[(size_t) slot].clear();
+}
+
+void SwarmnessAudioProcessor::restoreFileReference (const juce::String& key, const juce::String& path)
+{
+    const bool cabSlot = key.startsWith ("cabIR"), pedal = key == "pedalNam";
+    const int slot = key == "cabIR2" ? 1 : 0;
+    juce::String error = "not found";
+    if (path.isNotEmpty() && juce::File::isAbsolutePath (path) && juce::File (path).existsAsFile())
+    {
+        const juce::File file (path);
+        error = key == "reverbIR" ? loadReverbIR (file) : cabSlot ? loadCabIR (file, slot) : loadNamModel (file, pedal);
+        if (error.isEmpty())
+            return;
+    }
+    if (key == "reverbIR") clearReverbIR();
+    else if (cabSlot)      clearCabIR (slot);
+    else                   clearNamModel (pedal);
+    if (path.isEmpty())
+        return;
+
+    // keep the reference and say so where the file's name would be
+    const juce::ScopedLock sl (irInfoLock);
+    missingFiles[key] = path;
+    const auto note = (error == "not found" ? "Missing: " : "Can't load: ") + juce::File (path).getFileName();
+    if (key == "reverbIR") reverbIRDescription = note;
+    else if (cabSlot)      cabIRDescription[(size_t) slot] = note;
+    else                   namDescription[pedal ? 1 : 0] = note;
+}
+
+juce::String SwarmnessAudioProcessor::fileReference (const juce::String& key, const juce::File& loaded) const
+{
+    if (loaded != juce::File())
+        return loaded.getFullPathName();
+    const juce::ScopedLock sl (irInfoLock);
+    const auto it = missingFiles.find (key);
+    return it != missingFiles.end() ? it->second : juce::String();
 }
 
 juce::File SwarmnessAudioProcessor::getCabIRFile (int slot) const
@@ -1171,11 +1208,11 @@ void SwarmnessAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
     state.setProperty ("pluginVersion", JucePlugin_VersionString, nullptr);
     state.setProperty ("uiScale", uiScale.load(), nullptr);
     state.setProperty ("uiMini", uiMini.load(), nullptr);
-    state.setProperty ("reverbIR", getReverbIRFile().getFullPathName(), nullptr);
-    state.setProperty ("namModel", getNamModelFile().getFullPathName(), nullptr);
-    state.setProperty ("pedalNam", getNamModelFile (true).getFullPathName(), nullptr);
-    state.setProperty ("cabIR", getCabIRFile().getFullPathName(), nullptr);
-    state.setProperty ("cabIR2", getCabIRFile (1).getFullPathName(), nullptr);
+    state.setProperty ("reverbIR", fileReference ("reverbIR", getReverbIRFile()), nullptr);
+    state.setProperty ("namModel", fileReference ("namModel", getNamModelFile()), nullptr);
+    state.setProperty ("pedalNam", fileReference ("pedalNam", getNamModelFile (true)), nullptr);
+    state.setProperty ("cabIR", fileReference ("cabIR", getCabIRFile()), nullptr);
+    state.setProperty ("cabIR2", fileReference ("cabIR2", getCabIRFile (1)), nullptr);
     state.setProperty ("tunerA4", tunerTap.a4.load(), nullptr);
     juce::StringArray bindings;
     for (const auto& b : midiBindings)
@@ -1273,32 +1310,9 @@ void SwarmnessAudioProcessor::setStateInformation (const void* data, int sizeInB
                     if (auto* param = apvts.getParameter (paramId))
                         param->setValueNotifyingHost (param->convertTo0to1 (value));
 
-            const auto irPath = tree.getProperty ("reverbIR").toString();
-            if (irPath.isNotEmpty() && juce::File::isAbsolutePath (irPath) && juce::File (irPath).existsAsFile())
-                loadReverbIR (juce::File (irPath));
-            else
-                clearReverbIR();
-            const auto namPath = tree.getProperty ("namModel").toString();
-            if (namPath.isNotEmpty() && juce::File::isAbsolutePath (namPath) && juce::File (namPath).existsAsFile())
-                loadNamModel (juce::File (namPath));
-            else
-                clearNamModel();
-            const auto pedalPath = tree.getProperty ("pedalNam").toString();
-            if (pedalPath.isNotEmpty() && juce::File::isAbsolutePath (pedalPath) && juce::File (pedalPath).existsAsFile())
-                loadNamModel (juce::File (pedalPath), true);
-            else
-                clearNamModel (true);
-            const auto cabPath = tree.getProperty ("cabIR").toString();
-            if (cabPath.isNotEmpty() && juce::File::isAbsolutePath (cabPath) && juce::File (cabPath).existsAsFile())
-                loadCabIR (juce::File (cabPath));
-            else
-                clearCabIR();
+            for (auto key : { "reverbIR", "namModel", "pedalNam", "cabIR", "cabIR2" })
+                restoreFileReference (key, tree.getProperty (key).toString());
             tunerTap.a4.store (juce::jlimit (430.0f, 450.0f, (float) (double) tree.getProperty ("tunerA4", 440.0)));
-            const auto cabPath2 = tree.getProperty ("cabIR2").toString();
-            if (cabPath2.isNotEmpty() && juce::File::isAbsolutePath (cabPath2) && juce::File (cabPath2).existsAsFile())
-                loadCabIR (juce::File (cabPath2), 1);
-            else
-                clearCabIR (1);
 
             presetManager->scenesFromVar (juce::JSON::parse (scenesJson),
                                           juce::roundToInt (apvts.getRawParameterValue (ParamIDs::scene)->load()));

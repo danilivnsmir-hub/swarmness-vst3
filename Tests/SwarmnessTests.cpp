@@ -1270,6 +1270,50 @@ namespace
         check (finite && peak > 0.01f, juce::String::formatted ("a NaN / Inf from the host doesn't silence it (peak after: %.3f)", peak));
     }
 
+    void testParameterOrder()
+    {
+        std::printf ("\nParameter order (hosts that store automation by index)\n");
+        SwarmnessAudioProcessor p;
+        const auto& params = p.getParameters();
+        const char* expected[] { "oct1", "oct2", "shiftA", "shiftB", "rise", "fall", "shOn", "stingMix", "shStack",
+                                 "panic", "chaos", "speed", "shSnap", "shRaw", "shDetune", "rbOn" };
+        bool same = params.size() > (int) std::size (expected);
+        for (size_t i = 0; same && i < std::size (expected); ++i)
+            if (auto* r = dynamic_cast<juce::RangedAudioParameter*> (params[(int) i]))
+                same = r->getParameterID() == expected[i];
+        check (same, "SHIFT's parameters come first, in their old order, then HIVE (" + juce::String (params.size()) + " parameters)");
+    }
+
+    void testMissingFiles()
+    {
+        std::printf ("\nSessions keep references to missing files\n");
+        const auto gone = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("swarmness-gone").getChildFile ("Cab 4x12.wav");
+        SwarmnessAudioProcessor a;
+        juce::MemoryBlock mb;
+        a.getStateInformation (mb);
+        auto xml = juce::AudioProcessor::getXmlFromBinary (mb.getData(), (int) mb.getSize());
+        xml->setAttribute ("cabIR", gone.getFullPathName());
+        xml->setAttribute ("namModel", gone.withFileExtension ("nam").getFullPathName());
+        juce::MemoryBlock withMissing;
+        juce::AudioProcessor::copyXmlToBinary (*xml, withMissing);
+
+        SwarmnessAudioProcessor b;
+        b.setStateInformation (withMissing.getData(), (int) withMissing.getSize());
+        juce::MemoryBlock saved;
+        b.getStateInformation (saved);
+        auto again = juce::AudioProcessor::getXmlFromBinary (saved.getData(), (int) saved.getSize());
+        check (again->getStringAttribute ("cabIR") == gone.getFullPathName()
+                   && again->getStringAttribute ("namModel") == gone.withFileExtension ("nam").getFullPathName(),
+               "a missing IR / capture stays in the session after load + save");
+        check (b.getCabIRDescription().startsWith ("Missing: ") && b.getCabIRFile() == juce::File(),
+               "...and the CAB shows it as missing: \"" + b.getCabIRDescription() + "\"");
+        b.clearCabIR();
+        juce::MemoryBlock cleared;
+        b.getStateInformation (cleared);
+        check (juce::AudioProcessor::getXmlFromBinary (cleared.getData(), (int) cleared.getSize())->getStringAttribute ("cabIR").isEmpty(),
+               "CLEAR drops the missing reference");
+    }
+
     void setLanes (SwarmnessAudioProcessor& p, std::initializer_list<std::pair<int, int>> lanes)
     {
         for (auto [block, lane] : lanes)
@@ -3399,6 +3443,8 @@ int main (int argc, char** argv)
     testChainOrder();
     testParallelRouting();
     testNonFiniteInput();
+    testMissingFiles();
+    testParameterOrder();
     testGraphicEq();
     testParametricEq();
     testReverb();
