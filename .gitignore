@@ -77,3 +77,8 @@ $RECYCLE.BIN/
 
 # Abacus AI
 .abacus.donotdelete
+
+# Pedal: libDaisy is cloned next to the firmware, build outputs
+Pedal/daisy/libDaisy
+Pedal/daisy/*/build/
+build-bench/

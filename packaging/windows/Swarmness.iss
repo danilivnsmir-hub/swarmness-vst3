@@ -1,8 +1,8 @@
 ; Inno Setup script for Swarmness (Windows x64)
-; Build: ISCC.exe /DAppVersion=2.0.0 /DBuildDir=<path to build\Swarmness_artefacts\Release> Swarmness.iss
+; Build: ISCC.exe /DAppVersion=1.0.0 /DBuildDir=<path to build\Swarmness_artefacts\Release> Swarmness.iss
 
 #ifndef AppVersion
-  #define AppVersion "2.0.0"
+  #define AppVersion "1.0.0"
 #endif
 #ifndef BuildDir
   #define BuildDir "..\..\build\Swarmness_artefacts\Release"
@@ -12,7 +12,7 @@
 AppId={{6C0B6C8E-2E7B-4C39-9A5E-5A1D5F2B7A11}
 AppName=Swarmness
 AppVersion={#AppVersion}
-AppPublisher=OpenAudio
+AppPublisher=Insect Audio
 AppPublisherURL=https://github.com/danilivnsmir-hub/swarmness-vst3
 DefaultDirName={autopf}\Swarmness
 DefaultGroupName=Swarmness

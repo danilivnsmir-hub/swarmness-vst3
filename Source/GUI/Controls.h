@@ -6,6 +6,28 @@
 #include <vector>
 
 //==============================================================================
+/** MIDI learn: controls carry the ID of their parameter; right-clicking one opens the MIDI menu. */
+namespace MidiLearnable
+{
+    inline const juce::Identifier property { "midiParam" };
+    inline void tag (juce::Component& c, const juce::String& paramID) { c.getProperties().set (property, paramID); }
+    inline juce::String paramOf (const juce::Component& c) { return c.getProperties()[property].toString(); }
+}
+
+/** A slider that leaves the right mouse button to the MIDI menu. */
+struct RightClickSafeSlider : public juce::Slider
+{
+    void mouseDown (const juce::MouseEvent& e) override  { if (! e.mods.isPopupMenu()) juce::Slider::mouseDown (e); }
+    void mouseDrag (const juce::MouseEvent& e) override  { if (! e.mods.isPopupMenu()) juce::Slider::mouseDrag (e); }
+    void mouseUp (const juce::MouseEvent& e) override    { if (! e.mods.isPopupMenu()) juce::Slider::mouseUp (e); }
+};
+
+/** Toggle buttons: the right mouse button opens the MIDI menu instead of switching. */
+#define SWARM_RIGHT_CLICK_SAFE_BUTTON \
+    void mouseDown (const juce::MouseEvent& e) override { if (! e.mods.isPopupMenu()) juce::ToggleButton::mouseDown (e); } \
+    void mouseUp (const juce::MouseEvent& e) override   { if (! e.mods.isPopupMenu()) juce::ToggleButton::mouseUp (e); }
+
+//==============================================================================
 /** Rotary knob with caption above and live value readout below. */
 class Knob : public juce::Component
 {
@@ -15,12 +37,26 @@ public:
     juce::Slider& getSlider() noexcept { return slider; }
     void attach (juce::AudioProcessorValueTreeState&, const juce::String& paramID, const juce::String& tooltip);
 
+    /** Optional value snapping while dragging (e.g. PITCH to whole semitones when SNAP is on). */
+    void setSnap (std::function<double (double)> fn) { slider.snapper = std::move (fn); }
+
     void paint (juce::Graphics&) override;
     void resized() override;
+    void mouseDown (const juce::MouseEvent&) override;     // click the value to type an exact number
 
 private:
+    struct SnappingSlider : public RightClickSafeSlider
+    {
+        std::function<double (double)> snapper;
+        double snapValue (double v, DragMode) override { return snapper != nullptr ? snapper (v) : v; }
+    };
+
+    void showValueEditor();
+    void closeValueEditor();
+
     juce::String caption;
-    juce::Slider slider;
+    SnappingSlider slider;
+    std::unique_ptr<juce::TextEditor> valueEditor;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Knob)
@@ -34,6 +70,8 @@ public:
     Fader (const juce::String& caption, bool bipolar = false);
 
     juce::Slider& getSlider() noexcept { return slider; }
+    /** Narrow faders: smaller lettering, value without the unit. */
+    void setCompact (bool shouldBeCompact) { compact = shouldBeCompact; repaint(); }
     void attach (juce::AudioProcessorValueTreeState&, const juce::String& paramID, const juce::String& tooltip);
 
     void paint (juce::Graphics&) override;
@@ -41,7 +79,8 @@ public:
 
 private:
     juce::String caption;
-    juce::Slider slider;
+    RightClickSafeSlider slider;
+    bool compact = false;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Fader)
@@ -54,6 +93,7 @@ class PowerButton : public juce::ToggleButton
 public:
     PowerButton();
     void paintButton (juce::Graphics&, bool isMouseOver, bool isDown) override;
+    SWARM_RIGHT_CLICK_SAFE_BUTTON
 };
 
 //==============================================================================
@@ -63,6 +103,7 @@ class PillToggle : public juce::ToggleButton
 public:
     explicit PillToggle (const juce::String& label);
     void paintButton (juce::Graphics&, bool isMouseOver, bool isDown) override;
+    SWARM_RIGHT_CLICK_SAFE_BUTTON
 };
 
 //==============================================================================
@@ -72,6 +113,12 @@ class SegmentedChoice : public juce::Component,
 {
 public:
     SegmentedChoice (juce::RangedAudioParameter& param, juce::StringArray labels);
+    /** Free-standing variant (no parameter): onSelect is called when the user clicks a segment. */
+    explicit SegmentedChoice (juce::StringArray labels);
+
+    void setSelectedIndex (int index);
+    int getSelectedIndex() const noexcept { return selected; }
+    std::function<void (int)> onSelect;
 
     void paint (juce::Graphics&) override;
     void mouseDown (const juce::MouseEvent&) override;
@@ -83,33 +130,139 @@ private:
 
     juce::StringArray labels;
     int selected = 0, hovered = -1;
-    juce::ParameterAttachment attachment;
+    std::unique_ptr<juce::ParameterAttachment> attachment;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SegmentedChoice)
 };
 
 //==============================================================================
-/** Metal stomp switch bound to the (host) bypass parameter. */
+/**
+ * TRAILS step pattern editor - a pattern tremolo for the repeats.
+ *  - drag up / down over the bars: LEVEL of each repeat (paint across steps), double-click = on / off
+ *  - click the symbol under a bar: its MOVE (hold, up, down, random, reverse); right-click = menu
+ *  - header: STEPS - / + (pattern length) and FILL (ready-made patterns)
+ */
+class StepGrid : public juce::Component,
+                 public juce::SettableTooltipClient
+{
+public:
+    explicit StepGrid (juce::AudioProcessorValueTreeState&);
+
+    /** From the editor timer: repaints when a step value or the playing step changed. */
+    void refresh (int playingStep);
+
+    void paint (juce::Graphics&) override;
+    void mouseDown (const juce::MouseEvent&) override;
+    void mouseDrag (const juce::MouseEvent&) override;
+    void mouseUp (const juce::MouseEvent&) override;
+    void mouseDoubleClick (const juce::MouseEvent&) override;
+
+private:
+    static constexpr int kSteps = 16;
+    juce::Rectangle<float> headerArea() const;
+    juce::Rectangle<float> barsArea() const;
+    juce::Rectangle<float> movesArea() const;
+    juce::Rectangle<float> minusArea() const;
+    juce::Rectangle<float> plusArea() const;
+    juce::Rectangle<float> fillArea() const;
+    int stepAt (float x) const;
+    float levelAt (float y) const;
+
+    float level (int step) const;
+    int move (int step) const;
+    int numSteps() const;
+    void setParam (const char* id, float value, bool gesture = true);
+    void paintLevel (int step, float value);
+    void endPainting();
+    void showMoveMenu (int step);
+    void showFillMenu();
+    void applyFill (int fill);
+
+    juce::AudioProcessorValueTreeState& state;
+    std::array<float, kSteps> shownLevel {};
+    std::array<int, kSteps> shownMove {};
+    int shownSteps = -1, shownPlaying = -2;
+    std::vector<juce::RangedAudioParameter*> painting;   // params inside a gesture while dragging
+    int lastPaintStep = -1;
+    float lastPaintLevel = 0.0f;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (StepGrid)
+};
+
+//==============================================================================
+/** Scene buttons A..D of the current preset (left-click = select, right-click = menu). */
+class SceneBar : public juce::Component,
+                 public juce::SettableTooltipClient
+{
+public:
+    SceneBar();
+    std::function<int()> getCurrent;
+    std::function<bool (int)> isUsed;
+    std::function<void (int)> onSelect, onRightClick;
+    std::function<juce::String (int)> describeMidi;   // e.g. "CC 30" (shown under the letter)
+
+    void refresh();   // from the editor timer
+    void paint (juce::Graphics&) override;
+    void mouseDown (const juce::MouseEvent&) override;
+    juce::Rectangle<float> buttonArea (int scene) const;
+
+private:
+    static constexpr int kScenes = 4;
+    int shownCurrent = -1;
+    std::array<bool, kScenes> shownUsed {};
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SceneBar)
+};
+
+//==============================================================================
+/**
+ * Metal stomp switch bound to a boolean parameter: LED on top, caption below.
+ * Momentary switches are "on" only while held (mouse down .. mouse up); latching ones toggle.
+ */
 class Footswitch : public juce::Component,
                    public juce::SettableTooltipClient
 {
 public:
-    explicit Footswitch (juce::RangedAudioParameter& bypassParam);
+    Footswitch (juce::RangedAudioParameter& param, const juce::String& caption, juce::Colour ledColour,
+                bool ledShowsInverse, std::function<bool()> isMomentary);
 
     void paint (juce::Graphics&) override;
     void mouseDown (const juce::MouseEvent&) override;
     void mouseUp (const juce::MouseEvent&) override;
 
+    /** Changes the printed caption (e.g. the SHIFT interval). */
+    void setCaption (const juce::String& c) { if (c != caption) { caption = c; repaint(); } }
+
+    /** Lights the LED although the parameter is off (e.g. engaged through a LINK switch). */
+    void setLitExternally (bool shouldBeLit);
+
+    /** Pulsing ring while waiting for a MIDI message to learn. */
+    void setLearning (bool isLearning);
+
 private:
-    bool bypassed = false, pressed = false;
+    juce::String caption;
+    juce::Colour ledColour;
+    bool inverse = false, value = false, pressed = false, holding = false, externallyLit = false, learning = false;
+    std::function<bool()> momentary;
     juce::ParameterAttachment attachment;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Footswitch)
 };
 
 //==============================================================================
+/** Miniature toggle switch (bat lever) with a tiny caption, e.g. the LINK switches. */
+class MiniSwitch : public juce::ToggleButton
+{
+public:
+    explicit MiniSwitch (const juce::String& caption);
+    void paintButton (juce::Graphics&, bool isMouseOver, bool isDown) override;
+    SWARM_RIGHT_CLICK_SAFE_BUTTON
+};
+
+//==============================================================================
 /** Stereo horizontal peak meter with hold. */
-class LevelMeter : public juce::Component
+class LevelMeter : public juce::Component,
+                   public juce::SettableTooltipClient
 {
 public:
     explicit LevelMeter (const juce::String& caption);
@@ -118,31 +271,41 @@ public:
     void update (float left, float right);
     void paint (juce::Graphics&) override;
 
+    /** Highlights a recommended level range (e.g. where the input should peak). */
+    void setTargetZone (float minDb, float maxDb) { zoneMin = minDb; zoneMax = maxDb; repaint(); }
+
 private:
     juce::String caption;
+    float zoneMin = 0.0f, zoneMax = 0.0f;
     std::array<float, 2> level {}, hold {};
     std::array<int, 2> holdTicks {};
 };
 
 //==============================================================================
 /** Scrolling display of the live transposition in semitones. */
-class PitchScope : public juce::Component
+class PitchScope : public juce::Component,
+                   public juce::SettableTooltipClient
 {
 public:
     PitchScope();
 
-    void push (float semitones, bool active);
+    /** One frame: the main voice, and the STACK voice while it sounds. */
+    void push (float semitones, bool active, bool stackOn = false, float stackSemitones = 0.0f);
     void paint (juce::Graphics&) override;
 
 private:
-    std::vector<float> history;
+    std::vector<float> history, stackHistory;   // stack: NaN = silent
     int writeIndex = 0;
-    bool active = true, primed = false;
-    float current = 0.0f;
+    bool active = true, primed = false, stackNow = false;
+    float current = 0.0f, currentStack = 0.0f;
 };
 
 //==============================================================================
-/** Header preset browser: < [name] > SAVE and a menu with the less frequent actions. */
+/**
+ * Header preset browser: [FACTORY | USER] < [name] > SAVE ...
+ * The bank tabs choose which presets the list and the arrows browse; the bank follows
+ * whatever preset gets loaded (e.g. saving switches to USER).
+ */
 class PresetBar : public juce::Component
 {
 public:
@@ -153,14 +316,18 @@ public:
     void paint (juce::Graphics&) override;
 
 private:
-    void showPresetMenu();
     void showActionsMenu();
     void saveAs();
     void confirmDelete();
     void importPreset();
     void exportPreset();
 
+    void setBank (bool user);
+    void showMenuForBank();
+
     PresetManager& presets;
+    SegmentedChoice bankTabs { { "FACTORY", "USER" } };
+    bool userBank = false;
     juce::TextButton prevButton { "<" }, nextButton { ">" }, nameButton, saveButton { "SAVE" }, menuButton { "..." };
     std::unique_ptr<juce::FileChooser> chooser;
     juce::String shownName;

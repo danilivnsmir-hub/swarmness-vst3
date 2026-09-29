@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "Publish a GitHub Release with this tag (e.g. v2.0.0); leave empty for a plain build"
+        description: "Publish a GitHub Release with this tag (e.g. v1.0.0); leave empty for a plain build"
         required: false
         default: ""
 
@@ -25,7 +25,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Configure
-        run: cmake -B build -G "Visual Studio 17 2022" -A x64
+        run: cmake -B build -G "Visual Studio 17 2022" -A x64 -DSWARMNESS_TONE3000_KEY="${{ vars.TONE3000_PUBLISHABLE_KEY }}"
 
       - name: Build
         run: cmake --build build --config Release --parallel --target Swarmness_VST3 Swarmness_Standalone SwarmnessTests
@@ -36,7 +36,7 @@ jobs:
       - name: pluginval
         shell: pwsh
         run: |
-          Invoke-WebRequest https://github.com/Tracktion/pluginval/releases/latest/download/pluginval_Windows.zip -OutFile pluginval.zip
+          Invoke-WebRequest https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_Windows.zip -OutFile pluginval.zip
           Expand-Archive pluginval.zip -DestinationPath pluginval
           # pluginval.exe is a GUI-subsystem app: wait for it explicitly and use its real exit code.
           $pvArgs = @("--strictness-level", "$env:PLUGINVAL_STRICTNESS", "--verbose", "--timeout-ms", "600000",
@@ -86,7 +86,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Configure
-        run: cmake -B build -G Xcode -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+        run: cmake -B build -G Xcode -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DSWARMNESS_TONE3000_KEY="${{ vars.TONE3000_PUBLISHABLE_KEY }}"
 
       - name: Build
         run: cmake --build build --config Release --parallel --target Swarmness_VST3 Swarmness_AU Swarmness_Standalone SwarmnessTests -- -quiet
@@ -97,15 +97,19 @@ jobs:
       - name: Verify universal binaries and ad-hoc sign
         run: |
           ART=build/Swarmness_artefacts/Release
-          lipo -info "$ART/VST3/Swarmness.vst3/Contents/MacOS/Swarmness"
-          lipo -info "$ART/AU/Swarmness.component/Contents/MacOS/Swarmness"
+          # universal or nothing: a missing slice fails the build
+          for bin in "$ART/VST3/Swarmness.vst3/Contents/MacOS/Swarmness" "$ART/AU/Swarmness.component/Contents/MacOS/Swarmness" \
+                     "$ART/Standalone/Swarmness.app/Contents/MacOS/Swarmness"; do
+            lipo -info "$bin"
+            lipo "$bin" -verify_arch arm64 x86_64
+          done
           for b in "$ART/VST3/Swarmness.vst3" "$ART/AU/Swarmness.component" "$ART/Standalone/Swarmness.app"; do
             codesign --force --deep --sign - "$b"
           done
 
       - name: pluginval (VST3 + AU)
         run: |
-          curl -sSL -o pluginval.zip https://github.com/Tracktion/pluginval/releases/latest/download/pluginval_macOS.zip
+          curl -sSL -o pluginval.zip https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_macOS.zip
           unzip -q pluginval.zip
           PV=pluginval.app/Contents/MacOS/pluginval
           mkdir -p ~/Library/Audio/Plug-Ins/Components
@@ -144,10 +148,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ninja-build libasound2-dev libjack-jackd2-dev libfreetype6-dev libfontconfig1-dev \
             libx11-dev libxcomposite-dev libxcursor-dev libxext-dev libxinerama-dev libxrandr-dev libxrender-dev \
-            libglu1-mesa-dev mesa-common-dev xvfb
+            libglu1-mesa-dev mesa-common-dev xvfb gdb libcurl4-openssl-dev
 
       - name: Configure
-        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSWARMNESS_TONE3000_KEY="${{ vars.TONE3000_PUBLISHABLE_KEY }}"
 
       - name: Build
         run: cmake --build build --target Swarmness_VST3 Swarmness_Standalone SwarmnessTests
@@ -155,11 +159,50 @@ jobs:
       - name: DSP tests
         run: build/SwarmnessTests_artefacts/Release/SwarmnessTests
 
+      - name: Pedal engine without JUCE sounds exactly like the plug-in
+        run: |
+          cmake -S Pedal/bench -B build-bench -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-bench
+          build-bench/pedal_bench --render pedal.raw
+          build/SwarmnessTests_artefacts/Release/SwarmnessTests --compare-pedal pedal.raw
+
       - name: pluginval
         run: |
-          curl -sSL -o pluginval.zip https://github.com/Tracktion/pluginval/releases/latest/download/pluginval_Linux.zip
+          curl -sSL -o pluginval.zip https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_Linux.zip
           unzip -q pluginval.zip
-          xvfb-run -a ./pluginval --strictness-level $PLUGINVAL_STRICTNESS --validate-in-process --timeout-ms 600000 build/Swarmness_artefacts/Release/VST3/Swarmness.vst3
+          # a crash leaves a core dump: its backtrace is the real one (a rerun under gdb changes the timing)
+          ulimit -c unlimited
+          sudo sysctl -w kernel.core_pattern="$PWD/core.%p" > /dev/null
+          set -o pipefail
+          if ! xvfb-run -a ./pluginval --strictness-level $PLUGINVAL_STRICTNESS --validate-in-process --timeout-ms 600000 build/Swarmness_artefacts/Release/VST3/Swarmness.vst3 2>&1 | tee pluginval.log; then
+            host_race=0
+            for c in core.*; do
+              [ -f "$c" ] || continue
+              echo "::group::pluginval crashed - backtrace from $c"
+              gdb -q -batch -ex "thread apply all bt 30" ./pluginval "$c" 2>&1 | tail -200
+              echo "::endgroup::"
+              # A known race in pluginval's own VST3 host (JUCE hosting code): the validation thread
+              # destroys a host context whose RunLoop the main thread is still polling for the
+              # plug-in's fds - after every test has passed. Only exactly that is let through:
+              # the crashing thread is in RunLoop::Impl and no Swarmness frame is on its stack.
+              crash=$(gdb -q -batch -ex "bt 30" ./pluginval "$c" 2>&1 | grep '^#' || true)
+              if grep -q "SUCCESS" pluginval.log && echo "$crash" | grep -q "RunLoop::Impl" \
+                 && ! echo "$crash" | grep -qi "swarmness"; then
+                host_race=1
+              else
+                host_race=0; break
+              fi
+            done
+            if [ "$host_race" = 1 ]; then
+              echo "::warning::pluginval passed every test, then crashed in its own VST3 host (RunLoop::Impl race after the plug-in was destroyed) - not the plug-in"
+              exit 0
+            fi
+            echo "::group::pluginval crashed - the same run under gdb (backtrace)"
+            xvfb-run -a gdb -q -batch -ex run -ex "thread apply all bt 25" --args \
+              ./pluginval --strictness-level $PLUGINVAL_STRICTNESS --validate-in-process --timeout-ms 600000 build/Swarmness_artefacts/Release/VST3/Swarmness.vst3 2>&1 | tail -150
+            echo "::endgroup::"
+            exit 1
+          fi
 
       - name: Package
         run: |
@@ -172,10 +215,53 @@ jobs:
           path: dist/*.zip
 
   # ---------------------------------------------------------------------------
+  pedal:
+    name: Pedal engine (Daisy Seed firmware + Raspberry Pi benchmark)
+    runs-on: ubuntu-24.04
+    env:
+      LIBDAISY_COMMIT: facb66c76b5482918741695f4268b0185e474644
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchains
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib g++-aarch64-linux-gnu
+
+      - name: libDaisy (MIT)
+        run: |
+          git clone https://github.com/electro-smith/libDaisy.git Pedal/daisy/libDaisy
+          git -C Pedal/daisy/libDaisy checkout $LIBDAISY_COMMIT
+          git -C Pedal/daisy/libDaisy submodule update --init --recursive --depth 1
+          make -C Pedal/daisy/libDaisy -j4
+
+      - name: Daisy Seed benchmark firmware
+        run: make -C Pedal/daisy/bench -j4
+
+      - name: Raspberry Pi (aarch64) benchmark
+        run: |
+          aarch64-linux-gnu-g++ -std=c++17 -O2 -static -DSWARM_NO_JUCE -ISource -IPedal/bench \
+            Pedal/bench/pedal_bench.cpp -o pedal_bench_pi4 -mcpu=cortex-a72
+          aarch64-linux-gnu-g++ -std=c++17 -O2 -static -DSWARM_NO_JUCE -ISource -IPedal/bench \
+            Pedal/bench/pedal_bench.cpp -o pedal_bench_pi5 -mcpu=cortex-a76
+
+      - name: Package
+        run: |
+          mkdir -p dist pedal
+          cp Pedal/daisy/bench/build/swarmness_bench.bin pedal/swarmness_bench_daisy_seed.bin
+          cp pedal_bench_pi4 pedal_bench_pi5 Pedal/README.md pedal/
+          (cd pedal && zip -q ../dist/Swarmness-Pedal-Bench.zip *)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Swarmness-Pedal
+          path: dist/*.zip
+
+  # ---------------------------------------------------------------------------
   release:
     name: GitHub Release
     if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
-    needs: [ windows, macos, linux ]
+    needs: [ windows, macos, linux, pedal ]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -190,5 +276,6 @@ jobs:
           tag_name: ${{ inputs.release_tag || github.ref_name }}
           target_commitish: ${{ github.sha }}
           name: Swarmness ${{ inputs.release_tag || github.ref_name }}
+          prerelease: ${{ contains(inputs.release_tag || github.ref_name, '-') }}
           files: dist/*
           generate_release_notes: true

@@ -4,18 +4,31 @@
 #include "PluginProcessor.h"
 #include "GUI/SwarmLookAndFeel.h"
 #include "GUI/Controls.h"
+#include "GUI/ChainStrip.h"
+#include "GUI/Pages.h"
+#include "GUI/TunerOverlay.h"
 
 /** All controls laid out at a fixed base resolution; the editor scales it as a whole. */
 class MainPanel : public juce::Component
 {
 public:
-    static constexpr int baseWidth  = 1000;
-    static constexpr int baseHeight = 640;
+    static constexpr int baseWidth  = 1100;
+    static constexpr int baseHeight = 800;   // full view
+    static constexpr int miniHeight = 330;   // MINI: chain, scenes and footswitches for playing live
+
+    int getBaseHeight() const noexcept { return mini ? miniHeight : baseHeight; }
+    bool isMini() const noexcept { return mini; }
+    void setMini (bool shouldBeMini);
+    std::function<void()> onModeChanged;   // the editor resizes
 
     explicit MainPanel (SwarmnessAudioProcessor&);
 
     void resized() override;
     void tick();   // called by the editor's timer
+
+    enum Page { fxPageIndex = 0, eqPageIndex, spacePageIndex, pitchPageIndex, rigPageIndex, numPages };
+    void showPage (int page);
+    static int pageForBlock (int block);
 
 private:
     /** Static artwork, cached as an image so animated controls repaint cheaply. */
@@ -29,56 +42,95 @@ private:
 
     using APVTS = juce::AudioProcessorValueTreeState;
 
-    void attachButton (juce::Button&, const juce::String& id, const juce::String& tooltip);
+    void attachButton (juce::Component& parent, juce::Button&, const juce::String& id, const juce::String& tooltip);
     bool paramOn (const char* id) const;
+    bool footswitchesMomentary() const;
     void setSectionDimmed (std::initializer_list<juce::Component*>, bool dimmed);
+
+    // MIDI learn: right-click any control (or a chain tile) for its menu
+    void mouseDown (const juce::MouseEvent&) override;
+    void showMidiMenu (const juce::String& paramID, juce::Component* target, int value = -1);
+    juce::Component* findLearnable (const juce::String& paramID);
+    struct LearnMarker : juce::Component
+    {
+        float phase = 0.0f;
+        void paint (juce::Graphics&) override;
+    };
+    LearnMarker learnMarker;
 
     SwarmnessAudioProcessor& processor;
     APVTS& state;
 
-    juce::Image logo;
+    juce::Image logo, emblem;
     Backdrop backdrop;
+
+    // Chain + pages (the FX page holds the original sections; EQ and CRYPT have their own components)
+    ChainStrip chainStrip;
+    juce::Component fxPage, pitchPage, rigPage;   // FX = SMOKE / SWARM / WINGS, PITCH = HIVE + SHIFT, RIG = WASP + AMP + CAB
+    EqPage eqPage;
+    ReverbPage reverbPage;
+    WaspSection wasp;       // RIG page: the overdrive on top,
+    AmpCabSection ampCab;   // AMP + CAB under it
+    int currentPage = fxPageIndex;
 
     // Header
     PresetBar presetBar;
-    juce::TextButton infoButton { "?" };
+    SegmentedChoice switchModeSelector;
+    juce::TextButton infoButton { "?" }, miniButton { "MINI" }, tunerButton { "TUNE" };
+    SceneBar sceneBar;
+    bool mini = false;
 
-    // VOLTAGE
-    PowerButton pitchPower;
-    SegmentedChoice octaveSelector;
-    SegmentedChoice qualitySelector;
-    Knob semiKnob { "SEMI", true }, riseKnob { "RISE" }, rangeKnob { "RANGE" }, speedKnob { "SPEED" };
-    Knob rushKnob { "RUSH" }, angerKnob { "ANGER" }, modRateKnob { "RATE" };
+    // SHIFT (footswitch shifter)
+    Knob shiftAKnob { "SHIFT A", true }, shiftBKnob { "SHIFT B", true }, riseKnob { "RISE" }, fallKnob { "FALL" }, blendKnob { "MIX" };
+    PowerButton shiftPower;
+    Knob panicKnob { "ANGER" }, chaosKnob { "FRENZY" }, speedKnob { "BUZZ" }, shDetuneKnob { "DETUNE", true };
+    PillToggle stackToggle { "STACK" }, shSnapToggle { "SNAP" }, shRawToggle { "RAW" };
     PitchScope pitchScope;
 
-    // TONE
-    Fader lowCutFader { "LOW CUT" }, highCutFader { "HIGH CUT" }, midFader { "MID" };
-
-    // OUTPUT
-    Fader mixFader { "MIX" }, driveFader { "DRIVE" }, volumeFader { "VOLUME", true };
+    // HIVE: VOICES | TRAILS | MANGLE
+    PowerButton hivePower;
+    PillToggle snapToggle { "SNAP" };
+    Knob pitchKnob { "PITCH", true }, primaryKnob { "DRONE" }, secondaryKnob { "QUEEN" }, trackingKnob { "TRACKING" };
+    PillToggle rbSyncToggle { "SYNC" }, trDryToggle { "DRY" };
+    Knob magicKnob { "TRAILS" }, rbTimeKnob { "TIME" }, rbDivKnob { "DIV" }, toneKnob { "TONE" }, gateKnob { "GATE" };
+    StepGrid stepGrid;
+    PillToggle rbRawToggle { "RAW" };
+    Knob hvMangleKnob { "MANGLE" }, rbDetuneKnob { "DETUNE", true }, rbMixKnob { "MIX" };
 
     // SWARM
     PowerButton swarmPower;
     PillToggle deepToggle { "DEEP" };
     Knob swarmDepthKnob { "DEPTH" }, swarmRateKnob { "RATE" }, swarmMixKnob { "MIX" };
 
-    // FLOW
+    // SMOKE (fuzz)
+    PowerButton fuzzPower;
+    SegmentedChoice fuzzVoiceSelector;
+    Knob fuzzKnob { "FUZZ" }, fuzzToneKnob { "TONE" }, fuzzScoopKnob { "SCOOP" };
+    Knob fuzzGlareKnob { "GLARE" }, fuzzGateKnob { "GATE" }, fuzzSagKnob { "SAG" }, fuzzBlendKnob { "CLEAN" };
+
+    // WINGS (gate)
     PowerButton flowPower;
     PillToggle hardToggle { "HARD" }, syncToggle { "SYNC" };
     Knob flowAmountKnob { "AMOUNT" }, flowSpeedKnob { "SPEED" }, flowDivKnob { "DIV" };
 
-    // Footer
-    Footswitch footswitch;
+    // Levels (footer, next to the meters)
+    Knob inputKnob { "INPUT", true }, volumeKnob { "VOLUME", true };
+
+    // Footswitches
+    Footswitch oct1Switch, oct2Switch, magicSwitch, bypassSwitch;
+    MiniSwitch link1Switch { "LINK" }, link2Switch { "LINK" };
     LevelMeter inMeter { "IN" }, outMeter { "OUT" };
 
     InfoOverlay infoOverlay;
+    TunerOverlay tunerOverlay;
 
     std::vector<std::unique_ptr<APVTS::ButtonAttachment>> buttonAttachments;
 
     // Section rectangles (base coordinates)
-    juce::Rectangle<float> voltageArea, toneArea, outputArea, swarmArea, flowArea;
-    juce::String latencyText;
-    std::array<bool, 3> lastSectionStates { true, true, true };
+    juce::Rectangle<float> hiveArea, shiftArea, swarmArea, fuzzArea, flowArea, footswitchArea;
+    std::array<juce::Rectangle<float>, 3> hiveSections;   // VOICES, TRAILS, MANGLE
+    std::array<bool, 5> lastSectionStates {};   // SHIFT engaged, HIVE on, SWARM, SMOKE, WINGS
+    int lastShiftA = 999, lastShiftB = 999;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainPanel)
 };
@@ -99,6 +151,7 @@ public:
 
 private:
     void timerCallback() override { refresh(); }
+    void applyMode (float scale);
 
     SwarmnessAudioProcessor& swarmProcessor;
     SwarmLookAndFeel lookAndFeel;
