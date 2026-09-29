@@ -219,7 +219,7 @@ VST3 / AU / Standalone · Windows, macOS (Universal: Apple Silicon + Intel), Lin
 
 Всё лежит на странице [Releases](https://github.com/danilivnsmir-hub/swarmness-vst3/releases/latest).
 
-**Windows** — запустите `Swarmness-<версия>-Windows-x64-Setup.exe` (VST3 ставится в `C:\Program Files\Common Files\VST3`), либо распакуйте `Swarmness-Windows-x64.zip` вручную.
+**Windows** — запустите `Swarmness-<версия>-Windows-x64-Setup.exe` (VST3 ставится в `C:\Program Files\Common Files\VST3`), либо распакуйте `Swarmness-Windows-x64.zip` вручную. Установщик сначала убирает старые копии плагина из стандартных папок VST3 (`Common Files\VST3`, `Common Files (x86)\VST3` и `%LOCALAPPDATA%\Programs\Common\VST3`): у всех версий Swarmness один и тот же идентификатор плагина, и DAW иначе продолжала бы загружать старую.
 
 **macOS** — откройте `Swarmness-<версия>-macOS-Universal.pkg` (VST3, AU и приложение — выбираются в установщике; ставится в `/Library/Audio/Plug-Ins`). Сборки подписаны ad-hoc, но не нотаризованы: если macOS не даёт открыть установщик, откройте **Системные настройки → Конфиденциальность и безопасность** и нажмите **«Всё равно открыть»** (на macOS 14 и старше хватает правого клика → **Открыть**). Если DAW не видит плагин после ручного копирования из zip:
 ```bash
@@ -229,7 +229,11 @@ xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/Components/Swarmness.com
 
 **Linux** — распакуйте `Swarmness-Linux-x64.zip`: `Swarmness.vst3` — в `~/.vst3/`, приложение — куда удобно.
 
-> **Обновляетесь с бет 3.x?** Номер версии начат заново (1.0.0 меньше 3.x). Установщики заменяют старую версию, но если вы когда-то копировали бету вручную в `~/Library/Audio/Plug-Ins/VST3` или `~/Library/Audio/Plug-Ins/Components`, удалите эти копии: macOS загружает AU с бо́льшим номером версии, и старая бета перекрыла бы 1.0.0. После обновления пересканируйте плагины в DAW.
+> **Обновляетесь со старой версии (1.x, 2.x или беты 3.x)?** Номер версии начат заново (1.0.0 меньше 3.x). Установщики заменяют старую версию, но копию, положенную когда-то вручную, DAW может загружать вместо новой — все версии Swarmness видны ей как один и тот же плагин. Если после установки в DAW по-прежнему открывается старый интерфейс:
+> - **Windows:** найдите и удалите старые `Swarmness.vst3` (файл или папку) во всех путях VST3, которые сканирует DAW, кроме `C:\Program Files\Common Files\VST3\Swarmness.vst3` (это новая версия). В REAPER путь загруженного плагина виден в браузере FX по правому клику.
+> - **macOS:** удалите копии из `~/Library/Audio/Plug-Ins/VST3` и `~/Library/Audio/Plug-Ins/Components`: macOS загружает AU с бо́льшим номером версии, и старая бета перекрыла бы 1.0.0.
+>
+> После этого пересканируйте плагины в DAW (в REAPER: Options → Preferences → Plug-ins → VST → Re-scan, при необходимости с очисткой кэша).
 
 
 ## Сборка из исходников
