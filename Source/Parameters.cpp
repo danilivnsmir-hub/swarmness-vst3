@@ -324,15 +324,19 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
 
     // ------------------------------------------------------------------ CHAIN ORDER
     auto chain = std::make_unique<Group> ("chain", "Chain", "|");
-    for (int b = 0; b < Chain::numBlocks; ++b)
-        chain->addChild (std::make_unique<juce::AudioParameterInt> (
+    auto slotParam = [] (int b) { return std::make_unique<juce::AudioParameterInt> (
             pid (Chain::slotIds[b]), juce::String ("Chain Slot ") + Chain::names[b], 0, Chain::slotMax, Chain::defaultSlots[b],
-            juce::AudioParameterIntAttributes().withAutomatable (false)));
-    for (int b = 0; b < Chain::numBlocks; ++b)
-        chain->addChild (std::make_unique<juce::AudioParameterChoice> (
+            juce::AudioParameterIntAttributes().withAutomatable (false)); };
+    auto laneParam = [] (int b) { return std::make_unique<juce::AudioParameterChoice> (
             pid (Chain::laneIds[b]), juce::String ("Chain Lane ") + Chain::names[b],
             juce::StringArray { "Series", "Parallel A", "Parallel B" }, Chain::series,
-            juce::AudioParameterChoiceAttributes().withAutomatable (false)));
+            juce::AudioParameterChoiceAttributes().withAutomatable (false)); };
+    for (int b = 0; b < Chain::numBlocks; ++b)
+        if (b != Chain::honey)   // HONEY's slot / lane sit in its own group (added in 1.1, after everything else)
+            chain->addChild (slotParam (b));
+    for (int b = 0; b < Chain::numBlocks; ++b)
+        if (b != Chain::honey)
+            chain->addChild (laneParam (b));
     for (int sp = 0; sp < Chain::maxSplits; ++sp)
         chain->addChild (std::make_unique<juce::AudioParameterFloat> (
             pid (Chain::parallelMixIds[sp]), "Split " + juce::String (sp + 1) + " Mix", percentRange(), 50.0f,
@@ -362,7 +366,19 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
                                                                  juce::AudioParameterChoiceAttributes().withMeta (true)));
     out->addChild (toggle (bypass, "Bypass", false));
 
+    // ------------------------------------------------------------------ HONEY (1.1: last, so the parameter order hosts saw before is unchanged)
+    auto honey = std::make_unique<Group> ("honey", "Honey", "|");
+    honey->addChild (toggle (hnOn, "Honey On", false));
+    honey->addChild (percent (hnSustain, "Honey Sustain", 50.0f));
+    honey->addChild (percent (hnAttack, "Honey Attack", 50.0f));
+    honey->addChild (percent (hnBlend, "Honey Blend", 100.0f));
+    honey->addChild (std::make_unique<juce::AudioParameterFloat> (pid (hnLevel), "Honey Level", juce::NormalisableRange<float> (-12.0f, 12.0f, 0.1f), 0.0f, dbAttr()));
+    honey->addChild (toggle (hnLimit, "Honey Limit", false));
+    honey->addChild (slotParam (Chain::honey));
+    honey->addChild (laneParam (Chain::honey));
+
     layout.add (std::move (shift), std::move (hive), std::move (swarm), std::move (fz), std::move (flow),
-                std::move (comb), std::move (carve), std::move (crypt), std::move (amp), std::move (cab), std::move (drv), std::move (chain), std::move (out));
+                std::move (comb), std::move (carve), std::move (crypt), std::move (amp), std::move (cab), std::move (drv), std::move (chain), std::move (out),
+                std::move (honey));
     return layout;
 }

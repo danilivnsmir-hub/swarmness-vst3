@@ -597,6 +597,39 @@ void MiniSwitch::paintButton (juce::Graphics& g, bool isMouseOver, bool)
 }
 
 //==============================================================================
+void GainReductionMeter::set (float reductionDb)
+{
+    const float v = juce::jlimit (0.0f, 30.0f, reductionDb);
+    if (std::abs (v - shown) > 0.05f)
+    {
+        shown = v;
+        repaint();
+    }
+}
+
+void GainReductionMeter::paint (juce::Graphics& g)
+{
+    auto r = getLocalBounds().toFloat();
+    g.setFont (font (11.5f, true));
+    g.setColour (Colours::textDim);
+    g.drawText ("GR", r.removeFromLeft (22.0f), juce::Justification::centredLeft, false);
+    auto value = r.removeFromRight (52.0f);
+    const auto slot = r.reduced (2.0f, r.getHeight() * 0.3f);
+    g.setColour (Colours::inset);
+    g.fillRoundedRectangle (slot, 2.0f);
+    g.setColour (Colours::panelBorder);
+    g.drawRoundedRectangle (slot, 2.0f, 1.0f);
+    if (shown > 0.1f)
+    {
+        const auto bar = slot.reduced (1.0f).removeFromRight ((slot.getWidth() - 2.0f) * juce::jmin (1.0f, shown / 24.0f));
+        g.setGradientFill (juce::ColourGradient (Colours::accentDeep, bar.getX(), 0.0f, Colours::accentBright, bar.getRight(), 0.0f, false));
+        g.fillRoundedRectangle (bar, 1.5f);
+    }
+    g.setColour (shown > 0.1f ? Colours::accentBright : Colours::textFaint);
+    g.drawText (shown > 0.1f ? "-" + juce::String (shown, 1) + " dB" : juce::String ("0 dB"), value, juce::Justification::centredRight, false);
+}
+
+//==============================================================================
 LevelMeter::LevelMeter (const juce::String& c) : caption (c) {}
 
 void LevelMeter::update (float left, float right)
@@ -1041,6 +1074,8 @@ void InfoOverlay::paint (juce::Graphics& g)
                       "The VENOM footswitch = self-oscillation; LINK drags SHIFT A / B in." },
         { "MANGLE",   "HIVE's MANGLE is one knob: sour detuned voices first, then random pitch jumps, then buzz / AM on top. "
                       "RAW = cheap-pedal-DSP character, DETUNE = width, MIX = dry vs voices (100% = voices only)." },
+        { "HONEY",    "Sustainer / compressor, pedal style: SUSTAIN = threshold down and ratio up together (sticky sustain), ATTACK = slower lets the pick through, "
+                      "BLEND = parallel blend with the dry signal, LEVEL on top of the automatic make-up, LIMIT = a fast peak limiter after it (ceiling -6 dBFS). First in the chain by default - in front of the amp for clean parts." },
         { "SWARM",    "Stereo chorus with bucket-brigade colour (DEEP = 8 voices with feedback). WINGS = rhythmic gate: HARD = stutter, off = tremolo, SYNC = host tempo." },
         { "SMOKE",    "Jumbo fuzz. VOICE: DOWN doom / MID / UP scream. SCOOP = mid cut, GLARE = gated octave-up, GATE = starved sputter, SAG = breathing "
                       "(the pick sags, the note blooms), CLEAN = clean signal under the fuzz." },

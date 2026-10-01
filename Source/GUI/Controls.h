@@ -260,6 +260,18 @@ public:
 };
 
 //==============================================================================
+/** HONEY's gain reduction: a thin bar that grows from the right, with the figure. */
+class GainReductionMeter : public juce::Component,
+                           public juce::SettableTooltipClient
+{
+public:
+    void set (float reductionDb);
+    void paint (juce::Graphics&) override;
+private:
+    float shown = 0.0f;
+};
+
+//==============================================================================
 /** Stereo horizontal peak meter with hold. */
 class LevelMeter : public juce::Component,
                    public juce::SettableTooltipClient

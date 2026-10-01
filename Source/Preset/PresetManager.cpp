@@ -73,6 +73,11 @@ void PresetManager::initialiseFactoryPresets()
           { { rise, 0 }, { fall, 0 }, { stingMix, 50 } } },
         { "Slow Rise", basics, "RISE and FALL: hold a footswitch and the pitch sweeps up over ~1 s; release and it slides back down over ~1.5 s.",
           { { rise, 950 }, { fall, 1500 } } },
+        { "Sticky Clean", basics, "HONEY into the CHROME clean: a compressor pedal in front of the amp - even picking, sticky sustain, a little SWARM.",
+          { { hnOn, 1 }, { hnSustain, 65 }, { hnAttack, 70 }, { hnBlend, 100 }, { hnLevel, 1 },
+            { ampOn, 1 }, { ampChannel, 0 }, { ampGain, 4 }, { ampTreble, 6 }, { ampLevel, 6 },
+            { cabOn, 1 }, { cabType, 1 }, { cabMic, 15 }, { cabDist, 30 },
+            { swarmOn, 1 }, { swarmMix, 25 }, { swarmDepth, 35 } } },
 
         // ---------------------------------------------------------------- recipes
         { "Panic - Octave Panic", recipes, "Fuzz into a footswitch octave: SMOKE into SHIFT. Hold SHIFT A (+1 oct) or SHIFT B (+2 oct); ANGER sours it, FRENZY throws the pitch around, BUZZ grinds, RISE slides into the note.",
@@ -223,11 +228,13 @@ void PresetManager::initialiseFactoryPresets()
             { revOn, 1 }, { revType, 0 }, { revDecay, 1.1f }, { revMix, 35 }, { revDuck, 80 }, { revLowCut, 250 } } },
         // ------------------------------------------------------------- amps & cabs (CLEAN = CHROME, CRUNCH = BRIT, LEAD = STEEL)
         { "Glass Clean", amps, "CLEAN: the crystal clean into an open 2x12, a little SWARM and a HALL behind it.",
-          { { ampOn, 1 }, { ampChannel, 0 }, { ampGain, 3.5f }, { ampBass, 4.5f }, { ampMid, 5 }, { ampTreble, 6 }, { ampLevel, 9 }, { ampMaster, 4.5f },
-            { cabOn, 1 }, { cabType, 1 }, { cabMic, 35 }, { cabDist, 30 },
+          { { hnOn, 1 }, { hnSustain, 40 }, { hnAttack, 60 }, { hnBlend, 70 },
+            { ampOn, 1 }, { ampChannel, 0 }, { ampGain, 3.5f }, { ampBass, 4.5f }, { ampMid, 5 }, { ampTreble, 6 }, { ampLevel, 9 }, { ampMaster, 4.5f },
+            { cabOn, 1 }, { cabType, 1 }, { cabMic, 15 }, { cabDist, 30 },
             { swarmOn, 1 }, { swarmMix, 30 }, { swarmDepth, 40 }, { revOn, 1 }, { revType, 2 }, { revMix, 20 }, { revDecay, 2.8f } } },
         { "Thall Intro", amps, "The crystal clean for intros: glassy, almost piezo-bright, a tight bottom, wide SWARM and a long HALL - arpeggios that ring like a piano.",
-          { { ampOn, 1 }, { ampChannel, 0 }, { ampGain, 5 }, { ampBass, 4 }, { ampMid, 4 }, { ampTreble, 6.5f }, { ampLevel, 0 },
+          { { hnOn, 1 }, { hnSustain, 40 }, { hnAttack, 60 }, { hnBlend, 70 },
+            { ampOn, 1 }, { ampChannel, 0 }, { ampGain, 5 }, { ampBass, 4 }, { ampMid, 4 }, { ampTreble, 6.5f }, { ampLevel, 0 },
             { cabOn, 1 }, { cabType, 1 }, { cabMic, 15 }, { cabDist, 30 }, { cabLowCut, 90 },
             { swarmOn, 1 }, { swarmMix, 45 }, { swarmDepth, 55 }, { revOn, 1 }, { revType, 2 }, { revMix, 32 }, { revDecay, 4.5f } } },
         { "Brit Crunch", amps, "CRUNCH: bright, barking upper mids and a tight bottom - rock rhythm into the BRIT 4x12. Roll the guitar's volume back to clean it up.",

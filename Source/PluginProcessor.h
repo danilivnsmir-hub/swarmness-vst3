@@ -7,6 +7,7 @@
 #include "DSP/FuzzStage.h"
 #include "DSP/SwarmChorus.h"
 #include "DSP/FlowGate.h"
+#include "DSP/HoneyBlock.h"
 #include "DSP/Equalisers.h"
 #include "DSP/ReverbStage.h"
 #include "DSP/AmpBlock.h"
@@ -75,6 +76,7 @@ public:
         std::atomic<bool>  stackOn { false };
         std::atomic<int>   trailStep { -1 };             // TRAILS step now playing (-1 = none)
         std::atomic<float> reverbLevel { 0.0f };       // CRYPT wet peak
+        std::atomic<float> honeyGr { 0.0f };           // HONEY gain reduction, dB
     };
 
     Meters& getMeters() noexcept { return meters; }
@@ -234,6 +236,8 @@ private:
         std::atomic<float>* fuzzScoop {};  std::atomic<float>* fuzzGlare {};   std::atomic<float>* fuzzBlend {};   std::atomic<float>* fuzzSag {};
         std::atomic<float>* flowOn {};     std::atomic<float>* flowHard {};    std::atomic<float>* flowSync {};
         std::atomic<float>* flowAmount {}; std::atomic<float>* flowSpeed {};   std::atomic<float>* flowDiv {};
+        std::atomic<float>* hnOn {};       std::atomic<float>* hnSustain {};   std::atomic<float>* hnAttack {};
+        std::atomic<float>* hnBlend {};    std::atomic<float>* hnLevel {};     std::atomic<float>* hnLimit {};
         std::atomic<float>* output {};      std::atomic<float>* input {};      std::atomic<float>* bypass {};
 
         std::atomic<float>* geqOn {};      std::atomic<float>* geqLevel {};
@@ -282,6 +286,7 @@ private:
     HiveBlock          hive;          // VOICES + TRAILS
     SwarmChorus        swarmChorus;
     FlowGate           flow;
+    HoneyBlock         honey;         // sustainer / compressor
     swarm::GraphicEq    comb;
     swarm::ParametricEq carve;
     ReverbStage        crypt;

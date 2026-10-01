@@ -25,7 +25,7 @@ VST3 / AU / Standalone · Windows, macOS (Universal: Apple Silicon + Intel), Lin
 ## Цепочка сигнала
 
 ```
-вход → INPUT → [ SMOKE ][ SHIFT ][ HIVE ][ WASP ][ AMP ][ CAB ][ SWARM ][ WINGS ][ COMB ][ CARVE ][ CRYPT ] → VOLUME → выход
+вход → INPUT → [ HONEY ][ SMOKE ][ SHIFT ][ HIVE ][ WASP ][ AMP ][ CAB ][ SWARM ][ WINGS ][ COMB ][ CARVE ][ CRYPT ] → VOLUME → выход
 
 любые блоки можно поставить параллельно:
 вход ─┬─ A: [ SMOKE ] ─┬─ MIX → [ SHIFT ][ HIVE ] ─┬─ A: [ SWARM ] ─┬─ MIX → [ WINGS ] … → выход
@@ -114,6 +114,8 @@ VST3 / AU / Standalone · Windows, macOS (Universal: Apple Silicon + Intel), Lin
 
 Самовозбуждение — только на футсвиче **VENOM**: повторы разрастаются и держатся, но мягко, без визга. Голоса звучат живее: у каждого свой медленный дрейф на несколько центов, DRONE чуть левее, QUEEN чуть правее.
 
+**HONEY (мёд)** — сустейнер-компрессор в духе педали, по умолчанию первый в цепи (перед усилителем — для чистых партий): **SUSTAIN** — порог вниз и степень сжатия вверх одной ручкой (0 — лёгкое касание 1,5:1, 100 — всё в липкий сустейн 10:1), **ATTACK** — 1…40 мс, медленнее — щипок пролетает до сжатия, **BLEND** — параллельное смешивание с сухим, **LEVEL** — поверх автоматической компенсации громкости (SUSTAIN сам по себе громкость почти не меняет), **LIMIT** — быстрый пик-лимитер после компрессора (потолок −6 dBFS, верх зелёной зоны индикатора IN): выбросы щипка, пролетевшие сквозь медленную атаку, не долетают до усилителя. Детектор не слушает низ ниже 120 Гц (низкая струна не качает всё), релиз «оптический»: быстрый после короткого удара, медленный на глубоком сжатии. Полоска под ручками показывает текущее сжатие.
+
 **SWARM (рой)** — стерео-хорус с окраской как у аналоговых BBD-педалей (тёмный, слегка перегруженный): **DEPTH** — от лёгкого расширения до морской болезни, **RATE**, **MIX** (на 50% сухой и хорус звучат оба в полную громкость, на 100% — чистое вибрато). **DEEP** — 8 голосов с сильной обратной связью.
 
 **SMOKE (дым)** — «джамбо»-фузз на высоком гейне: три каскада клиппинга, 4× оверсэмплинг.
@@ -189,10 +191,10 @@ VST3 / AU / Standalone · Windows, macOS (Universal: Apple Silicon + Intel), Lin
 
 Пресеты разделены на два банка — вкладки **FACTORY / USER** слева от имени пресета. Выбранный банк определяет, что показывает список и по чему листают стрелки **< >**; при загрузке или сохранении пресета вкладка переключается сама.
 
-**FACTORY** — 65 заводских пресетов в восьми категориях (подменю); каждый показывает одну возможность, описание всплывает при наведении на имя пресета:
+**FACTORY** — 66 заводских пресетов в восьми категориях (подменю); каждый показывает одну возможность, описание всплывает при наведении на имя пресета:
 
 - **Recipes — panic, slam, glitch** (с чего начинать): Panic - Octave Panic / Siren Sweep / In-Key Chaos (фузз → октава на футсвиче, ANGER / FRENZY / BUZZ сверху); Slam - Semitone Clash / Minor Second Down / Tritone Dread / Sub Layer (слэм-диссонанс: постоянный голос на полутон / тритон / октавы ниже, MIX 50%); Glitch Steps, Stutter Echo, Gallop Octaves, Offbeat Fifths (ритмичные повторы через STEPS и GATE)
-- **Basics:** Init, Clean Shift, Shift Doubler, Slow Rise
+- **Basics:** Init, Clean Shift, Shift Doubler, Slow Rise, Sticky Clean (HONEY в чистый канал)
 - **Shift — hold SHIFT A / B:** Killer Bee, Angry Hive, Frenzy, Hornet Buzz, Stacked Octaves, Power Stack (STACK: A и B вместе), Dive Bomb
 - **Hive Voices & Trails:** Pitch Delay, Dotted Echo (HIVE как дилей), Harmony Fifth, Atonal Detune, Tone Clusters, Honey Ladder, Descending Spiral, Drowning Hive, Bounce Trill, Scatter Swarm, Reverse Hive, Swell Ladder, Angry Voices, Venom Overload
 - **Smoke, Swarm & Wings:** Swarm Cloud, Jumbo Smoke, Doom Cathedral, Glare Scream, Smoked Out, Wing Beat Breakdown, Ghost Swarm
@@ -279,7 +281,7 @@ Source/
   PluginProcessor.*       цепочка обработки, задержка, байпас, состояние
   PluginEditor.*          главное окно (масштабируемое), страницы PITCH / FX / RIG / EQ / CRYPT
   DSP/                    ShiftBlock = SHIFT, HiveBlock = HIVE (LivePitchShifter + PitchVoice, SpeedStage = BUZZ),
-                          FuzzStage = SMOKE, SwarmChorus, FlowGate = WINGS,
+                          FuzzStage = SMOKE, SwarmChorus, FlowGate = WINGS, HoneyBlock = HONEY,
                           Equalisers = COMB + CARVE, ReverbStage = CRYPT, SpectrumTap (анализатор),
                           AmpCircuit (модели схем) + AmpBlock = AMP, DriveBlock = WASP, CabBlock = CAB,
                           NamRunner (NAM-захваты для AMP и WASP), NoiseGate, IrTools (ресэмплинг IR), Tuner

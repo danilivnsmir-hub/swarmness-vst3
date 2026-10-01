@@ -157,6 +157,17 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
         pitchPage.addAndMakeVisible (c);
     pitchPage.addChildComponent (rbDivKnob);
 
+    // HONEY
+    attachButton (fxPage, honeyPower, hnOn, "HONEY sustainer / compressor on / off");
+    attachButton (fxPage, limitToggle, hnLimit, "LIMIT: a fast peak limiter after the compressor (ceiling -6 dBFS, the top of the IN meter's green zone) - stops the picks that a slow ATTACK lets through");
+    honeySustainKnob.attach (state, hnSustain, "SUSTAIN: threshold down and ratio up together, like one knob on a pedal - a touch at 0, everything squashed into sticky sustain at 100");
+    honeyAttackKnob .attach (state, hnAttack,  "ATTACK: 1 .. 40 ms - slower lets the pick through before the squash");
+    honeyBlendKnob  .attach (state, hnBlend,   "BLEND: parallel blend - dry at 0, only the compressed signal at 100");
+    honeyLevelKnob  .attach (state, hnLevel,   "LEVEL: output on top of the automatic make-up (SUSTAIN alone keeps the loudness about even)");
+    honeyMeter.setTooltip ("Gain reduction: how much HONEY is turning down right now");
+    for (auto* c : std::initializer_list<juce::Component*> { &honeySustainKnob, &honeyAttackKnob, &honeyBlendKnob, &honeyLevelKnob, &honeyMeter })
+        fxPage.addAndMakeVisible (c);
+
     // SWARM
     attachButton (fxPage, swarmPower, swarmOn,   "SWARM chorus on / off");
     attachButton (fxPage, deepToggle, swarmDeep, "Deep mode: 8 voices with feedback");
@@ -247,6 +258,7 @@ int MainPanel::pageForBlock (int block)
         case Chain::drive:
         case Chain::amp:
         case Chain::cab:   return rigPageIndex;
+        case Chain::honey: return fxPageIndex;
         default:           return fxPageIndex;
     }
 }
@@ -322,8 +334,9 @@ void MainPanel::resized()
 
     // FX page: SMOKE across the top, SWARM and WINGS under it
     fuzzArea   = { 16.0f,  144.0f, (float) baseWidth - 32.0f, 226.0f };
-    swarmArea  = { 16.0f,  382.0f, 528.0f, 226.0f };
-    flowArea   = { 556.0f, 382.0f, (float) baseWidth - 16.0f - 556.0f, 226.0f };
+    honeyArea  = { 16.0f,  382.0f, 392.0f, 226.0f };
+    swarmArea  = { 420.0f, 382.0f, 320.0f, 226.0f };
+    flowArea   = { 752.0f, 382.0f, (float) baseWidth - 16.0f - 752.0f, 226.0f };
     // PITCH page: HIVE on top, SHIFT below
     hiveArea   = { 16.0f, 144.0f, (float) baseWidth - 32.0f, 262.0f };
     shiftArea  = { 16.0f, 418.0f, (float) baseWidth - 32.0f, 190.0f };
@@ -411,6 +424,20 @@ void MainPanel::resized()
             x += kw + gap;
         }
     };
+
+    // HONEY: four knobs and the gain-reduction bar under them
+    honeyPower.setBounds (powerFor (honeyArea));
+    limitToggle.setBounds (pillFor (honeyArea, 0));
+    {
+        const int kw = 72, kh = 104, gap = ((int) honeyArea.getWidth() - 4 * kw) / 5;
+        int x = (int) honeyArea.getX() + gap;
+        for (auto* k : { &honeySustainKnob, &honeyAttackKnob, &honeyBlendKnob, &honeyLevelKnob })
+        {
+            k->setBounds (x, (int) honeyArea.getY() + 50, kw, kh);
+            x += kw + gap;
+        }
+        honeyMeter.setBounds ((int) honeyArea.getX() + 18, (int) honeyArea.getBottom() - 42, (int) honeyArea.getWidth() - 36, 22);
+    }
 
     // SWARM
     swarmPower.setBounds (powerFor (swarmArea));
@@ -576,8 +603,9 @@ void MainPanel::paintBackdrop (juce::Graphics& g)
 
     if (currentPage == fxPageIndex)
     {
-        for (auto a : { swarmArea, fuzzArea, flowArea })
+        for (auto a : { honeyArea, swarmArea, fuzzArea, flowArea })
             drawPanel (g, a);
+        drawSectionTitle (g, titleRow (honeyArea), "HONEY", lastSectionStates[5]);
         drawSectionTitle (g, titleRow (fuzzArea),  "SMOKE", lastSectionStates[3]);
         drawSectionTitle (g, titleRow (swarmArea), "SWARM", lastSectionStates[2]);
         drawSectionTitle (g, titleRow (flowArea),  "WINGS", lastSectionStates[4]);
@@ -680,8 +708,10 @@ void MainPanel::tick()
     rbDivKnob.setVisible (hiveSynced);
 
     const bool voicesOn = paramOn (ParamIDs::rbOn) || venom;
-    const std::array<bool, 5> states { noiseOn, voicesOn, paramOn (ParamIDs::swarmOn),
-                                       paramOn (ParamIDs::fuzzOn), paramOn (ParamIDs::flowOn) };
+    const std::array<bool, 6> states { noiseOn, voicesOn, paramOn (ParamIDs::swarmOn),
+                                       paramOn (ParamIDs::fuzzOn), paramOn (ParamIDs::flowOn), paramOn (ParamIDs::hnOn) };
+    setSectionDimmed ({ &limitToggle, &honeySustainKnob, &honeyAttackKnob, &honeyBlendKnob, &honeyLevelKnob, &honeyMeter }, ! states[5]);
+    honeyMeter.set (states[5] ? meters.honeyGr.load() : 0.0f);
 
     setSectionDimmed ({ &snapToggle, &pitchKnob, &primaryKnob, &secondaryKnob, &trackingKnob, &magicKnob,
                         &hvMangleKnob, &rbDetuneKnob, &rbMixKnob, &rbRawToggle }, ! states[1]);

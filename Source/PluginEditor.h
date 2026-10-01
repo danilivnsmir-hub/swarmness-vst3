@@ -108,6 +108,12 @@ private:
     Knob fuzzKnob { "FUZZ" }, fuzzToneKnob { "TONE" }, fuzzScoopKnob { "SCOOP" };
     Knob fuzzGlareKnob { "GLARE" }, fuzzGateKnob { "GATE" }, fuzzSagKnob { "SAG" }, fuzzBlendKnob { "CLEAN" };
 
+    // HONEY (compressor)
+    PowerButton honeyPower;
+    PillToggle limitToggle { "LIMIT" };
+    Knob honeySustainKnob { "SUSTAIN" }, honeyAttackKnob { "ATTACK" }, honeyBlendKnob { "BLEND" }, honeyLevelKnob { "LEVEL", true };
+    GainReductionMeter honeyMeter;
+
     // WINGS (gate)
     PowerButton flowPower;
     PillToggle hardToggle { "HARD" }, syncToggle { "SYNC" };
@@ -127,9 +133,9 @@ private:
     std::vector<std::unique_ptr<APVTS::ButtonAttachment>> buttonAttachments;
 
     // Section rectangles (base coordinates)
-    juce::Rectangle<float> hiveArea, shiftArea, swarmArea, fuzzArea, flowArea, footswitchArea;
+    juce::Rectangle<float> hiveArea, shiftArea, swarmArea, fuzzArea, flowArea, honeyArea, footswitchArea;
     std::array<juce::Rectangle<float>, 3> hiveSections;   // VOICES, TRAILS, MANGLE
-    std::array<bool, 5> lastSectionStates {};   // SHIFT engaged, HIVE on, SWARM, SMOKE, WINGS
+    std::array<bool, 6> lastSectionStates {};   // SHIFT engaged, HIVE on, SWARM, SMOKE, WINGS, HONEY
     int lastShiftA = 999, lastShiftB = 999;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainPanel)

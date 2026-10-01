@@ -1138,11 +1138,12 @@ namespace
             for (int b = 0; b < Chain::numBlocks; ++b)
                 slots[(size_t) b] = (float) Chain::defaultSlots[b];
             const auto def = Chain::orderFromSlots (slots);
-            check (def[0] == Chain::smoke && def[1] == Chain::shift && def[2] == Chain::pitch && def[3] == Chain::drive && def[4] == Chain::amp
-                   && def[5] == Chain::cab && def[6] == Chain::swarm && def[10] == Chain::crypt, "default order: SMOKE, SHIFT, HIVE, WASP, AMP, CAB, SWARM, ..., CRYPT");
+            check (def[0] == Chain::honey && def[1] == Chain::smoke && def[2] == Chain::shift && def[3] == Chain::pitch && def[4] == Chain::drive
+                   && def[5] == Chain::amp && def[6] == Chain::cab && def[7] == Chain::swarm && def[11] == Chain::crypt,
+                   "default order: HONEY, SMOKE, SHIFT, HIVE, WASP, AMP, CAB, SWARM, ..., CRYPT");
             slots.fill (0.0f);   // all tied -> default order
             check (Chain::orderFromSlots (slots) == def, "tied slots fall back to the default order");
-            Chain::Order custom { Chain::crypt, Chain::comb, Chain::cab, Chain::pitch, Chain::shift, Chain::wings, Chain::smoke, Chain::amp, Chain::carve, Chain::swarm, Chain::drive };
+            Chain::Order custom { Chain::crypt, Chain::comb, Chain::cab, Chain::pitch, Chain::shift, Chain::wings, Chain::smoke, Chain::amp, Chain::carve, Chain::swarm, Chain::drive, Chain::honey };
             check (Chain::orderFromSlots (Chain::slotsForOrder (custom)) == custom, "slots <-> order round trip");
         }
 
@@ -1308,6 +1309,110 @@ namespace
         }
     }
 
+    void testHoney()
+    {
+        std::printf ("\nHONEY: sustainer / compressor\n");
+        const double sr = 48000.0;
+        check (Chain::defaultOrder()[0] == Chain::honey, "HONEY sits first in the default chain");
+        {
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            auto in = makeSine (sr, (int) sr, 220.0, 0.3f);
+            auto out = render (p, in, sr, 256);
+            const int lat = p.getLatencySamples();
+            double diff = 0.0;
+            for (int i = 0; i + lat < in.getNumSamples(); ++i)
+                diff = juce::jmax (diff, (double) std::abs (out.getSample (0, i + lat) - in.getSample (0, i)));
+            check (diff < 1.0e-6 && lat == 61, juce::String::formatted ("off: transparent (max diff %.1e), latency unchanged (%d)", diff, lat));
+        }
+        auto levelDb = [&] (SwarmnessAudioProcessor& p, float amp, double from = 0.6, double to = 0.95)
+        {
+            auto out = render (p, makeSine (sr, (int) sr, 220.0, amp), sr, 256);
+            return juce::Decibels::gainToDecibels (out.getRMSLevel (0, (int) (from * sr), (int) ((to - from) * sr)) * std::sqrt (2.0f));
+        };
+        auto honeyProc = [&] (float sustain, float attack, float blend)
+        {
+            auto p = std::make_unique<SwarmnessAudioProcessor>();
+            resetToInit (*p);
+            setParam (*p, ParamIDs::hnOn, 1.0f);
+            setParam (*p, ParamIDs::hnSustain, sustain);
+            setParam (*p, ParamIDs::hnAttack, attack);
+            setParam (*p, ParamIDs::hnBlend, blend);
+            return p;
+        };
+        // the static curve: a -10 dBFS sine at SUSTAIN 0 / 50 / 100 lands where the curve says
+        for (float s : { 0.0f, 50.0f, 100.0f })
+        {
+            auto p = honeyProc (s, 0.0f, 100.0f);
+            const float amp = juce::Decibels::decibelsToGain (-10.0f);
+            const float det = juce::Decibels::gainToDecibels (HoneyBlock::detectorOfSine (amp));
+            const float expected = -10.0f - HoneyBlock::gainReductionFor (det, s * 0.01f) + HoneyBlock::makeupDb (s * 0.01f);
+            const float got = levelDb (*p, amp);
+            check (std::abs (got - expected) < 1.0f, juce::String::formatted ("SUSTAIN %.0f: -10 dBFS sine -> %.1f dB (curve says %.1f)", s, got, expected));
+        }
+        // sustain: at SUSTAIN 100 a -40 dBFS note sits within 6 dB of a -10 dBFS one
+        {
+            auto p = honeyProc (100.0f, 0.0f, 100.0f);
+            const float loud = levelDb (*p, juce::Decibels::decibelsToGain (-10.0f));
+            auto q = honeyProc (100.0f, 0.0f, 100.0f);
+            const float quiet = levelDb (*q, juce::Decibels::decibelsToGain (-40.0f));
+            check (loud - quiet < 6.0f, juce::String::formatted ("SUSTAIN 100: a 30 dB quieter note comes out only %.1f dB quieter", loud - quiet));
+        }
+        // attack: a -20 dBFS burst - ATTACK 0 (1 ms) has settled 4 ms in, ATTACK 100 (40 ms) lets the first ms through
+        for (float a : { 0.0f, 100.0f })
+        {
+            auto p = honeyProc (100.0f, a, 100.0f);
+            auto in = makeSine (sr, (int) sr, 220.0, juce::Decibels::decibelsToGain (-20.0f));
+            for (int i = 0; i < (int) (0.3 * sr); ++i)
+                for (int ch = 0; ch < in.getNumChannels(); ++ch)
+                    in.setSample (ch, i, 0.0f);
+            auto out = render (*p, in, sr, 256);
+            const int lat = p->getLatencySamples(), t0 = (int) (0.3 * sr) + lat;
+            const float early = juce::Decibels::gainToDecibels (out.getMagnitude (0, t0 + (int) (0.004 * sr), (int) (0.005 * sr)));
+            const float settled = juce::Decibels::gainToDecibels (out.getMagnitude (0, t0 + (int) (0.5 * sr), (int) (0.1 * sr)));
+            if (a < 50.0f)
+                check (early - settled < 3.0f, juce::String::formatted ("ATTACK 0: 4-9 ms in %.1f dB vs settled %.1f dB", early, settled));
+            else
+                check (early - settled > 6.0f, juce::String::formatted ("ATTACK 100: the pick gets through (4-9 ms in %.1f dB vs settled %.1f dB)", early, settled));
+        }
+        // no clicks: a tremolo-shaped sine through full compression stays smooth
+        {
+            auto p = honeyProc (100.0f, 0.0f, 100.0f);
+            auto in = makeSine (sr, (int) sr * 2, 220.0, 0.5f);
+            for (int i = 0; i < in.getNumSamples(); ++i)
+            {
+                const float env = 0.55f + 0.45f * std::sin (juce::MathConstants<float>::twoPi * 4.0f * (float) i / (float) sr);
+                for (int ch = 0; ch < in.getNumChannels(); ++ch)
+                    in.setSample (ch, i, in.getSample (ch, i) * env);
+            }
+            auto out = render (*p, in, sr, 256);
+            double sumSq = 0.0, peak = 0.0;
+            const int from = (int) (0.3 * sr), to = (int) (1.8 * sr);
+            for (int i = from; i < to; ++i)
+            {
+                const float v = out.getSample (0, i + 1) - 2.0f * out.getSample (0, i) + out.getSample (0, i - 1);
+                sumSq += (double) v * v;
+                peak = juce::jmax (peak, (double) std::abs (v));
+            }
+            const double rms = std::sqrt (sumSq / (double) (to - from));
+            check (peak / rms < 10.0 * std::sqrt (2.0), juce::String::formatted ("compressing a swelling sine: 2nd-difference peak / rms %.1f dB", 20.0 * std::log10 (peak / rms)));
+        }
+        // LIMIT: a 0 dBFS sine is held at the -6 dBFS ceiling (within 1 dB after 20 ms), off it is not
+        {
+            auto p = honeyProc (0.0f, 100.0f, 100.0f);
+            setParam (*p, ParamIDs::hnLimit, 1.0f);
+            auto out = render (*p, makeSine (sr, (int) sr, 220.0, 1.0f), sr, 256);
+            const float pk = juce::Decibels::gainToDecibels (out.getMagnitude (0, (int) (0.02 * sr), (int) (0.9 * sr)));
+            check (std::abs (pk - HoneyBlock::kLimitCeilingDb) < 1.0f, juce::String::formatted ("LIMIT: 0 dBFS sine held at %.1f dBFS", pk));
+        }
+        // BLEND 0 = dry
+        {
+            auto p = honeyProc (100.0f, 0.0f, 0.0f);
+            const float got = levelDb (*p, juce::Decibels::decibelsToGain (-10.0f));
+            check (std::abs (got + 10.0f) < 0.5f, juce::String::formatted ("BLEND 0: dry (%.1f dB)", got));
+        }
+    }
+
     void testNonFiniteInput()
     {
         std::printf ("\nNon-finite input\n");
@@ -1392,23 +1497,23 @@ namespace
     {
         std::printf ("\nParallel paths (split -> A || B -> merge)\n");
         {
-            Chain::Layout l { { Chain::smoke, Chain::shift, Chain::pitch, Chain::swarm, Chain::crypt, Chain::wings, Chain::comb, Chain::carve, Chain::drive, Chain::amp, Chain::cab }, {} };
+            Chain::Layout l { { Chain::smoke, Chain::shift, Chain::pitch, Chain::swarm, Chain::crypt, Chain::wings, Chain::comb, Chain::carve, Chain::drive, Chain::amp, Chain::cab, Chain::honey }, {} };
             l.lanes[Chain::swarm] = Chain::pathA;
             l.lanes[Chain::crypt] = Chain::pathB;
             const auto plan = Chain::planFor (l);
             const auto& split = plan.stages[3];
-            check (plan.numStages == 10 && plan.numSplits == 1 && split.parallel && split.numA == 1 && split.numB == 1
+            check (plan.numStages == 11 && plan.numSplits == 1 && split.parallel && split.numA == 1 && split.numB == 1
                    && split.a[0] == Chain::swarm && split.b[0] == Chain::crypt && plan.stages[4].block == Chain::wings,
                    "plan: SMOKE, SHIFT, HIVE -> [SWARM || CRYPT] -> WINGS, COMB, CARVE");
 
-            // two splits with series blocks between: [SMOKE, SHIFT || HIVE] -> WASP -> AMP -> CAB -> SWARM -> [WINGS || COMB] -> CARVE -> CRYPT
+            // two splits with series blocks between: HONEY -> [SMOKE, SHIFT || HIVE] -> WASP -> AMP -> CAB -> SWARM -> [WINGS || COMB] -> CARVE -> CRYPT
             Chain::Layout two { Chain::defaultOrder(), {} };
             two.lanes[Chain::smoke] = Chain::pathA;  two.lanes[Chain::shift] = Chain::pathA;  two.lanes[Chain::pitch] = Chain::pathB;
             two.lanes[Chain::wings] = Chain::pathA;  two.lanes[Chain::comb]  = Chain::pathB;
             const auto p2 = Chain::planFor (two);
-            check (p2.numSplits == 2 && p2.numStages == 8 && p2.stages[0].parallel && p2.stages[0].split == 0
-                   && p2.stages[1].block == Chain::drive && p2.stages[2].block == Chain::amp && p2.stages[4].block == Chain::swarm
-                   && p2.stages[5].parallel && p2.stages[5].split == 1 && p2.stages[5].a[0] == Chain::wings && p2.stages[5].b[0] == Chain::comb,
+            check (p2.numSplits == 2 && p2.numStages == 9 && p2.stages[0].block == Chain::honey && p2.stages[1].parallel && p2.stages[1].split == 0
+                   && p2.stages[2].block == Chain::drive && p2.stages[3].block == Chain::amp && p2.stages[5].block == Chain::swarm
+                   && p2.stages[6].parallel && p2.stages[6].split == 1 && p2.stages[6].a[0] == Chain::wings && p2.stages[6].b[0] == Chain::comb,
                    "two splits separated by a series block, each with its own MIX");
         }
 
@@ -1707,8 +1812,8 @@ namespace
             auto v = [&b] (const char* id) { return b.getAPVTS().getRawParameterValue (id)->load(); };
             check (v (ParamIDs::shiftA) < -11.5f && v (ParamIDs::shiftB) < -23.5f && v (ParamIDs::shRaw) < 0.5f && std::abs (v (ParamIDs::shDetune) + 20.0f) < 0.1f,
                    "old session: DIVE -> SHIFT -12 / -24, STING RAW off and DETUNE -20 ct carried over to SHIFT");
-            check (b.getRequestedLayout().order[0] == Chain::smoke && b.getRequestedLayout().order[1] == Chain::shift
-                   && b.getRequestedLayout().order[2] == Chain::pitch, "old session: SHIFT lands right before HIVE");
+            check (b.getRequestedLayout().order[0] == Chain::honey && b.getRequestedLayout().order[1] == Chain::smoke && b.getRequestedLayout().order[2] == Chain::shift
+                   && b.getRequestedLayout().order[3] == Chain::pitch, "old session: SHIFT lands right before HIVE (and HONEY, new, goes first)");
             {
                 PresetManager::ValueMap beta25 { { "hvAnger", 0.0f }, { "hvFrenzy", 55.0f }, { "hvBuzz", 0.0f }, { ParamIDs::shRaw, 1.0f } };
                 PresetManager::migrateLegacyValues (beta25);
@@ -3583,6 +3688,7 @@ int main (int argc, char** argv)
         if (which == "cab")     testCab();
         if (which == "wasp")    testWasp();
         if (which == "splices") testSpliceContinuity();
+        if (which == "honey")   testHoney();
         if (which == "tuner")   testTuner();
         std::printf ("\n%s (%d failure%s)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures, failures == 1 ? "" : "s");
         return failures == 0 ? 0 : 1;
@@ -3622,6 +3728,7 @@ int main (int argc, char** argv)
     testParallelRouting();
     testNonFiniteInput();
     testSpliceContinuity();
+    testHoney();
     testMissingFiles();
     testParameterOrder();
     testGraphicEq();

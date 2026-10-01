@@ -53,6 +53,8 @@ SwarmnessAudioProcessor::SwarmnessAudioProcessor()
     p.fuzzScoop = get (id::fuzzScoop);   p.fuzzGlare = get (id::fuzzGlare);     p.fuzzBlend = get (id::fuzzBlend);   p.fuzzSag = get (id::fuzzSag);
     p.flowOn = get (id::flowOn);         p.flowHard = get (id::flowHard);       p.flowSync = get (id::flowSync);
     p.flowAmount = get (id::flowAmount); p.flowSpeed = get (id::flowSpeed);     p.flowDiv = get (id::flowDiv);
+    p.hnOn = get (id::hnOn);             p.hnSustain = get (id::hnSustain);     p.hnAttack = get (id::hnAttack);
+    p.hnBlend = get (id::hnBlend);       p.hnLevel = get (id::hnLevel);         p.hnLimit = get (id::hnLimit);
     p.output = get (id::output);         p.input = get (id::input);           p.bypass = get (id::bypass);
 
     p.geqOn = get (id::geqOn);           p.geqLevel = get (id::geqLevel);
@@ -175,6 +177,7 @@ void SwarmnessAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBl
     fuzzStage.prepare (sampleRate, maxBlockSize);
     shift.prepare (sampleRate, maxBlockSize);
     hive.prepare (sampleRate, maxBlockSize);
+    honey.prepare (sampleRate, maxBlockSize);
     swarmChorus.prepare (sampleRate);
     flow .prepare (sampleRate);
     comb .prepare (sampleRate);
@@ -232,6 +235,7 @@ void SwarmnessAudioProcessor::releaseResources()
     fuzzStage.reset();
     shift.reset();
     hive.reset();
+    honey.reset();
     swarmChorus.reset();
     comb.reset();
     carve.reset();
@@ -464,6 +468,21 @@ void SwarmnessAudioProcessor::processChainBlock (int block, const BlockContext& 
         case Chain::pitch: processHive (ctx, audio, numChannels, numSamples); break;
         case Chain::smoke: processSmoke (audio, numChannels, numSamples); break;
         case Chain::wings: processWings (ctx, audio, numChannels, numSamples); break;
+
+        case Chain::honey:
+        {
+            HoneyBlock::Settings s;
+            s.on = on (p.hnOn);
+            s.sustain = pct (p.hnSustain);
+            s.attack = pct (p.hnAttack);
+            s.blend = pct (p.hnBlend);
+            s.levelDb = p.hnLevel->load();
+            s.limit = on (p.hnLimit);
+            honey.setParams (s);
+            honey.process (audio, numChannels, numSamples);
+            meters.honeyGr.store (honey.gainReductionDb());
+            break;
+        }
 
         case Chain::swarm:
             swarmChorus.setParams (p.swarmRate->load(), pct (p.swarmDepth), on (p.swarmOn) ? pct (p.swarmMix) : 0.0f, on (p.swarmDeep));
