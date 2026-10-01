@@ -1271,6 +1271,41 @@ namespace
                    juce::String::formatted ("SHIFT %+d st on a sine: 2nd-difference peak / rms %.1f dB, %d outlier samples", semis,
                                             20.0 * std::log10 (peak / rms), outliers));
         }
+        // HIVE's REVERSE repeats: two heads read the loop backwards and crossfade - the wow / flutter on the
+        // loop delay must not make a head jump when the phase wraps (a reversed sine stays a sine)
+        {
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            setParam (p, ParamIDs::rbOn, 1.0f);
+            setParam (p, ParamIDs::trDry, 1.0f);
+            setParam (p, ParamIDs::rbPrimary, 0.0f);
+            setParam (p, ParamIDs::rbTracking, 100.0f);
+            setParam (p, ParamIDs::rbMagic, 70.0f);
+            setParam (p, ParamIDs::rbTime, 300.0f);
+            setParam (p, ParamIDs::rbMix, 100.0f);
+            setParam (p, ParamIDs::rbRaw, 0.0f);
+            for (int k = 0; k < 8; ++k)
+            {
+                setParam (p, ParamIDs::trLevels[k], 100.0f);
+                setParam (p, ParamIDs::trMoves[k], (float) HiveBlock::reverse);
+            }
+            auto out = render (p, makeSine (sr, (int) sr * 4, 220.0, 0.3f), sr, 256);
+            const int from = (int) (1.0 * sr), to = (int) (3.5 * sr);
+            double sumSq = 0.0, peak = 0.0;
+            std::vector<float> d2 ((size_t) (to - from));
+            for (int i = from; i < to; ++i)
+            {
+                const float v = out.getSample (0, i + 1) - 2.0f * out.getSample (0, i) + out.getSample (0, i - 1);
+                d2[(size_t) (i - from)] = v;
+                sumSq += (double) v * v;
+                peak = juce::jmax (peak, (double) std::abs (v));
+            }
+            const double rms = std::sqrt (sumSq / (double) d2.size());
+            const int outliers = (int) std::count_if (d2.begin(), d2.end(), [rms] (float v) { return std::abs (v) > 6.0 * rms; });
+            check (outliers == 0 && peak / rms < 10.0 * std::sqrt (2.0),
+                   juce::String::formatted ("HIVE REVERSE repeats of a sine: 2nd-difference peak / rms %.1f dB, %d outlier samples",
+                                            20.0 * std::log10 (peak / rms), outliers));
+        }
     }
 
     void testNonFiniteInput()
@@ -3441,9 +3476,22 @@ int main (int argc, char** argv)
         HiveBlock::Settings s;
         s.voicesOn = true; s.drone = 0.0f; s.queen = 0.0f; s.tracking = 1.0f;
         s.trails = 0.55f; s.repeatSeconds = 0.3f; s.tone = 0.6f; s.fromDry = true; s.gate = 1.0f; s.mix = 0.5f;
-        s.raw = argc >= 5 && juce::String (argv[4]) == "raw=1";
         s.steps.numSteps = 8;
         for (int k = 0; k < 8; ++k) { s.steps.level[(size_t) k] = 1.0f; s.steps.move[(size_t) k] = HiveBlock::hold; }
+        for (int i = 4; i < argc; ++i)   // raw=0|1  moves=0,4,0,4 (0 hold, 1 up, 2 down, 3 random, 4 reverse)
+        {
+            const juce::String kv (argv[i]);
+            if (kv == "raw=1") s.raw = true;
+            if (kv == "raw=0") s.raw = false;
+            if (kv.startsWith ("moves="))
+            {
+                juce::StringArray m;
+                m.addTokens (kv.fromFirstOccurrenceOf ("=", false, false), ",", "");
+                s.steps.numSteps = juce::jlimit (1, 8, m.size());
+                for (int k = 0; k < m.size() && k < 8; ++k)
+                    s.steps.move[(size_t) k] = (HiveBlock::StepMove) juce::jlimit (0, 4, m[k].getIntValue());
+            }
+        }
         hive.setParams (s);
         std::map<juce::String, std::array<std::vector<float>, 2>> taps;
         hive.debugTap = [&taps] (const char* name, const float* const* data, int ch, int n)
@@ -3534,6 +3582,7 @@ int main (int argc, char** argv)
         if (which == "amp")     testAmp();
         if (which == "cab")     testCab();
         if (which == "wasp")    testWasp();
+        if (which == "splices") testSpliceContinuity();
         if (which == "tuner")   testTuner();
         std::printf ("\n%s (%d failure%s)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures, failures == 1 ? "" : "s");
         return failures == 0 ? 0 : 1;
