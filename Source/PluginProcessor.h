@@ -257,6 +257,7 @@ private:
         std::atomic<float>* drvOn {};      std::atomic<float>* drvVolume {};   std::atomic<float>* drvDrive {};    std::atomic<float>* drvBright {};
         std::atomic<float>* drvAttack {};  std::atomic<float>* drvGate {};
         std::atomic<float>* drvNam {};     std::atomic<float>* drvNamInput {}; std::atomic<float>* drvNamOutput {}; std::atomic<float>* drvNamLite {};
+        std::atomic<float>* drvCharacter {};
         std::atomic<float>* cabOn {};      std::atomic<float>* cabType {};     std::atomic<float>* cabMic {};      std::atomic<float>* cabDist {};
         std::atomic<float>* cabLowCut {};  std::atomic<float>* cabHighCut {};  std::atomic<float>* cabLevel {};
         std::atomic<float>* cabIrMix {};   std::atomic<float>* cabIrInvB {};

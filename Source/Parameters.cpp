@@ -377,8 +377,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     honey->addChild (slotParam (Chain::honey));
     honey->addChild (laneParam (Chain::honey));
 
+    // ------------------------------------------------------------------ WASP character (1.1, appended for the same reason)
+    auto drvCh = std::make_unique<Group> ("waspCharacter", "Wasp Character", "|");
+    drvCh->addChild (std::make_unique<juce::AudioParameterChoice> (pid (drvCharacter), "Wasp Character", ParamChoices::waspCharacters, 0));
+
     layout.add (std::move (shift), std::move (hive), std::move (swarm), std::move (fz), std::move (flow),
                 std::move (comb), std::move (carve), std::move (crypt), std::move (amp), std::move (cab), std::move (drv), std::move (chain), std::move (out),
-                std::move (honey));
+                std::move (honey), std::move (drvCh));
     return layout;
 }

@@ -254,7 +254,7 @@ private:
     juce::AudioProcessorValueTreeState& state;
     juce::Rectangle<float> panelArea, responseArea, clipArea, cardArea;
     PowerButton power;
-    SegmentedChoice modeSelector;
+    SegmentedChoice modeSelector, characterSelector;
     Knob volumeKnob { "VOLUME" }, driveKnob { "DRIVE" }, brightKnob { "BRIGHT" }, attackKnob { "ATTACK" }, gateKnob { "GATE" };
     Knob namInputKnob { "INPUT" }, namOutputKnob { "OUTPUT" };
     juce::TextButton loadButton { "LOAD .NAM" }, toneButton { "TONE3000" }, clearButton { "CLEAR" }, prevButton { "<" }, nextButton { ">" };

@@ -3027,6 +3027,68 @@ namespace
             check (b > d + 12.0, juce::String::formatted ("BRIGHT: 4 kHz vs 500 Hz %.1f dB -> %.1f dB", d, b));
         }
         {
+            // the four characters: one circuit, four sets of parts
+            std::printf ("  characters\n");
+            auto harmonic = [&] (DriveBlock::Settings t, int h, float amp)
+            {
+                auto out = renderWasp (t, makeSine (sr, 24000, 220.0, amp));
+                return toneDb (out, sr, 220.0 * h, 12000, 9600) - toneDb (out, sr, 220.0, 12000, 9600);
+            };
+            std::array<juce::AudioBuffer<float>, DriveBlock::numCharacters> outs;
+            for (int c = 0; c < DriveBlock::numCharacters; ++c)
+            {
+                auto t = s; t.character = c;
+                outs[(size_t) c] = renderWasp (t, guitar);
+                const double db = juce::Decibels::gainToDecibels (outs[(size_t) c].getRMSLevel (0, 9600, 38400)) - inDb;
+                check (allFinite (outs[(size_t) c]) && std::abs (db) < 6.0,
+                       juce::String::formatted ("%s at DRIVE 3, VOLUME 5: %+.1f dB vs the input", DriveBlock::characterName (c), db));
+                if (c > 0)
+                {
+                    const double diff = nullDb (outs[(size_t) c], outs[0], 0, 9600, 38400);
+                    check (diff > -20.0, juce::String::formatted ("%s sounds different from TIGHT (residual %.1f dB)", DriveBlock::characterName (c), diff));
+                }
+            }
+            auto b = s; b.character = DriveBlock::boost; b.drive = 0.0f; b.attack = 0.0f;
+            const double bFlat = toneAt (b, 80.0) - toneAt (b, 1000.0), bH3 = harmonic (b, 3, 0.1f);
+            check (std::abs (bFlat) < 3.0 && bH3 < -60.0,
+                   juce::String::formatted ("BOOST at DRIVE 0: flat (80 Hz vs 1 kHz %+.1f dB), clean (3rd harmonic %.1f dB)", bFlat, bH3));
+            auto m = s; m.character = DriveBlock::smooth; m.drive = 0.5f;
+            auto r = s; r.character = DriveBlock::rasp; r.drive = 0.5f;
+            auto ti = s; ti.drive = 0.5f;
+            const double mH2 = harmonic (m, 2, 0.1f), tH2 = harmonic (ti, 2, 0.1f), mH3 = harmonic (m, 3, 0.1f), rH3 = harmonic (r, 3, 0.1f);
+            check (mH2 < tH2 - 20.0, juce::String::formatted ("SMOOTH clips symmetrically: 2nd harmonic %.1f dB (TIGHT %.1f dB)", mH2, tH2));
+            check (rH3 > mH3 + 6.0, juce::String::formatted ("RASP clips harder: 3rd harmonic %.1f dB (SMOOTH %.1f dB)", rH3, mH3));
+            for (int c = 1; c < DriveBlock::numCharacters; ++c)
+            {
+                auto t = s; t.character = c;
+                const double model = DriveBlock::responseDb (t, 80.0) - DriveBlock::responseDb (t, 1000.0);
+                const double audio = toneAt (t, 80.0) - toneAt (t, 1000.0);
+                check (std::abs (model - audio) < 1.5,
+                       juce::String::formatted ("%s: the editor's response matches the audio (%.1f vs %.1f dB)", DriveBlock::characterName (c), model, audio));
+            }
+            {
+                // switching the character mid-note: a short fade, no click
+                DriveBlock d;
+                d.prepare (sr, 256);
+                auto in = makeSine (sr, 48000, 220.0, 0.1f);
+                juce::AudioBuffer<float> out (in);
+                auto t = s; t.character = DriveBlock::smooth;
+                d.setParams (t);
+                for (int i = 0; i < out.getNumSamples(); i += 256)
+                {
+                    if (i == 24064) { t.character = DriveBlock::rasp; d.setParams (t); }
+                    float* ptr[2] { out.getWritePointer (0, i), out.getWritePointer (1, i) };
+                    d.process (ptr, 2, juce::jmin (256, out.getNumSamples() - i));
+                }
+                float worst = 0.0f;
+                for (int i = 2; i < out.getNumSamples(); ++i)
+                    worst = juce::jmax (worst, std::abs (out.getSample (0, i) - 2.0f * out.getSample (0, i - 1) + out.getSample (0, i - 2)));
+                const float steady = out.getMagnitude (0, 40000, 8000);
+                check (allFinite (out) && worst < 0.25f * steady,
+                       juce::String::formatted ("SMOOTH -> RASP mid-note: largest step %.3f vs level %.3f (a fade, no click)", worst, steady));
+            }
+        }
+        {
             auto quiet = s, loud = s; quiet.volume = 0.25f; loud.volume = 0.75f;
             const double q = toneAt (quiet, 1000.0), l = toneAt (loud, 1000.0);
             check (std::abs ((l - q) - (DriveBlock::volumeDb (0.75f) - DriveBlock::volumeDb (0.25f))) < 0.5,

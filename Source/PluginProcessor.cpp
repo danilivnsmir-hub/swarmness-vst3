@@ -77,6 +77,7 @@ SwarmnessAudioProcessor::SwarmnessAudioProcessor()
     p.drvOn = get (id::drvOn);           p.drvVolume = get (id::drvVolume);     p.drvDrive = get (id::drvDrive);     p.drvBright = get (id::drvBright);
     p.drvAttack = get (id::drvAttack);   p.drvGate = get (id::drvGate);
     p.drvNam = get (id::drvNam);         p.drvNamInput = get (id::drvNamInput); p.drvNamOutput = get (id::drvNamOutput); p.drvNamLite = get (id::drvNamLite);
+    p.drvCharacter = get (id::drvCharacter);
     p.cabOn = get (id::cabOn);           p.cabType = get (id::cabType);         p.cabMic = get (id::cabMic);         p.cabDist = get (id::cabDist);
     p.cabLowCut = get (id::cabLowCut);   p.cabHighCut = get (id::cabHighCut);   p.cabLevel = get (id::cabLevel);
     p.cabIrMix = get (id::cabIrMix);     p.cabIrInvB = get (id::cabIrInvB);
@@ -603,6 +604,7 @@ void SwarmnessAudioProcessor::processChainBlock (int block, const BlockContext& 
             s.bright = p.drvBright->load() * 0.1f;
             s.attack = p.drvAttack->load() * 0.1f;
             s.gate = pct (p.drvGate);
+            s.character = (int) p.drvCharacter->load();
             s.nam = on (p.drvNam);
             s.namInput = p.drvNamInput->load() * 0.1f;
             s.namOutput = p.drvNamOutput->load() * 0.1f;

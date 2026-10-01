@@ -1339,7 +1339,8 @@ void AmpCabSection::choose (bool nam)
 //==============================================================================
 WaspSection::WaspSection (SwarmnessAudioProcessor& p)
     : processor (p), state (p.getAPVTS()),
-      modeSelector (*p.getAPVTS().getParameter (ParamIDs::drvNam), { "WASP", "NAM" })
+      modeSelector (*p.getAPVTS().getParameter (ParamIDs::drvNam), { "WASP", "NAM" }),
+      characterSelector (*p.getAPVTS().getParameter (ParamIDs::drvCharacter), { "TIGHT", "BOOST", "SMOOTH", "RASP" })
 {
     using namespace ParamIDs;
     setBufferedToImage (true);
@@ -1349,6 +1350,10 @@ WaspSection::WaspSection (SwarmnessAudioProcessor& p)
     powerAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (state, drvOn, power);
     modeSelector.setTooltip ("WASP: the built-in tight overdrive.  NAM: a pedal capture (.nam) - any overdrive, boost or fuzz from TONE3000");
     addAndMakeVisible (modeSelector);
+    characterSelector.setTooltip ("Character - the same circuit, four sets of parts.  TIGHT: the modern precision metal drive, asymmetric hard clipping.  "
+                                  "BOOST: a transparent clean boost, flat to the lows, no clipper.  SMOOTH: the classic mid-focused overdrive, soft symmetric clipping.  "
+                                  "RASP: a hard-clipping distortion - grainy, saturated, fuzz-like at the top of DRIVE");
+    addAndMakeVisible (characterSelector);
 
     volumeKnob.attach (state, drvVolume, "VOLUME: output level - 5 is about unity at a medium DRIVE; crank it to slam the amp's input");
     driveKnob .attach (state, drvDrive,  "DRIVE: from a tight boost to a hard, square overdrive - the op-amp's gain into diodes to ground that clip one side first (asymmetric hard clipping)");
@@ -1402,6 +1407,7 @@ DriveBlock::Settings WaspSection::current() const
     s.bright = get (ParamIDs::drvBright) * 0.1f;
     s.attack = get (ParamIDs::drvAttack) * 0.1f;
     s.gate = get (ParamIDs::drvGate) * 0.01f;
+    s.character = (int) get (ParamIDs::drvCharacter);
     s.nam = get (ParamIDs::drvNam) > 0.5f;
     s.namInput = get (ParamIDs::drvNamInput) * 0.1f;
     s.namOutput = get (ParamIDs::drvNamOutput) * 0.1f;
@@ -1413,6 +1419,7 @@ void WaspSection::resized()
     panelArea = getLocalBounds().toFloat();
     power.setBounds ((int) panelArea.getRight() - 40, 8, 26, 26);
     modeSelector.setBounds ((int) panelArea.getRight() - 40 - 12 - 150, 9, 150, 24);
+    characterSelector.setBounds (modeSelector.getX() - 12 - 250, 9, 250, 24);
     const float knobsW = 470.0f;
     {
         const std::initializer_list<Knob*> row { &driveKnob, &volumeKnob, &brightKnob, &attackKnob, &gateKnob };
@@ -1445,6 +1452,7 @@ void WaspSection::updateVisibility()
 {
     for (auto* k : { &volumeKnob, &driveKnob, &brightKnob, &attackKnob })
         k->setVisible (! namMode);
+    characterSelector.setVisible (! namMode);
     for (auto* k : { &namInputKnob, &namOutputKnob })
         k->setVisible (namMode);
     for (auto* b : { &loadButton, &toneButton, &clearButton })
@@ -1512,7 +1520,11 @@ void WaspSection::paint (juce::Graphics& g)
                           t.removeFromTop (36.0f).toNearestInt(), juce::Justification::topLeft, 2, 0.85f);
         return;
     }
-    drawPanelTitle (g, panelArea, "WASP", "tight overdrive  -  op-amp gain into asymmetric hard-clipping diodes; in front of the AMP it tightens and pushes it", s.on);
+    static const char* subtitles[] { "tight overdrive  -  op-amp gain into asymmetric hard-clipping diodes; in front of the AMP it tightens and pushes it",
+                                     "clean boost  -  flat to the lows, no clipper; pushes the AMP's input without colouring it",
+                                     "smooth overdrive  -  the classic mid-focused soft clipping; warm and even in front of the AMP",
+                                     "rasp distortion  -  hard-clipping, grainy and saturated; a distortion pedal on its own" };
+    drawPanelTitle (g, panelArea, "WASP", subtitles[juce::jlimit (0, 3, s.character)], s.on);
 
     const auto curveColour = Colours::accent.withAlpha (s.on ? 0.95f : 0.4f);
     for (auto a : { responseArea, clipArea })
@@ -1554,12 +1566,12 @@ void WaspSection::paint (juce::Graphics& g)
     {
         const auto a = clipArea.reduced (8.0f, 8.0f);
         const float range = 0.5f;
-        const float volts = DriveBlock::kVolts * juce::Decibels::decibelsToGain (DriveBlock::tune().inDb);
+        const float volts = DriveBlock::kVolts * juce::Decibels::decibelsToGain (DriveBlock::tuneFor (s.character).inDb);
         std::array<float, 81> ys {};
         float peak = 1.0e-6f;
         for (int i = 0; i <= 80; ++i)
         {
-            ys[(size_t) i] = DriveBlock::transferVolts (s.drive, (-range + 2.0f * range * (float) i / 80.0f) * volts);
+            ys[(size_t) i] = DriveBlock::transferVolts (s.drive, (-range + 2.0f * range * (float) i / 80.0f) * volts, s.character);
             peak = juce::jmax (peak, std::abs (ys[(size_t) i]));
         }
         auto xFor = [a, range] (float v) { return a.getCentreX() + a.getWidth() * 0.5f * v / range; };

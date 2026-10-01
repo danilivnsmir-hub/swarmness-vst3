@@ -182,6 +182,7 @@ namespace ParamIDs
     inline constexpr const char* drvNamInput  = "drvNamInput";
     inline constexpr const char* drvNamOutput = "drvNamOutput";
     inline constexpr const char* drvNamLite   = "drvNamLite";
+    inline constexpr const char* drvCharacter = "drvCharacter";   // 1.1: TIGHT / BOOST / SMOOTH / RASP
 
     // CAB (modelled cabinets or a loaded IR)
     inline constexpr const char* cabOn       = "cabOn";
@@ -218,6 +219,7 @@ namespace ParamChoices
     inline const juce::StringArray reverbTypes { "Room", "Plate", "Hall", "Abyss", "IR" };
     inline const juce::StringArray ampChannels { "Clean", "Crunch", "Lead", "NAM" };
     inline const juce::StringArray cabTypes    { "1x12 Open", "2x12 Open", "4x12 Brit", "4x12 Modern", "IR" };
+    inline const juce::StringArray waspCharacters { "Tight", "Boost", "Smooth", "Rasp" };
     inline const juce::StringArray stepMoves { "Hold", "Up", "Down", "Random", "Reverse" };
     /** Ready-made TRAILS step patterns, in HiveBlock::Fill order. */
     inline const juce::StringArray trailFills { "Ladder", "Bounce", "Scatter", "Reverse", "Swell",
