@@ -643,7 +643,7 @@ namespace
     {
         std::printf ("\nSMOKE with nothing played: no self-oscillation, interface hiss not blown up\n");
         const double sr = 48000.0;
-        for (float noiseDb : { -200.0f, -90.0f, -75.0f, -68.0f })
+        for (float noiseDb : { -200.0f, -90.0f, -75.0f, -68.0f, -60.0f })
         {
             juce::AudioBuffer<float> input (2, 48000 * 2);
             juce::Random rng (7);
@@ -1309,6 +1309,106 @@ namespace
         }
     }
 
+    void testGates()
+    {
+        std::printf ("\nNoise gates (AMP / WASP): staccato, soft notes, the floor, swells\n");
+        const double sr = 48000.0;
+        juce::Random rng (3);
+        // 1 s of floor, 16 palm-muted 16th-note chugs at 180 bpm (-10 dBFS, 12 ms mutes), 0.5 s, 8 quiet staccato
+        // notes (-30 dBFS), 1 s of floor; the floor = hum + hiss at -65 dBFS rms
+        const int n = (int) (4.5 * sr);
+        juce::AudioBuffer<float> di (2, n);
+        di.clear();
+        auto note = [&] (double at, double hz, double tau, float amp, double len)
+        {
+            const int s0 = (int) (at * sr);
+            for (int i = 0; i < (int) (len * sr) && s0 + i < n; ++i)
+            {
+                const double t = i / sr;
+                const float v = amp * (float) ((std::sin (juce::MathConstants<double>::twoPi * hz * t) + 0.5 * std::sin (juce::MathConstants<double>::twoPi * 2.0 * hz * t)
+                                                + 0.3 * std::sin (juce::MathConstants<double>::twoPi * 3.0 * hz * t)) / 1.8 * std::exp (-t / tau) * (1.0 - std::exp (-t / 0.0015)));
+                for (int ch = 0; ch < 2; ++ch)
+                    di.addSample (ch, s0 + i, v);
+            }
+        };
+        std::vector<double> chugAt, quietAt;
+        for (int k = 0; k < 16; ++k) { chugAt.push_back (1.0 + k * 0.0833); note (chugAt.back(), 82.41, 0.012, juce::Decibels::decibelsToGain (-10.0f), 0.06); }
+        for (int k = 0; k < 8; ++k) { quietAt.push_back (2.9 + k * 0.1); note (quietAt.back(), 329.6, 0.03, juce::Decibels::decibelsToGain (-30.0f), 0.07); }
+        for (int i = 0; i < n; ++i)
+        {
+            const float floor = juce::Decibels::decibelsToGain (-64.0f) * (float) std::sin (juce::MathConstants<double>::twoPi * 50.0 * i / sr)
+                              + juce::Decibels::decibelsToGain (-68.0f) * (rng.nextFloat() * 2.0f - 1.0f) * 1.7f;
+            for (int ch = 0; ch < 2; ++ch)
+                di.addSample (ch, i, floor);
+        }
+        auto rmsDb = [] (const juce::AudioBuffer<float>& b, int from, int len) { return juce::Decibels::gainToDecibels (b.getRMSLevel (0, from, len), -200.0f); };
+        auto renderGate = [&] (float gate)
+        {
+            SwarmnessAudioProcessor p;
+            p.getPresetManager().loadPreset ("Steel Lead");
+            setParam (p, ParamIDs::ampGate, gate);
+            auto out = render (p, di, sr, 256);
+            return std::make_pair (std::move (out), p.getLatencySamples());
+        };
+        auto [off, lat] = renderGate (0.0f);
+        auto [on, lat2] = renderGate (45.0f);
+        auto [tight, lat3] = renderGate (55.0f);
+        juce::ignoreUnused (lat2, lat3);
+        // the floor
+        const float floorOff = rmsDb (off, (int) (0.2 * sr), (int) (0.7 * sr)), floorOn = rmsDb (on, (int) (0.2 * sr), (int) (0.7 * sr));
+        check (floorOff - floorOn > 40.0f, juce::String::formatted ("GATE 45 takes a -65 dBFS floor from %.1f to %.1f dBFS out of the lead amp", floorOff, floorOn));
+        // staccato separation: in every 16th, the 5 ms RMS's drop from its peak to its dip
+        auto gapDepth = [&] (const juce::AudioBuffer<float>& b)
+        {
+            std::vector<float> depths;
+            for (double at : chugAt)
+            {
+                float hi = -200.0f, lo = 200.0f;
+                for (int s = (int) (at * sr) + lat; s + 240 < (int) ((at + 0.0833) * sr) + lat; s += 240)
+                {
+                    const float v = rmsDb (b, s, 240);
+                    hi = juce::jmax (hi, v); lo = juce::jmin (lo, v);
+                }
+                depths.push_back (hi - lo);
+            }
+            std::sort (depths.begin(), depths.end());
+            return depths[depths.size() / 2];
+        };
+        const float depthOff = gapDepth (off), depthOn = gapDepth (on), depthTight = gapDepth (tight);
+        check (depthTight - depthOff > 8.0f && depthOn > depthOff,
+               juce::String::formatted ("16th-note chugs: the gap between them is %.1f dB deep with GATE 55, %.1f with 45 (%.1f without)", depthTight, depthOn, depthOff));
+        // the chugs' attacks and the quiet notes are untouched
+        std::vector<float> atk;
+        for (double at : chugAt)
+            atk.push_back (rmsDb (on, (int) (at * sr) + lat, 144) - rmsDb (off, (int) (at * sr) + lat, 144));
+        std::sort (atk.begin(), atk.end());
+        check (std::abs (atk[atk.size() / 2]) < 2.0f, juce::String::formatted ("the chugs' first 3 ms: %+.1f dB vs no gate (lookahead)", atk[atk.size() / 2]));
+        const float quietOff = rmsDb (off, (int) (2.9 * sr) + lat, (int) (0.8 * sr)), quietOn = rmsDb (on, (int) (2.9 * sr) + lat, (int) (0.8 * sr));
+        check (std::abs (quietOn - quietOff) < 3.0f, juce::String::formatted ("quiet (-30 dBFS) staccato notes still come through: %.1f vs %.1f dBFS", quietOn, quietOff));
+        // a swell opens the gate gently (NoiseGate alone: the gain never moves faster than 3 dB / ms)
+        {
+            NoiseGate g;
+            g.prepare (sr, 32, 0.001);
+            juce::AudioBuffer<float> swell (2, (int) (2.0 * sr));
+            for (int i = 0; i < swell.getNumSamples(); ++i)
+            {
+                const double t = i / sr;
+                const float v = (float) (std::sin (juce::MathConstants<double>::twoPi * 110.0 * t) * juce::Decibels::decibelsToGain (-70.0 + 50.0 * juce::jmin (1.0, t / 1.2)));
+                for (int ch = 0; ch < 2; ++ch) swell.setSample (ch, i, v);
+            }
+            float last = g.currentGainDb(), worst = 0.0f;
+            for (int s = 0; s + 48 <= swell.getNumSamples(); s += 48)
+            {
+                const float* key[2] { swell.getReadPointer (0, s), swell.getReadPointer (1, s) };
+                g.compute (key, 2, 48, 0.35f);
+                worst = juce::jmax (worst, std::abs (g.currentGainDb() - last));
+                last = g.currentGainDb();
+            }
+            check (worst < 3.0f && g.isOpen(), juce::String::formatted ("a swell: the gate opens with at most %.1f dB per ms", worst));
+        }
+        check (lat == 61 + 2 * (int) std::round (0.001 * sr), juce::String::formatted ("latency = SMOKE's oversampling + the two gates' lookahead (%d samples)", lat));
+    }
+
     void testHoney()
     {
         std::printf ("\nHONEY: sustainer / compressor\n");
@@ -1323,7 +1423,7 @@ namespace
             double diff = 0.0;
             for (int i = 0; i + lat < in.getNumSamples(); ++i)
                 diff = juce::jmax (diff, (double) std::abs (out.getSample (0, i + lat) - in.getSample (0, i)));
-            check (diff < 1.0e-6 && lat == 61, juce::String::formatted ("off: transparent (max diff %.1e), latency unchanged (%d)", diff, lat));
+            check (diff < 1.0e-6, juce::String::formatted ("off: transparent (max diff %.1e, latency %d)", diff, lat));
         }
         auto levelDb = [&] (SwarmnessAudioProcessor& p, float amp, double from = 0.6, double to = 0.95)
         {
@@ -2291,7 +2391,8 @@ namespace
         {
             AmpBlock::Settings s;
             auto out = renderAmp (s, guitar);
-            check (nullDb (out, guitar, 0, 0, guitar.getNumSamples()) < -200.0, "off: bit-transparent");
+            const int look = (int) std::round (AmpBlock::kGateLookaheadSeconds * 48000.0);
+            check (nullDb (out, guitar, look, 0, guitar.getNumSamples()) < -200.0, "off: bit-transparent (behind the gate's lookahead)");
         }
 
         // GATE silences the hiss between notes, keeps the notes
@@ -2883,7 +2984,8 @@ namespace
         {
             DriveBlock::Settings s;
             auto out = renderWasp (s, guitar);
-            check (nullDb (out, guitar, 0, 0, guitar.getNumSamples()) < -200.0, "off: bit-transparent");
+            const int look = (int) std::round (DriveBlock::kGateLookaheadSeconds * 48000.0);
+            check (nullDb (out, guitar, look, 0, guitar.getNumSamples()) < -200.0, "off: bit-transparent (behind the gate's lookahead)");
         }
         DriveBlock::Settings s;
         s.on = true;
@@ -3565,6 +3667,38 @@ int main (int argc, char** argv)
         std::printf ("latency %d samples\n", p.getLatencySamples());
         return 0;
     }
+    if (argc >= 4 && juce::String (argv[1]) == "--gate-probe")
+    {
+        // --gate-probe in.wav <knob 0..100 | auto> [fromMs toMs]: NoiseGate alone on a file, its state per ms
+        juce::AudioFormatManager fm;
+        fm.registerBasicFormats();
+        std::unique_ptr<juce::AudioFormatReader> r (fm.createReaderFor (juce::File (argv[2])));
+        if (r == nullptr) { std::printf ("cannot read %s\n", argv[2]); return 1; }
+        juce::AudioBuffer<float> in (2, (int) r->lengthInSamples);
+        r->read (&in, 0, in.getNumSamples(), 0, true, true);
+        if (r->numChannels == 1) in.copyFrom (1, 0, in, 0, 0, in.getNumSamples());
+        const double sr = r->sampleRate;
+        NoiseGate gate;
+        gate.prepare (sr, 32, 0.001);
+        const bool autoMode = juce::String (argv[3]) == "auto";
+        gate.setAutoThreshold (autoMode);
+        const float knob = autoMode ? 1.0f : juce::String (argv[3]).getFloatValue() * 0.01f;
+        const int fromMs = argc >= 5 ? juce::String (argv[4]).getIntValue() : 0, toMs = argc >= 6 ? juce::String (argv[5]).getIntValue() : 1 << 30;
+        std::printf ("ms  in-peak  gate-peak  rms  slow  thr  target  gain  open\n");
+        for (int start = 0; start + 32 <= in.getNumSamples(); start += 32)
+        {
+            const float* key[2] { in.getReadPointer (0, start), in.getReadPointer (1, start) };
+            float inPk = 0.0f;
+            for (int i = 0; i < 32; ++i) inPk = juce::jmax (inPk, std::abs (key[0][i]));
+            gate.compute (key, 2, 32, knob);
+            const int ms = (int) (start * 1000.0 / sr);
+            if (ms >= fromMs && ms <= toMs && (start / 32) % (int) juce::jmax (1.0, sr / 32000.0) == 0)
+                std::printf ("%5d %7.1f %9.1f %5.1f %5.1f %5.1f %6.1f %6.1f %d\n", ms, juce::Decibels::gainToDecibels (inPk, -140.0f), gate.peakDbNow(),
+                             gate.rmsDbNow(), gate.slowDbNow(), gate.thresholdNowDb(), gate.lastTargetDb(), gate.currentGainDb(), (int) gate.isOpen());
+        }
+        return 0;
+    }
+
     if (argc >= 4 && juce::String (argv[1]) == "--hive-probe")
     {
         // --hive-probe in.wav outdir [raw=0|1]: HIVE alone as a DRY / all-HOLD delay, every stage dumped to WAV
@@ -3689,6 +3823,7 @@ int main (int argc, char** argv)
         if (which == "wasp")    testWasp();
         if (which == "splices") testSpliceContinuity();
         if (which == "honey")   testHoney();
+        if (which == "gates")   testGates();
         if (which == "tuner")   testTuner();
         std::printf ("\n%s (%d failure%s)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures, failures == 1 ? "" : "s");
         return failures == 0 ? 0 : 1;
@@ -3729,6 +3864,7 @@ int main (int argc, char** argv)
     testNonFiniteInput();
     testSpliceContinuity();
     testHoney();
+    testGates();
     testMissingFiles();
     testParameterOrder();
     testGraphicEq();

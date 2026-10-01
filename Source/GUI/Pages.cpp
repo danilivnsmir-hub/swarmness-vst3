@@ -945,7 +945,7 @@ AmpCabSection::AmpCabSection (SwarmnessAudioProcessor& p)
     presenceKnob.attach (state, ampPresence, "PRESENCE: power-amp feedback - more bite and air up top");
     depthKnob   .attach (state, ampDepth,    "DEPTH: power-amp resonance - the low-end thump of a closed cabinet");
     masterKnob  .attach (state, ampMaster,   "MASTER: how hard the power amp is pushed - sag, compression and power-tube grind as it goes up");
-    gateKnob    .attach (state, ampGate,     "GATE: noise gate keyed from the guitar, on the amp's input and output - silences hiss and hum between riffs (0 = off)");
+    gateKnob    .attach (state, ampGate,     "GATE: noise gate keyed from the guitar (0 = off, then -75 .. -20 dBFS): opens on the pick a moment early, shuts fast after a mute and gently on a decay, turns quiet playing down rather than chopping it; on the amp's output (and, softened, its input)");
     levelKnob   .attach (state, ampLevel,    "LEVEL: AMP output level");
     for (auto* k : { &gainKnob, &bassKnob, &midKnob, &trebleKnob, &presenceKnob, &depthKnob, &masterKnob, &gateKnob, &levelKnob })
         addAndMakeVisible (k);
@@ -1354,7 +1354,7 @@ WaspSection::WaspSection (SwarmnessAudioProcessor& p)
     driveKnob .attach (state, drvDrive,  "DRIVE: from a tight boost to a hard, square overdrive - the op-amp's gain into diodes to ground that clip one side first (asymmetric hard clipping)");
     brightKnob.attach (state, drvBright, "BRIGHT: output voicing - darker and smoother down, more bite and pick attack up");
     attackKnob.attach (state, drvAttack, "ATTACK: tightens the low end in front of the clipping - up for chugs that stay tight on a high-gain amp, down for a full-range boost");
-    gateKnob  .attach (state, drvGate,   "GATE: noise gate keyed from your guitar (0 = off) - silences the hiss of the drive and the amp behind it");
+    gateKnob  .attach (state, drvGate,   "GATE: noise gate keyed from your guitar (0 = off, then -75 .. -20 dBFS): opens on the pick a moment early, shuts fast after a mute and gently on a decay - silences the hiss of the drive and the amp behind it");
     namInputKnob .attach (state, drvNamInput,  "INPUT: level into the pedal capture, 5 = as captured (+/-18 dB) - more = the pedal's DRIVE");
     namOutputKnob.attach (state, drvNamOutput, "OUTPUT: level after the capture, 5 = as captured (+/-18 dB) - the pedal's LEVEL");
     for (auto* k : { &volumeKnob, &driveKnob, &brightKnob, &attackKnob, &gateKnob })

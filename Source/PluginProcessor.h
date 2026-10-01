@@ -299,7 +299,12 @@ private:
     std::array<juce::SmoothedValue<float>, Chain::maxSplits> parMixSmoothed;
     juce::AudioBuffer<float> pathBBuffer;   // parallel path B
     // Parallel paths are latency-aligned: the path without SMOKE is delayed by SMOKE's latency.
-    juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::None> pathAlignA { 1 }, pathAlignB { 1 };
+    // per split: path A delayed by the latency of path B's blocks and vice versa, so every path takes as
+    // long as the blocks in series would, and the plug-in's latency never depends on the layout
+    std::array<std::array<juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::None>, 2>, Chain::maxSplits> pathAlign;
+    std::array<std::array<int, 2>, Chain::maxSplits> pathAlignSamples {};
+    int blockLatency (int block) const noexcept;
+    void applyPathAlignment() noexcept;
 
     SpectrumTap spectrumTap;
     juce::File reverbIRFile;

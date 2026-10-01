@@ -75,7 +75,7 @@ public:
         dryCopy.setSize (2, maxBlock, false, false, true);
         namCopy.setSize (2, maxBlock, false, false, true);
         namRunner.prepare (sampleRate, maxBlock);
-        noiseGate.prepare (sampleRate, maxBlock);
+        noiseGate.prepare (sampleRate, maxBlock, kGateLookaheadSeconds);
         reset();
     }
 
@@ -105,20 +105,27 @@ public:
     static float namKnobDb (float knob) noexcept { return (knob - 0.5f) * 36.0f; }
 
     //==============================================================================
+    /** The gate's lookahead: the block always delays its audio by this much. */
+    static constexpr double kGateLookaheadSeconds = 0.001;
+    int getLatencySamples() const noexcept { return noiseGate.lookaheadSamples(); }
+
     void process (float* const* audio, int numCh, int numSamples) noexcept
     {
         numCh = juce::jmin (numCh, 2);
         namRunner.pickUp();
+        // the gate: keyed from the input before the lookahead delay (always applied, so the latency is
+        // constant), the curve applied after the drive
+        const float* gateCurve = noiseGate.compute (audio, numCh, numSamples, settings.gate);
+        noiseGate.delayInPlace (audio, numCh, numSamples);
+
         onGain.setTargetValue (settings.on ? 1.0f : 0.0f);
         if (! settings.on && ! onGain.isSmoothing())
         {
             onGain.setCurrentAndTargetValue (0.0f);
-            return;   // off: the signal passes untouched
+            return;   // off: the (delayed) signal passes untouched
         }
         for (int c = 0; c < numCh; ++c)
             dryCopy.copyFrom (c, 0, audio[c], numSamples);
-
-        const float* gateCurve = noiseGate.compute (audio, numCh, numSamples, settings.gate);   // keyed from the input, applied after the drive
 
         const bool useNam = settings.nam && namRunner.isActive();
         namMix.setTargetValue (useNam ? 1.0f : 0.0f);

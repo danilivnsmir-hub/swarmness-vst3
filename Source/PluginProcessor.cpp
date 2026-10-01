@@ -195,7 +195,11 @@ void SwarmnessAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBl
     cab.commitPending();   // the cabinet is running from the first block (an offline bounce starts right away)
 
     // Only SMOKE (oversampling) adds latency, and it is there wherever SMOKE sits in the chain.
-    const int latency = fuzzStage.getLatencySamples();
+    // the plug-in's latency: every block's own (SMOKE's oversampling, the gates' lookahead in AMP and WASP),
+    // whatever the order - parallel paths are padded to the series total
+    int latency = 0;
+    for (int b = 0; b < Chain::numBlocks; ++b)
+        latency += blockLatency (b);
     dryDelay.setMaximumDelayInSamples (latency + 8);
     dryDelay.prepare ({ sampleRate, (juce::uint32) maxBlockSize, 2 });
     dryDelay.setDelay ((float) latency);
@@ -216,13 +220,13 @@ void SwarmnessAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBl
         init (parMixSmoothed[(size_t) sp], 0.03, pct (p.parMix[(size_t) sp]));
     activeLayout = getRequestedLayout();
     pathBBuffer.setSize (2, maxBlockSize, false, false, true);
-    for (auto* d : { &pathAlignA, &pathAlignB })
-    {
-        d->setMaximumDelayInSamples (latency + 8);
-        d->prepare ({ sampleRate, (juce::uint32) maxBlockSize, 2 });
-        d->setDelay ((float) latency);
-        d->reset();
-    }
+    for (auto& split : pathAlign)
+        for (auto& d : split)
+        {
+            d.setMaximumDelayInSamples (latency + 8);
+            d.prepare ({ sampleRate, (juce::uint32) maxBlockSize, 2 });
+        }
+    applyPathAlignment();
 
     setLatencySamples (latency);
 
@@ -356,20 +360,13 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
             pathBBuffer.copyFrom (ch, 0, audio[ch], numSamples);
         float* pathB[2] = { pathBBuffer.getWritePointer (0), pathBBuffer.getWritePointer (1) };
 
-        bool smokeA = false, smokeB = false;
         for (int i = 0; i < stage.numA; ++i)
-        {
-            smokeA = smokeA || stage.a[(size_t) i] == Chain::smoke;
             processChainBlock (stage.a[(size_t) i], ctx, audio, numChannels, numSamples);
-        }
         for (int i = 0; i < stage.numB; ++i)
-        {
-            smokeB = smokeB || stage.b[(size_t) i] == Chain::smoke;
             processChainBlock (stage.b[(size_t) i], ctx, pathB, numChannels, numSamples);
-        }
 
-        // Keep both paths time-aligned (SMOKE oversampling) so they never comb-filter.
-        // SMOKE exists once, so at most one split ever needs this.
+        // Keep both paths time-aligned (SMOKE's oversampling, the gates' lookahead) so they never comb-filter:
+        // each path is padded by the other's latency (applyPathAlignment), so the split takes as long as series
         auto align = [numChannels, numSamples] (juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::None>& d, float* const* x)
         {
             for (int ch = 0; ch < numChannels; ++ch)
@@ -379,8 +376,9 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
                     x[ch][i] = d.popSample (ch);
                 }
         };
-        if (smokeA && ! smokeB) align (pathAlignB, pathB);
-        if (smokeB && ! smokeA) align (pathAlignA, audio);
+        const int sp = juce::jlimit (0, Chain::maxSplits - 1, stage.split);
+        if (pathAlignSamples[(size_t) sp][0] > 0) align (pathAlign[(size_t) sp][0], audio);
+        if (pathAlignSamples[(size_t) sp][1] > 0) align (pathAlign[(size_t) sp][1], pathB);
 
         // merge: linear balance, so identical paths add up to exactly the input level
         auto& mix = parMixSmoothed[(size_t) stage.split];
@@ -407,8 +405,7 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
         if (chainFade.getCurrentValue() <= 0.0f && ! chainFade.isSmoothing())
         {
             activeLayout = getRequestedLayout();
-            pathAlignA.reset();
-            pathAlignB.reset();
+            applyPathAlignment();
             chainFade.setTargetValue (1.0f);
         }
     }
@@ -457,6 +454,39 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
         updatePeak (meters.output[(size_t) ch], buffer.getMagnitude (ch, 0, numSamples));
 
     spectrumTap.push (audio[0], numChannels > 1 ? audio[1] : nullptr, numSamples);
+}
+
+int SwarmnessAudioProcessor::blockLatency (int block) const noexcept
+{
+    switch (block)
+    {
+        case Chain::smoke: return fuzzStage.getLatencySamples();
+        case Chain::amp:   return amp.getLatencySamples();
+        case Chain::drive: return wasp.getLatencySamples();
+        default:           return 0;
+    }
+}
+
+void SwarmnessAudioProcessor::applyPathAlignment() noexcept
+{
+    for (auto& s : pathAlignSamples) s = { 0, 0 };
+    const auto plan = Chain::planFor (activeLayout);
+    for (int k = 0; k < plan.numStages; ++k)
+    {
+        const auto& stage = plan.stages[(size_t) k];
+        if (! stage.parallel) continue;
+        int latA = 0, latB = 0;
+        for (int i = 0; i < stage.numA; ++i) latA += blockLatency (stage.a[(size_t) i]);
+        for (int i = 0; i < stage.numB; ++i) latB += blockLatency (stage.b[(size_t) i]);
+        const int sp = juce::jlimit (0, Chain::maxSplits - 1, stage.split);
+        pathAlignSamples[(size_t) sp] = { latB, latA };   // A waits for B's blocks and vice versa
+    }
+    for (size_t sp = 0; sp < pathAlign.size(); ++sp)
+        for (size_t side = 0; side < 2; ++side)
+        {
+            pathAlign[sp][side].setDelay ((float) pathAlignSamples[sp][side]);
+            pathAlign[sp][side].reset();
+        }
 }
 
 //==============================================================================
