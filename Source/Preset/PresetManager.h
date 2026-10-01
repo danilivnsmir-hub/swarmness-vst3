@@ -75,6 +75,8 @@ public:
 
     /** Writes one of the ready-made TRAILS step patterns (HiveBlock::Fill) into a value map. */
     static void writeTrailFill (ValueMap& values, int fill);
+    /** Writes a ready-made WINGS pattern (FlowGate::Fill) into values. */
+    static void writeWingFill (ValueMap& values, int fill);
 
     /** Non-parameter data stored with user presets (the CRYPT impulse response path). */
     std::function<void (juce::DynamicObject&)> onSaveExtras;

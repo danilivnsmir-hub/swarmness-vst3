@@ -752,6 +752,11 @@ ReverbPage::ReverbPage (SwarmnessAudioProcessor& p)
     typeSelector.setTooltip ("ROOM = tight and close, PLATE = dense and bright, HALL = big, ABYSS = huge, dark, moving. "
                              "IR = your impulse response (load it on the right)");
     addAndMakeVisible (typeSelector);
+    freezeToggle.setTooltip ("FREEZE: hold the tail - what is ringing stays as a pad while you play over it (the dry signal and the early "
+                             "reflections still pass). Off again, the tail decays as set. Right-click = MIDI learn a pedal");
+    MidiLearnable::tag (freezeToggle, revFreeze);
+    freezeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (state, revFreeze, freezeToggle);
+    addAndMakeVisible (freezeToggle);
     addAndMakeVisible (tail);
 
     mixKnob     .attach (state, revMix,      "MIX: dry / reverb. 50% = both at full level, 100% = reverb only");
@@ -778,6 +783,7 @@ void ReverbPage::resized()
     panelArea = getLocalBounds().toFloat();
     power.setBounds ((int) panelArea.getRight() - 40, 8, 26, 26);
     typeSelector.setBounds ((int) panelArea.getRight() - 52 - 400, 10, 400, 24);
+    freezeToggle.setBounds (typeSelector.getX() - 12 - 76, 10, 76, 24);
 
     tail.setBounds (16, 46, 700, 244);
     irArea = { 728.0f, 46.0f, panelArea.getWidth() - 744.0f, 244.0f };
@@ -852,6 +858,7 @@ void ReverbPage::tick()
 
     for (auto* k : { &decayKnob, &sizeKnob, &modKnob })
         k->setAlpha (irMode ? 0.35f : 1.0f);
+    freezeToggle.setAlpha (irMode ? 0.35f : (on ? 1.0f : 0.6f));
     for (auto* k : { &mixKnob, &preDelayKnob, &toneKnob, &lowCutKnob, &duckKnob })
         k->setAlpha (on ? 1.0f : 0.6f);
     clearButton.setEnabled (irDescription.isNotEmpty());

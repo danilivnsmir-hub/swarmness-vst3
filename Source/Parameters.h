@@ -103,6 +103,10 @@ namespace ParamIDs
     inline constexpr const char* flowAmount  = "flowAmount";
     inline constexpr const char* flowSpeed   = "flowSpeed";
     inline constexpr const char* flowDiv     = "flowDiv";
+    // 1.1: the step pattern (levels per step, like TRAILS)
+    inline constexpr const char* wgSteps     = "wgSteps";
+    inline constexpr const char* wgLevels[]  { "wgL1", "wgL2", "wgL3", "wgL4", "wgL5", "wgL6", "wgL7", "wgL8",
+                                               "wgL9", "wgL10", "wgL11", "wgL12", "wgL13", "wgL14", "wgL15", "wgL16" };
 
     // HONEY (sustainer / compressor)
     inline constexpr const char* hnOn        = "hnOn";
@@ -147,6 +151,7 @@ namespace ParamIDs
     inline constexpr const char* revLowCut   = "revLowCut";
     inline constexpr const char* revMod      = "revMod";
     inline constexpr const char* revDuck     = "revDuck";
+    inline constexpr const char* revFreeze   = "revFreeze";    // 1.1: hold the tail
 
     // AMP (amp models CLEAN / CRUNCH / LEAD with CHARACTER, or a NAM capture)
     inline constexpr const char* ampOn       = "ampOn";
@@ -220,6 +225,8 @@ namespace ParamChoices
     inline const juce::StringArray ampChannels { "Clean", "Crunch", "Lead", "NAM" };
     inline const juce::StringArray cabTypes    { "1x12 Open", "2x12 Open", "4x12 Brit", "4x12 Modern", "IR" };
     inline const juce::StringArray waspCharacters { "Tight", "Boost", "Smooth", "Rasp" };
+    /** Ready-made WINGS step patterns, in FlowGate::Fill order. */
+    inline const juce::StringArray wingFills { "Pulse", "Offbeat", "Gallop", "Triplet", "Ramp Up", "Ramp Down", "Stutter", "Glitch" };
     inline const juce::StringArray stepMoves { "Hold", "Up", "Down", "Random", "Reverse" };
     /** Ready-made TRAILS step patterns, in HiveBlock::Fill order. */
     inline const juce::StringArray trailFills { "Ladder", "Bounce", "Scatter", "Reverse", "Swell",

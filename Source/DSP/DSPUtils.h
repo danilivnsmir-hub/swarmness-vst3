@@ -1,11 +1,21 @@
 #pragma once
 
 #include "Platform.h"
+#include <array>
 #include <cmath>
 #include <cstdint>
 
 namespace swarm
 {
+/** A step pattern, shared by HIVE's TRAILS (level + move per step) and WINGS (levels only). */
+struct StepPattern
+{
+    static constexpr int kMaxSteps = 16;
+    int numSteps = 8;
+    std::array<float, kMaxSteps> level { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
+    std::array<int, kMaxSteps> move { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };   // HIVE: 1 = up
+};
+
     constexpr float kPi    = sw::MathConstants<float>::pi;
     constexpr float kTwoPi = sw::MathConstants<float>::twoPi;
 

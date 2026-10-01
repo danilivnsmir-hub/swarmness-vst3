@@ -381,8 +381,20 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     auto drvCh = std::make_unique<Group> ("waspCharacter", "Wasp Character", "|");
     drvCh->addChild (std::make_unique<juce::AudioParameterChoice> (pid (drvCharacter), "Wasp Character", ParamChoices::waspCharacters, 0));
 
+    // ------------------------------------------------------------------ WINGS steps (1.1, appended)
+    auto wings = std::make_unique<Group> ("wingsSteps", "Wings Steps", "|");
+    wings->addChild (std::make_unique<juce::AudioParameterInt> (pid (wgSteps), "Wings Steps", 1, 16, 2));
+    for (int k = 0; k < 16; ++k)
+        wings->addChild (std::make_unique<juce::AudioParameterFloat> (
+            pid (wgLevels[k]), "Wings Step " + juce::String (k + 1) + " Level", percentRange(), k % 2 == 0 ? 100.0f : 0.0f,
+            Attr().withLabel ("%").withAutomatable (false)));
+
+    // ------------------------------------------------------------------ CRYPT freeze (1.1, appended)
+    auto cryptFz = std::make_unique<Group> ("cryptFreeze", "Crypt Freeze", "|");
+    cryptFz->addChild (toggle (revFreeze, "Crypt Freeze", false));
+
     layout.add (std::move (shift), std::move (hive), std::move (swarm), std::move (fz), std::move (flow),
                 std::move (comb), std::move (carve), std::move (crypt), std::move (amp), std::move (cab), std::move (drv), std::move (chain), std::move (out),
-                std::move (honey), std::move (drvCh));
+                std::move (honey), std::move (drvCh), std::move (wings), std::move (cryptFz));
     return layout;
 }

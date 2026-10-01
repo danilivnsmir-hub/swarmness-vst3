@@ -118,6 +118,7 @@ private:
     PowerButton flowPower;
     PillToggle hardToggle { "HARD" }, syncToggle { "SYNC" };
     Knob flowAmountKnob { "AMOUNT" }, flowSpeedKnob { "SPEED" }, flowDivKnob { "DIV" };
+    StepGrid wingsGrid;
 
     // Levels (footer, next to the meters)
     Knob inputKnob { "INPUT", true }, volumeKnob { "VOLUME", true };

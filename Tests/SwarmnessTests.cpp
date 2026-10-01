@@ -639,6 +639,91 @@ namespace
                juce::String::formatted ("INPUT -18 -> +12 dB into SMOKE: output +%.1f dB (plain gain, fuzz compresses)", stepDb));
     }
 
+    double toneDb (const juce::AudioBuffer<float>& b, double sr, double freq, int from, int length);
+
+    void testWings()
+    {
+        std::printf ("\nWINGS: a pattern gate (steps per cycle, HARD / smooth, fills)\n");
+        const double sr = 48000.0;
+        auto run = [&] (const swarm::StepPattern& pat, bool hard, float hz, int numSamples, std::function<void (FlowGate&, int)> onBlock = nullptr)
+        {
+            FlowGate g;
+            g.prepare (sr);
+            g.setParams (1.0f, hard);
+            g.setPattern (pat);
+            g.setRateHz (hz);
+            auto buf = makeSine (sr, numSamples, 1000.0, 0.25f);
+            for (int i = 0; i < numSamples; i += 256)
+            {
+                if (onBlock) onBlock (g, i);
+                float* ptr[2] { buf.getWritePointer (0, i), buf.getWritePointer (1, i) };
+                g.process (ptr, 2, juce::jmin (256, numSamples - i));
+            }
+            return buf;
+        };
+        auto rmsAt = [] (const juce::AudioBuffer<float>& b, int from, int len) { return b.getRMSLevel (0, from, len); };
+        const float sineRms = 0.25f * 0.70710678f;
+        {
+            // the default 2-step pattern = the old square gate: on for the first half, off for the second
+            auto out = run (FlowGate::makeFill (FlowGate::fillPulse), true, 4.0f, 48000);
+            const float on = rmsAt (out, 24000 + 1000, 4000), off = rmsAt (out, 24000 + 7000, 4000);
+            check (std::abs (on / sineRms - 1.0f) < 0.02f && off < 1.0e-4f,
+                   juce::String::formatted ("Pulse, HARD: first half %.3f (sine %.3f), second half %.5f", on, sineRms, off));
+            // smooth: a cosine, half way down at a quarter of the cycle
+            auto sm = run (FlowGate::makeFill (FlowGate::fillPulse), false, 4.0f, 48000);
+            const float quarter = rmsAt (sm, 24000 + 3000 - 48, 96);
+            check (std::abs (quarter / sineRms - 0.5f) < 0.03f, juce::String::formatted ("Pulse, smooth: %.2f of the level at a quarter cycle (0.5)", quarter / sineRms));
+        }
+        {
+            // a 4-step pattern at 2 Hz: every step 6000 samples, levels 1, 0, 0.5, 0
+            swarm::StepPattern pat;
+            pat.numSteps = 4;
+            pat.level = { 1.0f, 0.0f, 0.5f, 0.0f };
+            auto out = run (pat, true, 2.0f, 96000);
+            const float l0 = rmsAt (out, 48000 + 1000, 4000), l1 = rmsAt (out, 54000 + 1000, 4000), l2 = rmsAt (out, 60000 + 1000, 4000), l3 = rmsAt (out, 66000 + 1000, 4000);
+            check (std::abs (l0 / sineRms - 1.0f) < 0.02f && l1 < 1.0e-4f && std::abs (l2 / sineRms - 0.5f) < 0.02f && l3 < 1.0e-4f,
+                   juce::String::formatted ("4 steps [1 0 0.5 0]: %.2f %.2f %.2f %.2f of the level", l0 / sineRms, l1 / sineRms, l2 / sineRms, l3 / sineRms));
+            // the step edges are short but rounded: no energy above 8 kHz from a 1 kHz sine beyond -40 dB
+            const double hf = toneDb (out, sr, 9000.0, 48000, 48000) - toneDb (out, sr, 1000.0, 48000, 48000);
+            check (hf < -40.0, juce::String::formatted ("HARD edges are rounded: 9 kHz vs 1 kHz %.1f dB", hf));
+        }
+        {
+            // editing a level while it plays: the change glides (no click)
+            swarm::StepPattern pat;
+            pat.numSteps = 1;
+            pat.level[0] = 1.0f;
+            auto out = run (pat, true, 2.0f, 48000, [&] (FlowGate& g, int i)
+            {
+                if (i == 24064) { pat.level[0] = 0.0f; g.setPattern (pat); }
+            });
+            float worst = 0.0f;
+            for (int i = 2; i < out.getNumSamples(); ++i)
+                worst = juce::jmax (worst, std::abs (out.getSample (0, i) - 2.0f * out.getSample (0, i - 1) + out.getSample (0, i - 2)));
+            // a 1 kHz sine's own second difference is ~0.004; a jump of 0.25 would be a click
+            check (worst < 0.01f && rmsAt (out, 40000, 8000) < 1.0e-4f, juce::String::formatted ("level 1 -> 0 while playing: largest step %.4f, then silent", worst));
+        }
+        {
+            // the fills: Pulse is the parameter default; through the processor, Gallop gates the steps
+            PresetManager::ValueMap v;
+            PresetManager::writeWingFill (v, FlowGate::fillPulse);
+            check (v[ParamIDs::wgSteps] == 2.0f && v[ParamIDs::wgLevels[0]] == 100.0f && v[ParamIDs::wgLevels[1]] == 0.0f, "Pulse = 2 steps, on / off (the default)");
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            setParam (p, ParamIDs::flowOn, 1.0f);
+            setParam (p, ParamIDs::flowAmount, 100.0f);
+            setParam (p, ParamIDs::flowSpeed, 2.0f);
+            PresetManager::writeWingFill (v, FlowGate::fillGallop);
+            for (const auto& [id, val] : v)
+                setParam (p, id.toRawUTF8(), val);
+            auto out = render (p, makeSine (sr, 96000, 1000.0, 0.25f), sr, 256);
+            const float l0 = rmsAt (out, 48000 + 1000, 4000), l1 = rmsAt (out, 54000 + 1000, 4000), l2 = rmsAt (out, 60000 + 1000, 4000), l3 = rmsAt (out, 66000 + 1000, 4000);
+            check (l0 > 0.9f * sineRms && l1 < 1.0e-3f && l2 > 0.9f * sineRms && l3 > 0.9f * sineRms,
+                   juce::String::formatted ("processor, Gallop [1 0 1 1]: %.2f %.2f %.2f %.2f of the level", l0 / sineRms, l1 / sineRms, l2 / sineRms, l3 / sineRms));
+            // a session without the step parameters opens as the old gate: Pulse
+            check (p.getAPVTS().getRawParameterValue (ParamIDs::wgSteps)->load() == 4.0f, "steps parameter applied");
+        }
+    }
+
     void testFuzzIdleNoise()
     {
         std::printf ("\nSMOKE with nothing played: no self-oscillation, interface hiss not blown up\n");
@@ -2054,6 +2139,29 @@ namespace
                        juce::String::formatted ("%s, DECAY %.1f s: measured RT60 %.2f s", ParamChoices::reverbTypes[type].toRawUTF8(), decay, rt));
             }
 
+        {
+            // FREEZE: the tail is held (no growth, no decay) while frozen, decays again once released
+            ReverbStage r;
+            r.prepare (sr, 256);
+            ReverbStage::Settings s;
+            s.on = true; s.mix = 1.0f; s.type = ReverbStage::hall; s.decay = 1.0f; s.lowCutHz = 20.0f;
+            r.setParams (s);
+            juce::AudioBuffer<float> buf (2, (int) (sr * 9.0));
+            buf.clear();
+            buf.setSample (0, 4800, 0.5f);
+            buf.setSample (1, 4800, 0.5f);
+            for (int i = 0; i < buf.getNumSamples(); i += 256)
+            {
+                if (i == 256 * (int) (0.3 * sr / 256.0)) { s.freeze = true;  r.setParams (s); }
+                if (i == 256 * (int) (6.0 * sr / 256.0)) { s.freeze = false; r.setParams (s); }
+                float* ptr[2] { buf.getWritePointer (0, i), buf.getWritePointer (1, i) };
+                r.process (ptr, 2, juce::jmin (256, buf.getNumSamples() - i));
+            }
+            auto level = [&] (double at) { return juce::Decibels::gainToDecibels (buf.getRMSLevel (0, (int) (at * sr), (int) (0.5 * sr)) + 1.0e-9f); };
+            const double a = level (1.0), b = level (3.0), c = level (5.5), d = level (8.0);
+            check (allFinite (buf) && std::abs (b - a) < 2.0 && std::abs (c - a) < 3.0 && d < c - 20.0,
+                   juce::String::formatted ("FREEZE: tail %.1f dB at 1 s, %.1f at 3 s, %.1f at 5.5 s; released: %.1f dB at 8 s", a, b, c, d));
+        }
         {
             // quality of the HALL tail: wide (decorrelated L / R), dense, highs die faster than lows with a dark TONE
             SwarmnessAudioProcessor p;
@@ -3885,6 +3993,7 @@ int main (int argc, char** argv)
         if (which == "wasp")    testWasp();
         if (which == "splices") testSpliceContinuity();
         if (which == "honey")   testHoney();
+        if (which == "wings")   testWings();
         if (which == "gates")   testGates();
         if (which == "tuner")   testTuner();
         std::printf ("\n%s (%d failure%s)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures, failures == 1 ? "" : "s");
@@ -3909,6 +4018,7 @@ int main (int argc, char** argv)
     testTrails();
     reportLag();
     testFuzzIdleNoise();
+    testWings();
     testFuzzSag();
     testMonoToStereo();
     testMidiLearn();

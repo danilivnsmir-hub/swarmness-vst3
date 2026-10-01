@@ -21,6 +21,9 @@
  *
  * Both share pre-delay, TONE, LOW CUT, DUCK (the wet dips while you play) and MIX.
  * Switching the block off stops feeding it but lets the tail ring out (spill-over).
+ * FREEZE (algorithmic types): the tail is held - the loop becomes lossless and stops taking input,
+ * so what is ringing stays as a pad (the modulation keeps it alive); play over it, the dry signal
+ * and the early reflections still pass. Off again, the tail decays as set.
  */
 class ReverbStage
 {
@@ -33,6 +36,7 @@ public:
         int type = hall;
         float mix = 0.25f, decay = 2.5f, size = 0.6f, preDelayMs = 15.0f, tone = 0.5f;
         float lowCutHz = 150.0f, mod = 0.3f, duck = 0.0f;
+        bool freeze = false;
     };
 
     void prepare (double sr, int maxBlock)
@@ -64,6 +68,8 @@ public:
         irEngineReady = irLoaded && std::abs (convolution.getCurrentIRSize() - expectedIRSize()) <= 1;
 
         feedGain.reset (sr, 0.03);
+        freezeAmount.reset (sr, 0.05);
+        freezeAmount.setCurrentAndTargetValue (0.0f);
         dryGain.reset (sr, 0.03);
         wetGain.reset (sr, 0.03);
         typeFade.reset (sr, 0.012);
@@ -116,6 +122,7 @@ public:
         settings = s;
         settings.mix = juce::jlimit (0.0f, 1.0f, s.mix);
         feedGain.setTargetValue (s.on ? 1.0f : 0.0f);
+        freezeAmount.setTargetValue (s.freeze && s.on ? 1.0f : 0.0f);
         dryGain.setTargetValue (targetDry());
         wetGain.setTargetValue (targetWet());
         if (s.type != activeType && ! typeFade.isSmoothing())
@@ -372,6 +379,7 @@ private:
             for (int ch = 0; ch < numChannels; ++ch)
                 juce::FloatVectorOperations::multiply (audio[ch], g, numSamples);
         feedGain.skip (numSamples);
+        freezeAmount.skip (numSamples);
         wetGain.skip (numSamples);
     }
 
@@ -451,6 +459,8 @@ private:
         float sizeGain = 1.0f;
         for (int i = 0; i < numSamples; ++i)
         {
+            // FREEZE: the decay gains lerp to 1 (a lossless loop), the input injection to 0
+            const float fz = freezeAmount.getNextValue();
             // line lengths glide with SIZE; decay gains per line and band from RT60
             const float scale = sizeSmooth.process (targetScale);
             if ((i & 15) == 0)
@@ -507,7 +517,8 @@ private:
                 outR += outSignR[j] * y;
                 auto& lp = damp[(size_t) j];
                 lp += dampCoeff * (y - lp);
-                x[(size_t) j] = gLow[(size_t) j] * lp + gHigh[(size_t) j] * (y - lp);
+                const float gl = gLow[(size_t) j] + fz * (1.0f - gLow[(size_t) j]), gh = gHigh[(size_t) j] + fz * (1.0f - gHigh[(size_t) j]);
+                x[(size_t) j] = gl * lp + gh * (y - lp);
             }
 
             hadamard16 (x);
@@ -519,7 +530,7 @@ private:
                 auto& ap = loopAllPass[(size_t) j];
                 ap.delay = apDelay[(size_t) j];
                 const float v = ap.process (x[(size_t) j], 0.5f);
-                lines[(size_t) j].push (v + ((j & 1) == 0 ? l : r) * ((j & 2) != 0 ? -kInject : kInject));
+                lines[(size_t) j].push (v + ((j & 1) == 0 ? l : r) * ((j & 2) != 0 ? -kInject : kInject) * (1.0f - fz));
             }
 
             wl[i] = kOutScale * sizeGain * outL + cfg.early * erL;
@@ -641,7 +652,7 @@ private:
     std::array<std::array<swarm::EqBand::State, 2>, 2> outFilters {};
 
     juce::AudioBuffer<float> wet, dryCopy;
-    juce::SmoothedValue<float> feedGain, dryGain, wetGain, typeFade;
+    juce::SmoothedValue<float> feedGain, dryGain, wetGain, typeFade, freezeAmount;
     swarm::OnePole sizeSmooth, preDelaySmooth, duckGain;
     float duckEnv = 0.0f, duckAttack = 0.01f, duckRelease = 0.001f;
 

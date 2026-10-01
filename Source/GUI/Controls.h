@@ -1,5 +1,9 @@
 #pragma once
 
+#include "../DSP/DSPUtils.h"
+#include <functional>
+#include <map>
+
 #include "Theme.h"
 #include "../Preset/PresetManager.h"
 #include <array>
@@ -146,7 +150,21 @@ class StepGrid : public juce::Component,
                  public juce::SettableTooltipClient
 {
 public:
-    explicit StepGrid (juce::AudioProcessorValueTreeState&);
+    /** Which parameters the grid edits: TRAILS (levels + moves) or WINGS (levels only). */
+    struct Spec
+    {
+        const char* stepsId = nullptr;
+        const char* const* levelIds = nullptr;
+        const char* const* moveIds = nullptr;                       // nullptr = no MOVE row
+        const juce::StringArray* fillNames = nullptr;
+        std::function<swarm::StepPattern (int)> makeFill;
+        std::function<void (std::map<juce::String, float>&, int)> writeFill;
+        juce::String tooltip;
+    };
+    static Spec trails();
+    static Spec wings();
+
+    StepGrid (juce::AudioProcessorValueTreeState&, Spec);
 
     /** From the editor timer: repaints when a step value or the playing step changed. */
     void refresh (int playingStep);
@@ -179,6 +197,8 @@ private:
     void applyFill (int fill);
 
     juce::AudioProcessorValueTreeState& state;
+    const Spec spec;
+    const bool hasMoves;
     std::array<float, kSteps> shownLevel {};
     std::array<int, kSteps> shownMove {};
     int shownSteps = -1, shownPlaying = -2;

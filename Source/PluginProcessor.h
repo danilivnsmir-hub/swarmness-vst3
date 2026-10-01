@@ -75,6 +75,7 @@ public:
         std::atomic<float> stackSemitones { 0.0f };   // SHIFT STACK voice
         std::atomic<bool>  stackOn { false };
         std::atomic<int>   trailStep { -1 };             // TRAILS step now playing (-1 = none)
+        std::atomic<int>   wingStep { -1 };              // WINGS step now playing (-1 = none)
         std::atomic<float> reverbLevel { 0.0f };       // CRYPT wet peak
         std::atomic<float> honeyGr { 0.0f };           // HONEY gain reduction, dB
     };
@@ -236,6 +237,7 @@ private:
         std::atomic<float>* fuzzScoop {};  std::atomic<float>* fuzzGlare {};   std::atomic<float>* fuzzBlend {};   std::atomic<float>* fuzzSag {};
         std::atomic<float>* flowOn {};     std::atomic<float>* flowHard {};    std::atomic<float>* flowSync {};
         std::atomic<float>* flowAmount {}; std::atomic<float>* flowSpeed {};   std::atomic<float>* flowDiv {};
+        std::atomic<float>* wgSteps {};    std::array<std::atomic<float>*, 16> wgLevels {};
         std::atomic<float>* hnOn {};       std::atomic<float>* hnSustain {};   std::atomic<float>* hnAttack {};
         std::atomic<float>* hnBlend {};    std::atomic<float>* hnLevel {};     std::atomic<float>* hnLimit {};
         std::atomic<float>* output {};      std::atomic<float>* input {};      std::atomic<float>* bypass {};
@@ -248,6 +250,7 @@ private:
         std::atomic<float>* revOn {};      std::atomic<float>* revType {};     std::atomic<float>* revMix {};
         std::atomic<float>* revDecay {};   std::atomic<float>* revSize {};     std::atomic<float>* revPreDelay {};
         std::atomic<float>* revTone {};    std::atomic<float>* revLowCut {};   std::atomic<float>* revMod {};     std::atomic<float>* revDuck {};
+        std::atomic<float>* revFreeze {};
         std::atomic<float>* ampOn {};      std::atomic<float>* ampChannel {};  std::atomic<float>* ampGain {};
         std::atomic<float>* ampBass {};    std::atomic<float>* ampMid {};      std::atomic<float>* ampTreble {};   std::atomic<float>* ampPresence {};
         std::atomic<float>* ampDepth {};   std::atomic<float>* ampMaster {};   std::atomic<float>* ampGate {};     std::atomic<float>* ampLevel {};

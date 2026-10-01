@@ -1,6 +1,7 @@
 #include "PresetManager.h"
 #include "../Parameters.h"
 #include "../DSP/HiveBlock.h"
+#include "../DSP/FlowGate.h"
 
 const juce::String PresetManager::extension = ".swpreset";
 
@@ -177,6 +178,14 @@ void PresetManager::initialiseFactoryPresets()
           { { fuzzOn, 1 }, { fuzz, 85 }, { fuzzGate, 75 }, { fuzzTone, 45 }, { fuzzScoop, 50 }, { fuzzSag, 90 } } },
         { "Wing Beat Breakdown", texture, "Tempo-synced 1/16 hard WINGS gate on SMOKE. Hold SHIFT A for angry stabs.",
           { { rise, 0 }, { fall, 0 }, { panic, 30 }, { fuzzOn, 1 }, { fuzzVoice, 0 }, { fuzz, 80 }, { fuzzScoop, 60 }, { fuzzBlend, 15 }, { flowOn, 1 }, { flowSync, 1 }, { flowDiv, 4 }, { flowHard, 1 } } },
+        { "Gallop Gate", texture, "WINGS as a pattern gate: the Gallop fill (on, off, on, on) over a quarter note - a rhythm the amp plays for you. Change DIV for the tempo feel.",
+          { { flowOn, 1 }, { flowSync, 1 }, { flowDiv, 2 }, { flowHard, 1 }, { flowAmount, 100 }, { wgSteps, 4 }, { wgLevels[0], 100 }, { wgLevels[1], 0 }, { wgLevels[2], 100 }, { wgLevels[3], 100 },
+            { ampOn, 1 }, { ampChannel, 1 }, { ampGain, 6 }, { cabOn, 1 }, { cabType, 2 } } },
+        { "Glitch Wings", texture, "A 16-step Glitch pattern over one bar, smooth, on a fuzz with trails: broken, stuttering textures that still follow the song.",
+          { { fuzzOn, 1 }, { fuzzVoice, 1 }, { fuzz, 60 }, { flowOn, 1 }, { flowSync, 1 }, { flowDiv, 0 }, { flowHard, 0 }, { flowAmount, 90 },
+            { wgSteps, 16 }, { wgLevels[0], 100 }, { wgLevels[1], 80 }, { wgLevels[2], 0 }, { wgLevels[3], 100 }, { wgLevels[4], 60 }, { wgLevels[5], 0 }, { wgLevels[6], 100 }, { wgLevels[7], 70 },
+            { wgLevels[8], 100 }, { wgLevels[9], 0 }, { wgLevels[10], 50 }, { wgLevels[11], 100 }, { wgLevels[12], 0 }, { wgLevels[13], 100 }, { wgLevels[14], 70 }, { wgLevels[15], 90 },
+            { revOn, 1 }, { revType, 2 }, { revMix, 25 } } },
         { "Ghost Swarm", texture, "Smooth WINGS tremolo, a quiet octave-up DRONE with trails and SWARM - eerie clean parts.",
           { { rbOn, 1 }, { rbPitch, 12 }, { rbPrimary, 30 }, { rbMagic, 35 }, { rbTime, 300 }, { rbTracking, 85 }, { rbTone, 45 },
             { swarmOn, 1 }, { swarmMix, 35 }, { flowOn, 1 }, { flowHard, 0 }, { flowSpeed, 5.5f }, { flowAmount, 70 } } },
@@ -489,6 +498,14 @@ void PresetManager::writeTrailFill (ValueMap& values, int fill)
         values[ParamIDs::trLevels[k]] = 100.0f * pattern.level[k];
         values[ParamIDs::trMoves[k]] = (float) pattern.move[k];
     }
+}
+
+void PresetManager::writeWingFill (ValueMap& values, int fill)
+{
+    const auto pattern = FlowGate::makeFill (fill);
+    values[ParamIDs::wgSteps] = (float) pattern.numSteps;
+    for (size_t k = 0; k < (size_t) FlowGate::kMaxSteps; ++k)
+        values[ParamIDs::wgLevels[k]] = 100.0f * pattern.level[k];
 }
 
 void PresetManager::migrateLegacyValues (ValueMap& values)

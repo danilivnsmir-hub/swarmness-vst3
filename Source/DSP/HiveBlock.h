@@ -42,12 +42,7 @@ public:
     /** What a TRAILS step does to its repeat. */
     enum StepMove : int { hold = 0, up, down, random, reverse, numStepMoves };
 
-    struct StepPattern
-    {
-        int numSteps = 8;
-        std::array<float, kMaxSteps> level { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
-        std::array<int, kMaxSteps> move { up, up, up, up, up, up, up, up, up, up, up, up, up, up, up, up };
-    };
+    using StepPattern = swarm::StepPattern;   // moves default to up
 
     /** Ready-made step patterns (the first five match the old PATTERN choice, so it migrates 1:1). */
     enum Fill : int { fillLadder = 0, fillBounce, fillScatter, fillReverse, fillSwell, fillEcho, fillStutter,

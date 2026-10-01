@@ -53,6 +53,9 @@ SwarmnessAudioProcessor::SwarmnessAudioProcessor()
     p.fuzzScoop = get (id::fuzzScoop);   p.fuzzGlare = get (id::fuzzGlare);     p.fuzzBlend = get (id::fuzzBlend);   p.fuzzSag = get (id::fuzzSag);
     p.flowOn = get (id::flowOn);         p.flowHard = get (id::flowHard);       p.flowSync = get (id::flowSync);
     p.flowAmount = get (id::flowAmount); p.flowSpeed = get (id::flowSpeed);     p.flowDiv = get (id::flowDiv);
+    p.wgSteps = get (id::wgSteps);
+    for (int k = 0; k < 16; ++k)
+        p.wgLevels[(size_t) k] = get (id::wgLevels[k]);
     p.hnOn = get (id::hnOn);             p.hnSustain = get (id::hnSustain);     p.hnAttack = get (id::hnAttack);
     p.hnBlend = get (id::hnBlend);       p.hnLevel = get (id::hnLevel);         p.hnLimit = get (id::hnLimit);
     p.output = get (id::output);         p.input = get (id::input);           p.bypass = get (id::bypass);
@@ -68,6 +71,7 @@ SwarmnessAudioProcessor::SwarmnessAudioProcessor()
     p.revOn = get (id::revOn);           p.revType = get (id::revType);         p.revMix = get (id::revMix);
     p.revDecay = get (id::revDecay);     p.revSize = get (id::revSize);         p.revPreDelay = get (id::revPreDelay);
     p.revTone = get (id::revTone);       p.revLowCut = get (id::revLowCut);     p.revMod = get (id::revMod);         p.revDuck = get (id::revDuck);
+    p.revFreeze = get (id::revFreeze);
     p.ampOn = get (id::ampOn);           p.ampChannel = get (id::ampChannel);   p.ampGain = get (id::ampGain);
     p.ampBass = get (id::ampBass);       p.ampMid = get (id::ampMid);           p.ampTreble = get (id::ampTreble);   p.ampPresence = get (id::ampPresence);
     p.ampDepth = get (id::ampDepth);     p.ampMaster = get (id::ampMaster);     p.ampGate = get (id::ampGate);       p.ampLevel = get (id::ampLevel);
@@ -563,6 +567,7 @@ void SwarmnessAudioProcessor::processChainBlock (int block, const BlockContext& 
             s.lowCutHz = p.revLowCut->load();
             s.mod = pct (p.revMod);
             s.duck = pct (p.revDuck);
+            s.freeze = on (p.revFreeze);
             crypt.setParams (s);
             crypt.process (audio, numChannels, numSamples);
             break;
@@ -716,6 +721,13 @@ void SwarmnessAudioProcessor::processWings (const BlockContext& ctx, float* cons
 {
     const bool flowOn = on (p.flowOn);
     flow.setParams (flowOn ? pct (p.flowAmount) : 0.0f, on (p.flowHard));
+    {
+        swarm::StepPattern pat;
+        pat.numSteps = (int) p.wgSteps->load();
+        for (int k = 0; k < 16; ++k)
+            pat.level[(size_t) k] = pct (p.wgLevels[(size_t) k]);
+        flow.setPattern (pat);
+    }
 
     if (on (p.flowSync))
     {
@@ -731,6 +743,7 @@ void SwarmnessAudioProcessor::processWings (const BlockContext& ctx, float* cons
 
     if (flowOn || ! flow.isIdle())
         flow.process (audio, numChannels, numSamples);
+    meters.wingStep.store (flowOn ? flow.getCurrentStep() : -1, std::memory_order_relaxed);
 }
 
 //==============================================================================

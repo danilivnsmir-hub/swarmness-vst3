@@ -156,12 +156,13 @@ private:
 
     PowerButton power;
     SegmentedChoice typeSelector;
+    PillToggle freezeToggle { "FREEZE" };
     TailView tail;
     juce::TextButton loadButton { "LOAD IR" }, clearButton { "CLEAR" };
     Knob mixKnob { "MIX" }, decayKnob { "DECAY" }, sizeKnob { "SIZE" }, preDelayKnob { "PRE-DELAY" };
     Knob toneKnob { "TONE" }, lowCutKnob { "LOW CUT" }, modKnob { "MOD" }, duckKnob { "DUCK" };
     std::unique_ptr<juce::FileChooser> chooser;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> powerAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> powerAttachment, freezeAttachment;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ReverbPage)
 };

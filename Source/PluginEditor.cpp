@@ -24,7 +24,8 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
       presetBar (p.getPresetManager()),
       tunerOverlay (p.getTuner()),
       switchModeSelector (param (state, ParamIDs::switchMode), { "MOMENTARY", "LATCH" }),
-      stepGrid (p.getAPVTS()),
+      stepGrid (p.getAPVTS(), StepGrid::trails()),
+      wingsGrid (p.getAPVTS(), StepGrid::wings()),
       fuzzVoiceSelector (param (state, ParamIDs::fuzzVoice), { "DOWN", "MID", "UP" }),
       oct1Switch   (param (state, ParamIDs::oct1),      "SHIFT A", Colours::accent,  false, [this] { return footswitchesMomentary(); }),
       oct2Switch   (param (state, ParamIDs::oct2),      "SHIFT B", Colours::accent,  false, [this] { return footswitchesMomentary(); }),
@@ -201,6 +202,7 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     fxPage.addAndMakeVisible (flowAmountKnob);
     fxPage.addAndMakeVisible (flowSpeedKnob);
     fxPage.addChildComponent (flowDivKnob);
+    fxPage.addAndMakeVisible (wingsGrid);
     rigPage.addAndMakeVisible (wasp);
     rigPage.addAndMakeVisible (ampCab);
 
@@ -334,9 +336,9 @@ void MainPanel::resized()
 
     // FX page: SMOKE across the top, SWARM and WINGS under it
     fuzzArea   = { 16.0f,  144.0f, (float) baseWidth - 32.0f, 226.0f };
-    honeyArea  = { 16.0f,  382.0f, 392.0f, 226.0f };
-    swarmArea  = { 420.0f, 382.0f, 320.0f, 226.0f };
-    flowArea   = { 752.0f, 382.0f, (float) baseWidth - 16.0f - 752.0f, 226.0f };
+    honeyArea  = { 16.0f,  382.0f, 330.0f, 226.0f };
+    swarmArea  = { 358.0f, 382.0f, 280.0f, 226.0f };
+    flowArea   = { 650.0f, 382.0f, (float) baseWidth - 16.0f - 650.0f, 226.0f };
     // PITCH page: HIVE on top, SHIFT below
     hiveArea   = { 16.0f, 144.0f, (float) baseWidth - 32.0f, 262.0f };
     shiftArea  = { 16.0f, 418.0f, (float) baseWidth - 32.0f, 190.0f };
@@ -453,8 +455,15 @@ void MainPanel::resized()
     flowPower.setBounds (powerFor (flowArea));
     syncToggle.setBounds ((int) flowArea.getRight() - 44 - 54,  (int) flowArea.getY() + 9, 54, 24);
     hardToggle.setBounds ((int) flowArea.getRight() - 44 - 112, (int) flowArea.getY() + 9, 54, 24);
-    threeKnobs (flowArea, { &flowAmountKnob, &flowSpeedKnob });
-    flowDivKnob.setBounds (flowSpeedKnob.getBounds());
+    {
+        // two knobs at the left, the step pattern at the right
+        const int kw = 72, kh = 104, x0 = (int) flowArea.getX() + 14, y0 = (int) flowArea.getY() + 50;
+        flowAmountKnob.setBounds (x0, y0, kw, kh);
+        flowSpeedKnob.setBounds (x0 + kw + 8, y0, kw, kh);
+        flowDivKnob.setBounds (flowSpeedKnob.getBounds());
+        const int gx = flowSpeedKnob.getRight() + 16;
+        wingsGrid.setBounds (gx, (int) flowArea.getY() + 46, (int) flowArea.getRight() - 14 - gx, (int) flowArea.getBottom() - 14 - ((int) flowArea.getY() + 46));
+    }
 
     // RIG page: WASP on top, AMP + CAB under it
     wasp.setBounds (16, 144, baseWidth - 32, 200);
@@ -722,7 +731,8 @@ void MainPanel::tick()
     setSectionDimmed ({ &deepToggle, &swarmDepthKnob, &swarmRateKnob, &swarmMixKnob }, ! states[2]);
     setSectionDimmed ({ &fuzzVoiceSelector, &fuzzKnob, &fuzzToneKnob, &fuzzScoopKnob,
                         &fuzzGlareKnob, &fuzzGateKnob, &fuzzSagKnob, &fuzzBlendKnob }, ! states[3]);
-    setSectionDimmed ({ &hardToggle, &syncToggle, &flowAmountKnob, &flowSpeedKnob, &flowDivKnob }, ! states[4]);
+    setSectionDimmed ({ &hardToggle, &syncToggle, &flowAmountKnob, &flowSpeedKnob, &flowDivKnob, &wingsGrid }, ! states[4]);
+    wingsGrid.refresh (states[4] ? meters.wingStep.load() : -1);
 
     if (states != lastSectionStates)
     {
