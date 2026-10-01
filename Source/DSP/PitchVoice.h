@@ -104,6 +104,7 @@ public:
         applyTightness();
     }
     bool isRaw() const noexcept                      { return rawMix > 0.5f; }
+    const LivePitchShifter& engine() const noexcept  { return shifter; }
 
     /** Shifts the ring's chunk starting at 'base' into out (numSamples per channel). */
     void process (float* const* out, int numChannels, int numSamples, int base, float ratioStart, float ratioEnd) noexcept
