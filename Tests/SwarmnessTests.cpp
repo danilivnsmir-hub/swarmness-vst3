@@ -1240,6 +1240,74 @@ namespace
         }
     }
 
+    void testSpliceContinuity()
+    {
+        // Every splice of the modern pitch engine ended with one sample of the faded-out head at full gain:
+        // a click per splice (every ~20 ms on an octave up). A shifted sine must stay smooth.
+        std::printf ("\nPitch engine: splices leave no clicks\n");
+        const double sr = 48000.0;
+        for (int semis : { 12, 7, -12 })
+        {
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            setParam (p, ParamIDs::shOn, 1.0f);
+            setParam (p, ParamIDs::shiftA, (float) semis);
+            setParam (p, ParamIDs::stingMix, 100.0f);
+            setParam (p, ParamIDs::shRaw, 0.0f);
+            auto out = render (p, makeSine (sr, (int) sr * 3, 220.0, 0.3f), sr, 256);
+            const int from = (int) (0.5 * sr), to = (int) (2.5 * sr);
+            double sumSq = 0.0, peak = 0.0;
+            std::vector<float> d2 ((size_t) (to - from));
+            for (int i = from; i < to; ++i)
+            {
+                const float v = out.getSample (0, i + 1) - 2.0f * out.getSample (0, i) + out.getSample (0, i - 1);
+                d2[(size_t) (i - from)] = v;
+                sumSq += (double) v * v;
+                peak = juce::jmax (peak, (double) std::abs (v));
+            }
+            const double rms = std::sqrt (sumSq / (double) d2.size());
+            const int outliers = (int) std::count_if (d2.begin(), d2.end(), [rms] (float v) { return std::abs (v) > 6.0 * rms; });
+            check (outliers == 0 && peak / rms < 10.0 * std::sqrt (2.0),
+                   juce::String::formatted ("SHIFT %+d st on a sine: 2nd-difference peak / rms %.1f dB, %d outlier samples", semis,
+                                            20.0 * std::log10 (peak / rms), outliers));
+        }
+        // HIVE's REVERSE repeats: two heads read the loop backwards and crossfade - the wow / flutter on the
+        // loop delay must not make a head jump when the phase wraps (a reversed sine stays a sine)
+        {
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            setParam (p, ParamIDs::rbOn, 1.0f);
+            setParam (p, ParamIDs::trDry, 1.0f);
+            setParam (p, ParamIDs::rbPrimary, 0.0f);
+            setParam (p, ParamIDs::rbTracking, 100.0f);
+            setParam (p, ParamIDs::rbMagic, 70.0f);
+            setParam (p, ParamIDs::rbTime, 300.0f);
+            setParam (p, ParamIDs::rbMix, 100.0f);
+            setParam (p, ParamIDs::rbRaw, 0.0f);
+            for (int k = 0; k < 8; ++k)
+            {
+                setParam (p, ParamIDs::trLevels[k], 100.0f);
+                setParam (p, ParamIDs::trMoves[k], (float) HiveBlock::reverse);
+            }
+            auto out = render (p, makeSine (sr, (int) sr * 4, 220.0, 0.3f), sr, 256);
+            const int from = (int) (1.0 * sr), to = (int) (3.5 * sr);
+            double sumSq = 0.0, peak = 0.0;
+            std::vector<float> d2 ((size_t) (to - from));
+            for (int i = from; i < to; ++i)
+            {
+                const float v = out.getSample (0, i + 1) - 2.0f * out.getSample (0, i) + out.getSample (0, i - 1);
+                d2[(size_t) (i - from)] = v;
+                sumSq += (double) v * v;
+                peak = juce::jmax (peak, (double) std::abs (v));
+            }
+            const double rms = std::sqrt (sumSq / (double) d2.size());
+            const int outliers = (int) std::count_if (d2.begin(), d2.end(), [rms] (float v) { return std::abs (v) > 6.0 * rms; });
+            check (outliers == 0 && peak / rms < 10.0 * std::sqrt (2.0),
+                   juce::String::formatted ("HIVE REVERSE repeats of a sine: 2nd-difference peak / rms %.1f dB, %d outlier samples",
+                                            20.0 * std::log10 (peak / rms), outliers));
+        }
+    }
+
     void testNonFiniteInput()
     {
         std::printf ("\nNon-finite input\n");
@@ -3392,6 +3460,115 @@ int main (int argc, char** argv)
         std::printf ("latency %d samples\n", p.getLatencySamples());
         return 0;
     }
+    if (argc >= 4 && juce::String (argv[1]) == "--hive-probe")
+    {
+        // --hive-probe in.wav outdir [raw=0|1]: HIVE alone as a DRY / all-HOLD delay, every stage dumped to WAV
+        juce::AudioFormatManager fm;
+        fm.registerBasicFormats();
+        std::unique_ptr<juce::AudioFormatReader> r (fm.createReaderFor (juce::File (argv[2])));
+        if (r == nullptr) { std::printf ("cannot read %s\n", argv[2]); return 1; }
+        juce::AudioBuffer<float> in (2, (int) r->lengthInSamples);
+        r->read (&in, 0, in.getNumSamples(), 0, true, true);
+        if (r->numChannels == 1) in.copyFrom (1, 0, in, 0, 0, in.getNumSamples());
+        const double sr = r->sampleRate;
+        HiveBlock hive;
+        hive.prepare (sr, 256);
+        HiveBlock::Settings s;
+        s.voicesOn = true; s.drone = 0.0f; s.queen = 0.0f; s.tracking = 1.0f;
+        s.trails = 0.55f; s.repeatSeconds = 0.3f; s.tone = 0.6f; s.fromDry = true; s.gate = 1.0f; s.mix = 0.5f;
+        s.steps.numSteps = 8;
+        for (int k = 0; k < 8; ++k) { s.steps.level[(size_t) k] = 1.0f; s.steps.move[(size_t) k] = HiveBlock::hold; }
+        for (int i = 4; i < argc; ++i)   // raw=0|1  moves=0,4,0,4 (0 hold, 1 up, 2 down, 3 random, 4 reverse)
+        {
+            const juce::String kv (argv[i]);
+            if (kv == "raw=1") s.raw = true;
+            if (kv == "raw=0") s.raw = false;
+            if (kv.startsWith ("moves="))
+            {
+                juce::StringArray m;
+                m.addTokens (kv.fromFirstOccurrenceOf ("=", false, false), ",", "");
+                s.steps.numSteps = juce::jlimit (1, 8, m.size());
+                for (int k = 0; k < m.size() && k < 8; ++k)
+                    s.steps.move[(size_t) k] = (HiveBlock::StepMove) juce::jlimit (0, 4, m[k].getIntValue());
+            }
+        }
+        hive.setParams (s);
+        std::map<juce::String, std::array<std::vector<float>, 2>> taps;
+        hive.debugTap = [&taps] (const char* name, const float* const* data, int ch, int n)
+        {
+            auto& t = taps[name];
+            for (int c = 0; c < 2; ++c)
+                t[(size_t) c].insert (t[(size_t) c].end(), data[juce::jmin (c, ch - 1)], data[juce::jmin (c, ch - 1)] + n);
+        };
+        auto& out = taps["out"];
+        for (int start = 0; start < in.getNumSamples(); start += 256)
+        {
+            const int n = juce::jmin (256, in.getNumSamples() - start);
+            float* ptr[2] { in.getWritePointer (0, start), in.getWritePointer (1, start) };
+            hive.process (ptr, 2, n);
+            for (int c = 0; c < 2; ++c)
+                out[(size_t) c].insert (out[(size_t) c].end(), ptr[c], ptr[c] + n);
+        }
+        const juce::File dir (argv[3]);
+        dir.createDirectory();
+        for (auto& [name, t] : taps)
+        {
+            juce::AudioBuffer<float> b (2, (int) t[0].size());
+            for (int c = 0; c < 2; ++c)
+                b.copyFrom (c, 0, t[(size_t) c].data(), b.getNumSamples());
+            auto f = dir.getChildFile (name + ".wav");
+            f.deleteFile();
+            juce::WavAudioFormat wav;
+            std::unique_ptr<juce::OutputStream> os (f.createOutputStream().release());
+            if (auto w = wav.createWriterFor (os, juce::AudioFormatWriterOptions().withSampleRate (sr).withNumChannels (2).withBitsPerSample (24)))
+                w->writeFromAudioSampleBuffer (b, 0, b.getNumSamples());
+        }
+        std::printf ("wrote %d taps\n", (int) taps.size());
+        return 0;
+    }
+
+    if (argc >= 4 && juce::String (argv[1]) == "--perf-blocks")
+    {
+        // --perf-blocks "<preset>" <block> [paramId=value ...]: per-block processing time at 48 kHz - what a
+        // live buffer sees (dropouts come from the slowest blocks, not the average)
+        SwarmnessAudioProcessor p;
+        p.getPresetManager().loadPreset (argv[2]);
+        const int block = juce::jmax (16, juce::String (argv[3]).getIntValue());
+        for (int i = 4; i < argc; ++i)
+        {
+            const juce::String kv (argv[i]);
+            if (auto* param = p.getAPVTS().getParameter (kv.upToFirstOccurrenceOf ("=", false, false)))
+                param->setValueNotifyingHost (param->convertTo0to1 (kv.fromFirstOccurrenceOf ("=", false, false).getFloatValue()));
+        }
+        const double sr = 48000.0;
+        p.setPlayConfigDetails (2, 2, sr, block);
+        p.prepareToPlay (sr, block);
+        auto input = makeGuitar (sr, (int) sr * 8);
+        p.getAPVTS().getParameter (ParamIDs::oct1)->setValueNotifyingHost (1.0f);
+        std::vector<double> ms;
+        juce::MidiBuffer midi;
+        for (int start = 0; start + block <= input.getNumSamples(); start += block)
+        {
+            juce::AudioBuffer<float> b (2, block);
+            for (int ch = 0; ch < 2; ++ch)
+                b.copyFrom (ch, 0, input, juce::jmin (ch, input.getNumChannels() - 1), start, block);
+            const auto t0 = std::chrono::steady_clock::now();
+            p.processBlock (b, midi);
+            ms.push_back (std::chrono::duration<double, std::milli> (std::chrono::steady_clock::now() - t0).count());
+        }
+        const double budget0 = 1000.0 * block / sr;
+        for (size_t i = 0; i < ms.size(); ++i)
+            if (ms[i] > budget0 * 0.5)
+                std::printf ("  slow block #%d at %.2f s: %.3f ms\n", (int) i, (double) i * block / sr, ms[i]);
+        std::sort (ms.begin(), ms.end());
+        const double budget = 1000.0 * block / sr, mean = std::accumulate (ms.begin(), ms.end(), 0.0) / (double) ms.size();
+        const int over = (int) std::count_if (ms.begin(), ms.end(), [budget] (double v) { return v > budget; });
+        std::printf ("%-20s block %4d (budget %.2f ms): mean %.3f ms (%.0f%%), p99 %.3f, max %.3f ms (%.0f%% of budget), %d of %d blocks over budget\n",
+                     argv[2], block, budget, mean, 100.0 * mean / budget, ms[(size_t) ((double) ms.size() * 0.99)], ms.back(),
+                     100.0 * ms.back() / budget, over, (int) ms.size());
+        return 0;
+    }
+
     if (argc >= 3 && juce::String (argv[1]) == "--only")
     {
         const juce::String which (argv[2]);
@@ -3405,6 +3582,7 @@ int main (int argc, char** argv)
         if (which == "amp")     testAmp();
         if (which == "cab")     testCab();
         if (which == "wasp")    testWasp();
+        if (which == "splices") testSpliceContinuity();
         if (which == "tuner")   testTuner();
         std::printf ("\n%s (%d failure%s)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures, failures == 1 ? "" : "s");
         return failures == 0 ? 0 : 1;
@@ -3443,6 +3621,7 @@ int main (int argc, char** argv)
     testChainOrder();
     testParallelRouting();
     testNonFiniteInput();
+    testSpliceContinuity();
     testMissingFiles();
     testParameterOrder();
     testGraphicEq();

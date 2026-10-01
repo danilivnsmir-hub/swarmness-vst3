@@ -4,6 +4,7 @@
 #include "PitchVoice.h"
 #include "SpeedStage.h"
 #include <array>
+#include <functional>
 #include <vector>
 
 /**
@@ -118,6 +119,9 @@ public:
         float anger = 0.0f, frenzy = 0.0f, buzz = 0.0f, detuneCents = 0.0f, mix = 0.5f;
         bool raw = true;
     };
+
+    /** Diagnostics: gets each stage's audio per control block ("voiceIn", "trailIn", "trail", "voicesOut"). Unset normally. */
+    std::function<void (const char*, const float* const*, int, int)> debugTap;
 
     void prepare (double sr, int maxBlockSize)
     {
@@ -404,6 +408,7 @@ private:
 
         float* vin[2] = { voiceIn.getWritePointer (0), voiceIn.getWritePointer (1) };
         const int voiceBase = voiceRing.write (vin, numChannels, n);
+        if (debugTap) debugTap ("voiceIn", vin, numChannels, n);
 
         float* drone[2] = { droneBuf.getWritePointer (0), droneBuf.getWritePointer (1) };
         droneVoice.process (drone, numChannels, n, voiceBase, lastDroneRatio, droneRatio);
@@ -433,6 +438,7 @@ private:
             const float raw01 = settings.raw ? 1.0f : 0.5f;
             const float wowDepth = raw01 * 0.0045f * (float) sampleRate / (swarm::kTwoPi * wowRate);        // ~ +-8 ct
             const float flutterDepth = raw01 * 0.0015f * (float) sampleRate / (swarm::kTwoPi * flutterRate); // ~ +-2.5 ct
+            float dbgFwd[kControlBlock], dbgBwd[kControlBlock], dbgMix[kControlBlock], dbgPh[kControlBlock];
             for (int i = 0; i < n; ++i)
             {
                 wowPhase += wowRate / (float) sampleRate;
@@ -443,17 +449,44 @@ private:
                 const float g = loopGain.getNextValue();
                 for (int ch = 0; ch < numChannels; ++ch)
                 {
-                    const float fb = readSteps (ch, i, loopD + mod);
+                    const float fb = readSteps (ch, i, loopD, mod);
                     trailIn.setSample (ch, i, g * 0.5f * std::tanh (2.0f * fb));
+                }
+                if (debugTap)
+                {
+                    dbgFwd[i] = readForward (0, i, loopD, mod);
+                    dbgBwd[i] = readBackward (0, i, loopD, mod);
+                    dbgMix[i] = reverseMix;
+                    dbgPh[i] = reversePhase / reverseWindow (loopD);
                 }
                 advanceReverse (loopD);
                 reverseMix += reverseXfade * (reverseTarget - reverseMix);
             }
             float* tin[2] = { trailIn.getWritePointer (0), trailIn.getWritePointer (1) };
             const int trailBase = trailRing.write (tin, numChannels, n);
+            if (debugTap)
+            {
+                debugTap ("trailIn", tin, numChannels, n);
+                const float* a[2] { dbgFwd, dbgBwd }; debugTap ("loopFwdBwd", a, 2, n);
+                const float* b[2] { dbgMix, dbgPh };  debugTap ("revMixPhase", b, 2, n);
+            }
             if (trailIdle) { trailVoice.reset(); lastTrailRatio = trailRatio; trailIdle = false; }
             trailVoice.process (trail, numChannels, n, trailBase, lastTrailRatio, trailRatio);
             lastTrailRatio = trailRatio;
+            if (debugTap)
+            {
+                debugTap ("trail", trail, numChannels, n);
+                // the shifter's state, one value per sample: delay in ms | fading*1000 + unity*100 + ratio cents
+                float st0[kControlBlock], st1[kControlBlock];
+                const auto& e = trailVoice.engine();
+                for (int i = 0; i < n; ++i)
+                {
+                    st0[i] = e.currentDelay() * 10.0f / (float) sampleRate;                      // delay in ms / 100
+                    st1[i] = ((e.isFading() ? 1000.0f : 0.0f) + 100.0f * e.unityAmount() + 1200.0f * std::log2 (trailRatio)) * 1.0e-4f;
+                }
+                const float* st[2] { st0, st1 };
+                debugTap ("trailState", st, 2, n);
+            }
         }
         else
         {
@@ -517,6 +550,7 @@ private:
 
         float* vo[2] = { voicesOut.getWritePointer (0), voicesOut.getWritePointer (1) };
         speedVoices.process (vo, numChannels, n);   // BUZZ
+        if (debugTap) debugTap ("voicesOut", vo, numChannels, n);
     }
 
     //==========================================================================
@@ -617,14 +651,26 @@ private:
         if (stepMove == down) stepSemis = -currentPitch();
     }
 
-    float readSteps (int ch, int i, float loopD) const noexcept
+    /** The loop at one repeat back; `mod` = the wow / flutter offset of the read position (samples). */
+    float readSteps (int ch, int i, float loopD, float mod) const noexcept
     {
-        const float now = (float) (loopWrite + i);
-        const float forward = readLoop (ch, now - loopD);
+        const float forward = readForward (ch, i, loopD, mod);
         if (reverseMix < 1.0e-4f && reverseTarget < 0.5f)
             return forward;
+        return forward + reverseMix * (readBackward (ch, i, loopD, mod) - forward);
+    }
 
-        // REVERSE: two heads run backwards through the last window, crossfaded (sin^2)
+    float readForward (int ch, int i, float loopD, float mod) const noexcept
+    {
+        return readLoop (ch, (float) (loopWrite + i) - loopD - mod);
+    }
+
+    /** REVERSE: two heads run backwards through the last window, crossfaded (sin^2). The window and the
+        heads' phases use the same (unmodulated) loopD as advanceReverse - with the wow on the window the
+        second head jumped by the wow's depth whenever the phase wrapped, at full gain: a click per lap. */
+    float readBackward (int ch, int i, float loopD, float mod) const noexcept
+    {
+        const float now = (float) (loopWrite + i);
         const float w = reverseWindow (loopD);
         float backward = 0.0f;
         for (int head = 0; head < 2; ++head)
@@ -632,9 +678,9 @@ private:
             float ph = reversePhase + (head == 0 ? 0.0f : 0.5f * w);
             if (ph >= w) ph -= w;
             const float gain = std::sin (swarm::kPi * ph / w);
-            backward += gain * gain * readLoop (ch, now - w - 2.0f * ph);
+            backward += gain * gain * readLoop (ch, now - w - 2.0f * ph - mod);
         }
-        return forward + reverseMix * (backward - forward);
+        return backward;
     }
 
     void advanceReverse (float loopD) noexcept

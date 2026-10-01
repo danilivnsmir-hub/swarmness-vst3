@@ -100,6 +100,12 @@ public:
         alignSplices   = tightness > 0.3f;
     }
 
+    /** Diagnostics: the active read head's delay (samples), whether a splice fade is running, the unity blend. */
+    float currentDelay() const noexcept { return delay[(size_t) active]; }
+    bool isFading() const noexcept { return fading; }
+    float unityAmount() const noexcept { return unityBlend; }
+    float minimumDelay() const noexcept { return minDelay; }
+
     void reset() noexcept
     {
         delay = { minDelay + 1.0f, minDelay + 1.0f };
@@ -136,6 +142,7 @@ public:
                 maybeSplice (ratio, numChannels, wp);
 
             float gOld = 1.0f, gNew = 0.0f;
+            bool fadeDone = false;
             if (fading)
             {
                 const float t = (float) fadePos / (float) fadeLength;
@@ -144,8 +151,8 @@ public:
                 if (++fadePos >= fadeLength)
                 {
                     fading = false;
-                    active = 1 - active;
-                }
+                    fadeDone = true;   // the heads swap after this sample is read (swapping first put the
+                }                      // faded-out head at full gain for one sample: a click on every splice)
             }
 
             const int other = 1 - active;
@@ -160,6 +167,8 @@ public:
 
                 out[ch][i] = unityBlend > 1.0e-5f ? shifted + unityBlend * (buf[(size_t) wp] - shifted) : shifted;
             }
+            if (fadeDone)
+                active = 1 - active;
 
             ratio += ratioStep;
         }

@@ -1,5 +1,6 @@
 #include "Controls.h"
 #include "../Parameters.h"
+#include "../DSP/HiveBlock.h"   // the ready-made STEPS fills, for the pattern's name
 #include <limits>
 
 using namespace Theme;
@@ -1333,13 +1334,25 @@ void StepGrid::paint (juce::Graphics& g)
     g.drawText ("+", plusArea(), juce::Justification::centred, false);
     g.setColour (Colours::accentBright);
     g.drawText (juce::String (n), juce::Rectangle<float> (68.0f, 0.0f, 24.0f, 20.0f), juce::Justification::centred, false);
+    // the pattern's name when it is one of the ready-made fills, "Custom" once it has been edited
+    juce::String fillName ("Custom");
+    for (int f = 0; f < HiveBlock::numFills; ++f)
+    {
+        const auto pat = HiveBlock::makeFill (f);
+        bool same = pat.numSteps == n;
+        for (int k = 0; same && k < n; ++k)
+            same = std::abs (pat.level[(size_t) k] - level (k)) < 0.005f && pat.move[(size_t) k] == move (k);
+        if (same) { fillName = ParamChoices::trailFills[f]; break; }
+    }
     const auto fr = fillArea();
     g.setColour (Colours::inset);
     g.fillRoundedRectangle (fr, 3.0f);
     g.setColour (Colours::panelBorder);
     g.drawRoundedRectangle (fr, 3.0f, 1.0f);
-    g.setColour (Colours::text);
-    g.drawText ("FILL  v", fr, juce::Justification::centred, false);
+    g.setColour (fillName == "Custom" ? Colours::textDim : Colours::text);
+    g.setFont (font (12.0f, true));
+    g.drawFittedText (fillName + "  v", fr.toNearestInt().reduced (3, 0), juce::Justification::centred, 1, 0.8f);
+    g.setFont (font (13.0f, true));
 
     // bars
     const auto bars = barsArea();
