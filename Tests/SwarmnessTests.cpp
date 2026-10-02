@@ -1042,6 +1042,33 @@ namespace
                juce::String::formatted ("-6 dBFS sine: untouched (peak %.3f, 3rd harmonic %.0f dB)", quiet.getMagnitude (0, 4800, 43200), thd));
     }
 
+    void testStandaloneInput()
+    {
+        std::printf ("\nStandalone input: AUTO takes the one live channel of the interface\n");
+        const double sr = 48000.0;
+        SwarmnessAudioProcessor p;
+        resetToInit (p);
+        p.setStandaloneInputHandling (true);
+        auto in = makeGuitar (sr, 48000);
+        in.clear (1, 0, in.getNumSamples());   // the guitar on channel 1 (left) only
+        auto out = render (p, in, sr, 256);
+        check (nullDb (out, in, p.getLatencySamples(), 9600, 48000) > -20.0 && out.getRMSLevel (1, 9600, 38400) > 0.5f * out.getRMSLevel (0, 9600, 38400),
+               "left only: both outputs carry the guitar");
+        auto right = makeGuitar (sr, 48000);
+        right.clear (0, 0, right.getNumSamples());
+        SwarmnessAudioProcessor q;
+        resetToInit (q);
+        q.setStandaloneInputHandling (true);
+        auto out2 = render (q, right, sr, 256);
+        check (out2.getRMSLevel (0, 9600, 38400) > 0.5f * out2.getRMSLevel (1, 9600, 38400), "right only: both outputs carry the guitar");
+        SwarmnessAudioProcessor r;
+        resetToInit (r);
+        r.setStandaloneInputHandling (true);
+        r.setInputSource (SwarmnessAudioProcessor::InputSource::stereo);
+        auto out3 = render (r, in, sr, 256);
+        check (out3.getRMSLevel (1, 9600, 38400) < 1.0e-4f, "forced STEREO: the silent channel stays silent");
+    }
+
     void testOutputHold()
     {
         std::printf ("\nOutput FREEZE and STOP\n");
@@ -4464,6 +4491,7 @@ int main (int argc, char** argv)
         if (which == "limiter") testOutputLimiter();
         if (which == "hold")    testOutputHold();
         if (which == "blockpresets") testBlockPresets();
+        if (which == "standalone") testStandaloneInput();
         if (which == "gates")   testGates();
         if (which == "tuner")   testTuner();
         std::printf ("\n%s (%d failure%s)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures, failures == 1 ? "" : "s");
@@ -4500,6 +4528,7 @@ int main (int argc, char** argv)
     testOutputLimiter();
     testOutputHold();
     testBlockPresets();
+    testStandaloneInput();
     testFuzzSag();
     testMonoToStereo();
     testMidiLearn();

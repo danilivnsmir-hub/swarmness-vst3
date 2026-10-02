@@ -1,4 +1,7 @@
 #include "PluginEditor.h"
+#if JucePlugin_Build_Standalone
+ #include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>
+#endif
 
 using namespace Theme;
 
@@ -272,6 +275,33 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
             processor.setUiValues (Knob::alwaysShowValues);
             repaint();
         });
+       #if JucePlugin_Build_Standalone
+        if (processor.wrapperType == juce::AudioProcessor::wrapperType_Standalone)
+        {
+            m.addSeparator();
+            juce::PopupMenu source;
+            static const char* names[] { "Auto (follows the signal)", "Left channel", "Right channel", "Stereo" };
+            for (int i = 0; i < 4; ++i)
+                source.addItem (names[i], true, (int) processor.getInputSource() == i, [this, i] { processor.setInputSource ((SwarmnessAudioProcessor::InputSource) i); });
+            m.addSubMenu ("Input source", source);
+            m.addItem ("Audio settings (single channels)...", [this]
+            {
+                if (auto* holder = juce::StandalonePluginHolder::getInstance())
+                {
+                    auto* selector = new juce::AudioDeviceSelectorComponent (holder->deviceManager, 0, 2, 0, 2, true, false, false, false);
+                    selector->setSize (520, 600);
+                    juce::DialogWindow::LaunchOptions o;
+                    o.content.setOwned (selector);
+                    o.dialogTitle = "Audio settings - one channel at a time";
+                    o.dialogBackgroundColour = Colours::panel;
+                    o.escapeKeyTriggersCloseButton = true;
+                    o.useNativeTitleBar = true;
+                    o.resizable = false;
+                    o.launchAsync();
+                }
+            });
+        }
+       #endif
     };
     // the LINK switches left the footer: VENOM's wiring menu has SHIFT A / B (the parameters are unchanged)
     link1Switch.setVisible (false);

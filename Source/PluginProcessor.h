@@ -143,6 +143,13 @@ public:
     /** Tests (no message loop): applies a queued scene / program change now. */
     void flushPendingChanges() { handleAsyncUpdate(); }
 
+    /** Standalone: which device channel is the guitar. AUTO follows the signal (a channel that is silent
+        while the other plays is ignored and the live one goes to both sides), the rest is explicit. */
+    enum class InputSource : int { automatic = 0, left, right, stereo };
+    InputSource getInputSource() const noexcept { return (InputSource) inputSource.load(); }
+    void setInputSource (InputSource s) noexcept { inputSource = (int) s; }
+    void setStandaloneInputHandling (bool on) noexcept { standaloneInput = on; }   // tests: as if running standalone
+
     /** INPUT LEARN: listens for ~5 s and sets INPUT so the loudest peak lands at -12 dBFS. */
     void startInputLearn() noexcept;
     bool isInputLearning() const noexcept { return learnSamplesLeft.load() > 0; }
@@ -228,6 +235,9 @@ private:
     std::atomic<int> pendingScene { 0 };
     std::atomic<int> pendingProgram { -1 };   // MIDI Program Change: a preset to load on the message thread (-1 = none)
     std::atomic<int> learnSamplesLeft { 0 };
+    std::atomic<int> inputSource { 0 };
+    bool standaloneInput = false;
+    float inputEnv[2] { 0.0f, 0.0f };
     std::atomic<float> learnPeak { 0.0f }, pendingInputDb { -1000.0f };
     std::atomic<bool> restoringState { false };
     juce::Array<juce::RangedAudioParameter*> learnableParams;   // index = binding param

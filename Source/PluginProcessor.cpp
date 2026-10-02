@@ -295,6 +295,24 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     if (numSamples == 0 || numChannels == 0)
         return;
 
+    // Standalone: the guitar is on one channel of the interface (or a pair). AUTO: a channel that stays
+    // silent (40 dB under the other for a while) is ignored and the live one feeds both sides
+    if ((wrapperType == wrapperType_Standalone || standaloneInput) && numChannels == 2)
+    {
+        auto mode = getInputSource();
+        if (mode == InputSource::automatic)
+        {
+            const float decay = std::exp (-(float) numSamples / (0.5f * (float) currentSampleRate));
+            for (int ch = 0; ch < 2; ++ch)
+                inputEnv[ch] = juce::jmax (buffer.getMagnitude (ch, 0, numSamples), inputEnv[ch] * decay);
+            if (inputEnv[1] < inputEnv[0] * 0.01f && inputEnv[0] > 1.0e-4f)      mode = InputSource::left;
+            else if (inputEnv[0] < inputEnv[1] * 0.01f && inputEnv[1] > 1.0e-4f) mode = InputSource::right;
+            else                                                                  mode = InputSource::stereo;
+        }
+        if (mode == InputSource::left)       buffer.copyFrom (1, 0, buffer, 0, 0, numSamples);
+        else if (mode == InputSource::right) buffer.copyFrom (0, 0, buffer, 1, 0, numSamples);
+    }
+
     // Hosts may occasionally exceed the announced block size: process in safe chunks.
     if (numSamples > maxBlockSize)
     {
@@ -1397,6 +1415,7 @@ void SwarmnessAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
     state.setProperty ("uiScale", uiScale.load(), nullptr);
     state.setProperty ("uiMini", uiMini.load(), nullptr);
     state.setProperty ("uiValues", uiValues.load(), nullptr);
+    state.setProperty ("uiInput", inputSource.load(), nullptr);
     state.setProperty ("reverbIR", fileReference ("reverbIR", getReverbIRFile()), nullptr);
     state.setProperty ("namModel", fileReference ("namModel", getNamModelFile()), nullptr);
     state.setProperty ("pedalNam", fileReference ("pedalNam", getNamModelFile (true)), nullptr);
@@ -1429,6 +1448,7 @@ void SwarmnessAudioProcessor::setStateInformation (const void* data, int sizeInB
             uiScale = juce::jlimit (0.7f, 2.0f, (float) tree.getProperty ("uiScale", 1.0f));
             uiMini = (bool) tree.getProperty ("uiMini", false);
             uiValues = (bool) tree.getProperty ("uiValues", false);
+            inputSource = juce::jlimit (0, 3, (int) tree.getProperty ("uiInput", 0));
             // MIDI bindings ("paramID:kind:number;..."); up to beta.24 only the footswitches ("midi0".."midi3")
             for (auto& b : midiBindings)
             {
