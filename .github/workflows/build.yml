@@ -137,6 +137,31 @@ jobs:
             dist/*.zip
 
   # ---------------------------------------------------------------------------
+  linux-asan:
+    name: Linux DSP tests under AddressSanitizer
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libasound2-dev libjack-jackd2-dev libfreetype6-dev libfontconfig1-dev \
+            libx11-dev libxcomposite-dev libxcursor-dev libxext-dev libxinerama-dev libxrandr-dev libxrender-dev \
+            libglu1-mesa-dev mesa-common-dev libcurl4-openssl-dev
+
+      - name: Configure
+        run: >
+          cmake -B build-asan -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          -DCMAKE_CXX_FLAGS="-fsanitize=address -fno-omit-frame-pointer" -DCMAKE_C_FLAGS="-fsanitize=address -fno-omit-frame-pointer"
+          -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address"
+
+      - name: Build the tests
+        run: cmake --build build-asan --target SwarmnessTests
+
+      - name: DSP tests (ASan)
+        run: ASAN_OPTIONS=detect_leaks=0 build-asan/SwarmnessTests_artefacts/RelWithDebInfo/SwarmnessTests
+
   linux:
     name: Linux (VST3 + Standalone)
     runs-on: ubuntu-22.04
