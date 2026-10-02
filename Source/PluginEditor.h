@@ -23,6 +23,8 @@ public:
 
     explicit MainPanel (SwarmnessAudioProcessor&);
 
+    ~MainPanel() override;
+
     void resized() override;
     void tick();   // called by the editor's timer
 

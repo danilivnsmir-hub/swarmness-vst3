@@ -136,6 +136,8 @@ void Licence::validateIfDue()
     juce::Time lastValid;
     {
         const juce::ScopedLock sl (lock);
+        if (settings->getValue ("key").isEmpty())
+            return;   // nothing to check (a developer build, or no licence yet)
         lastValid = fromIso (settings->getValue ("lastValidated", settings->getValue ("activatedAt")));
     }
     if ((clock() - lastValid).inDays() < kValidateEveryDays)

@@ -286,6 +286,11 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     tick();
 }
 
+MainPanel::~MainPanel()
+{
+    processor.getLicence().onChange = nullptr;   // no more callbacks into a panel that is gone
+}
+
 void MainPanel::setupDisclosure (Disclosure& d, juce::Component& parent, int block, std::initializer_list<juce::Component*> hidden,
                                  std::initializer_list<const char*> paramIds, const juce::String& tooltip)
 {
@@ -1060,13 +1065,15 @@ MainPanel::LicencePanel::LicencePanel (SwarmnessAudioProcessor& p) : processor (
     {
         status = "Contacting the store...";
         repaint();
-        processor.getLicence().activate (keyEditor.getText(), [this] { refresh(); });
+        juce::Component::SafePointer<LicencePanel> safe (this);
+        processor.getLicence().activate (keyEditor.getText(), [safe] { if (safe != nullptr) safe->refresh(); });
     };
     deactivateButton.onClick = [this]
     {
         status = "Contacting the store...";
         repaint();
-        processor.getLicence().deactivate ([this] { refresh(); });
+        juce::Component::SafePointer<LicencePanel> safe (this);
+        processor.getLicence().deactivate ([safe] { if (safe != nullptr) safe->refresh(); });
     };
     buyButton.onClick = [] { juce::URL (Licence::kStoreUrl).launchInDefaultBrowser(); };
     closeButton.onClick = [this] { setVisible (false); };
