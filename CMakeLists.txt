@@ -6,7 +6,7 @@ if(APPLE AND NOT DEFINED CMAKE_OSX_ARCHITECTURES)
     set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "macOS architectures")
 endif()
 
-project(Swarmness VERSION 1.0.1 LANGUAGES C CXX)
+project(Swarmness VERSION 1.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -18,6 +18,8 @@ if(WIN32)
 endif()
 
 option(SWARMNESS_BUILD_TESTS "Build the offline DSP test runner" ON)
+# The trial / licence code is built in, but stays off until the store exists (then flip this to OFF)
+option(SWARMNESS_NO_LICENCE "No trial, no licence key" ON)
 
 # ============================================================================
 # JUCE: use -DJUCE_PATH=/path/to/JUCE (or the JUCE_PATH env var), otherwise
@@ -143,6 +145,7 @@ juce_add_binary_data(SwarmnessBinaryData
 
 set(SWARMNESS_DSP_SOURCES
     Source/Amp/Tone3000.cpp
+    Source/Licence.cpp
     Source/Parameters.cpp
     Source/PluginProcessor.cpp
     Source/Preset/PresetManager.cpp)
@@ -181,6 +184,7 @@ else()
 endif()
 
 target_compile_definitions(Swarmness PUBLIC
+    SWARMNESS_NO_LICENCE=$<BOOL:${SWARMNESS_NO_LICENCE}>
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=${SWARMNESS_USE_CURL}
     SWARMNESS_TONE3000_KEY="${SWARMNESS_TONE3000_KEY}"

@@ -7,6 +7,8 @@
 #include "DSP/FuzzStage.h"
 #include "DSP/SwarmChorus.h"
 #include "DSP/FlowGate.h"
+#include "Licence.h"
+#include "DSP/HoneyBlock.h"
 #include "DSP/Equalisers.h"
 #include "DSP/ReverbStage.h"
 #include "DSP/AmpBlock.h"
@@ -71,10 +73,13 @@ public:
         std::array<std::atomic<float>, 2> output {};
         std::atomic<float> pitchSemitones { 0.0f };   // current SHIFT transposition
         std::atomic<bool>  noiseEngaged { false };
+        std::atomic<unsigned> engagedBlocks { 0 };     // bit per Chain::Block: effectively on (power or a stomp)
         std::atomic<float> stackSemitones { 0.0f };   // SHIFT STACK voice
         std::atomic<bool>  stackOn { false };
         std::atomic<int>   trailStep { -1 };             // TRAILS step now playing (-1 = none)
+        std::atomic<int>   wingStep { -1 };              // WINGS step now playing (-1 = none)
         std::atomic<float> reverbLevel { 0.0f };       // CRYPT wet peak
+        std::atomic<float> honeyGr { 0.0f };           // HONEY gain reduction, dB
     };
 
     Meters& getMeters() noexcept { return meters; }
@@ -132,8 +137,20 @@ public:
     /** Editor scale factor, persisted with the plug-in state. */
     float getUiScale() const noexcept     { return uiScale.load(); }
     void setUiScale (float scale) noexcept { uiScale = scale; }
+    Licence& getLicence() noexcept { return licence; }
+    /** Tests (no message loop): applies a queued scene / program change now. */
+    void flushPendingChanges() { handleAsyncUpdate(); }
+
+    /** INPUT LEARN: listens for ~5 s and sets INPUT so the loudest peak lands at -12 dBFS. */
+    void startInputLearn() noexcept;
+    bool isInputLearning() const noexcept { return learnSamplesLeft.load() > 0; }
     bool getUiMini() const noexcept       { return uiMini.load(); }
     void setUiMini (bool m) noexcept      { uiMini = m; }
+    /** Which blocks have their MORE controls open (a bit per block) and whether knob values are always shown. */
+    int getUiMore() const noexcept        { return uiMore.load(); }
+    void setUiMore (int bits) noexcept    { uiMore = bits; }
+    bool getUiValues() const noexcept     { return uiValues.load(); }
+    void setUiValues (bool v) noexcept    { uiValues = v; }
     /** Last page shown in the editor (FX / EQ / CRYPT), kept while the plug-in is loaded. */
     int getUiPage() const noexcept         { return uiPage.load(); }
     void setUiPage (int page) noexcept     { uiPage = page; }
@@ -202,9 +219,14 @@ private:
         cab.setUserMix (p.cabIrMix->load() * 0.01f, p.cabIrInvB->load() > 0.5f);
     }
     Tone3000 tone3000;
+    Licence licence;
+    juce::SmoothedValue<float> licenceGate;   // 1 = the trial is over and no key: the dry signal passes
     TunerTap tunerTap;
     juce::SmoothedValue<float> tunerGain;
     std::atomic<int> pendingScene { 0 };
+    std::atomic<int> pendingProgram { -1 };   // MIDI Program Change: a preset to load on the message thread (-1 = none)
+    std::atomic<int> learnSamplesLeft { 0 };
+    std::atomic<float> learnPeak { 0.0f }, pendingInputDb { -1000.0f };
     std::atomic<bool> restoringState { false };
     juce::Array<juce::RangedAudioParameter*> learnableParams;   // index = binding param
     int indexOfParam (const juce::String& paramID) const noexcept;
@@ -234,6 +256,9 @@ private:
         std::atomic<float>* fuzzScoop {};  std::atomic<float>* fuzzGlare {};   std::atomic<float>* fuzzBlend {};   std::atomic<float>* fuzzSag {};
         std::atomic<float>* flowOn {};     std::atomic<float>* flowHard {};    std::atomic<float>* flowSync {};
         std::atomic<float>* flowAmount {}; std::atomic<float>* flowSpeed {};   std::atomic<float>* flowDiv {};
+        std::atomic<float>* wgSteps {};    std::array<std::atomic<float>*, 16> wgLevels {};
+        std::atomic<float>* hnOn {};       std::atomic<float>* hnSustain {};   std::atomic<float>* hnAttack {};
+        std::atomic<float>* hnBlend {};    std::atomic<float>* hnLevel {};     std::atomic<float>* hnLimit {};
         std::atomic<float>* output {};      std::atomic<float>* input {};      std::atomic<float>* bypass {};
 
         std::atomic<float>* geqOn {};      std::atomic<float>* geqLevel {};
@@ -244,6 +269,13 @@ private:
         std::atomic<float>* revOn {};      std::atomic<float>* revType {};     std::atomic<float>* revMix {};
         std::atomic<float>* revDecay {};   std::atomic<float>* revSize {};     std::atomic<float>* revPreDelay {};
         std::atomic<float>* revTone {};    std::atomic<float>* revLowCut {};   std::atomic<float>* revMod {};     std::atomic<float>* revDuck {};
+        std::atomic<float>* revFreeze {};
+        // stomps: STING and the targets of VENOM / STING
+        std::atomic<float>* stingHold {};  std::atomic<float>* stingShiftA {};  std::atomic<float>* stingShiftB {};
+        std::array<std::atomic<float>*, Chain::numBlocks> venomBlock {}, stingBlock {};
+        std::atomic<float>* venomFreeze {}; std::atomic<float>* stingFreeze {};
+        std::atomic<float>* hvStop {}; std::atomic<float>* hvStopTime {}; std::atomic<float>* venomStop {}; std::atomic<float>* stingStop {};
+        std::atomic<float>* fuzzCrush {}; std::atomic<float>* swarmRing {};
         std::atomic<float>* ampOn {};      std::atomic<float>* ampChannel {};  std::atomic<float>* ampGain {};
         std::atomic<float>* ampBass {};    std::atomic<float>* ampMid {};      std::atomic<float>* ampTreble {};   std::atomic<float>* ampPresence {};
         std::atomic<float>* ampDepth {};   std::atomic<float>* ampMaster {};   std::atomic<float>* ampGate {};     std::atomic<float>* ampLevel {};
@@ -253,6 +285,7 @@ private:
         std::atomic<float>* drvOn {};      std::atomic<float>* drvVolume {};   std::atomic<float>* drvDrive {};    std::atomic<float>* drvBright {};
         std::atomic<float>* drvAttack {};  std::atomic<float>* drvGate {};
         std::atomic<float>* drvNam {};     std::atomic<float>* drvNamInput {}; std::atomic<float>* drvNamOutput {}; std::atomic<float>* drvNamLite {};
+        std::atomic<float>* drvCharacter {};
         std::atomic<float>* cabOn {};      std::atomic<float>* cabType {};     std::atomic<float>* cabMic {};      std::atomic<float>* cabDist {};
         std::atomic<float>* cabLowCut {};  std::atomic<float>* cabHighCut {};  std::atomic<float>* cabLevel {};
         std::atomic<float>* cabIrMix {};   std::atomic<float>* cabIrInvB {};
@@ -265,13 +298,17 @@ private:
     {
         double bpm = 120.0;
         std::optional<double> ppq;
-        bool magicHeld = false, oct1Held = false, oct2Held = false;
+        bool magicHeld = false, stingHeld = false, oct1Held = false, oct2Held = false;
+        bool venom = false;                                 // HIVE's self-oscillation (a stomp with HIVE = On)
+        std::array<int, Chain::numBlocks> force {};         // per block: +1 engaged / -1 disengaged by a stomp, 0 = its own power
+        int freezeForce = 0, stopForce = 0;
+        bool engaged (int block, bool power) const noexcept { return force[(size_t) block] > 0 || (force[(size_t) block] == 0 && power); }
     };
 
     void processChainBlock (int block, const BlockContext&, float* const* audio, int numChannels, int numSamples) noexcept;
     void processShift (const BlockContext&, float* const* audio, int numChannels, int numSamples) noexcept;
     void processHive (const BlockContext&, float* const* audio, int numChannels, int numSamples) noexcept;
-    void processSmoke (float* const* audio, int numChannels, int numSamples) noexcept;
+    void processSmoke (const BlockContext&, float* const* audio, int numChannels, int numSamples) noexcept;
     void processWings (const BlockContext&, float* const* audio, int numChannels, int numSamples) noexcept;
 
     juce::AudioParameterBool* bypassParam = nullptr;
@@ -282,6 +319,7 @@ private:
     HiveBlock          hive;          // VOICES + TRAILS
     SwarmChorus        swarmChorus;
     FlowGate           flow;
+    HoneyBlock         honey;         // sustainer / compressor
     swarm::GraphicEq    comb;
     swarm::ParametricEq carve;
     ReverbStage        crypt;
@@ -294,7 +332,12 @@ private:
     std::array<juce::SmoothedValue<float>, Chain::maxSplits> parMixSmoothed;
     juce::AudioBuffer<float> pathBBuffer;   // parallel path B
     // Parallel paths are latency-aligned: the path without SMOKE is delayed by SMOKE's latency.
-    juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::None> pathAlignA { 1 }, pathAlignB { 1 };
+    // per split: path A delayed by the latency of path B's blocks and vice versa, so every path takes as
+    // long as the blocks in series would, and the plug-in's latency never depends on the layout
+    std::array<std::array<juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::None>, 2>, Chain::maxSplits> pathAlign;
+    std::array<std::array<int, 2>, Chain::maxSplits> pathAlignSamples {};
+    int blockLatency (int block) const noexcept;
+    void applyPathAlignment() noexcept;
 
     SpectrumTap spectrumTap;
     juce::File reverbIRFile;
@@ -326,6 +369,8 @@ private:
     Meters meters;
     std::atomic<float> uiScale { 1.0f };
     std::atomic<bool> uiMini { false };
+    std::atomic<int> uiMore { 0 };
+    std::atomic<bool> uiValues { false };
     std::atomic<int> uiPage { 0 };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SwarmnessAudioProcessor)

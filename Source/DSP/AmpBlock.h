@@ -86,7 +86,7 @@ public:
         namCopy.setSize (2, maxBlock, false, false, true);
 
         namRunner.prepare (sampleRate, maxBlock);
-        gate.prepare (sampleRate, maxBlock);
+        gate.prepare (sampleRate, maxBlock, kGateLookaheadSeconds);
         reset();
     }
 
@@ -123,16 +123,26 @@ public:
     void releaseRetired() { namRunner.releaseRetired(); }
 
     //==============================================================================
+    /** The gate's lookahead: the block always delays its audio by this much. */
+    static constexpr double kGateLookaheadSeconds = 0.001;
+    int getLatencySamples() const noexcept { return gate.lookaheadSamples(); }
+
     void process (float* const* audio, int numCh, int numSamples) noexcept
     {
         numCh = juce::jmin (numCh, 2);
         namRunner.pickUp();
 
+        // the gate: keyed from the input before the lookahead delay (which the block always applies,
+        // so its latency doesn't depend on anything); applied softened to the amp's input and in full
+        // to its output below
+        const float* gateCurve = gate.compute (audio, numCh, numSamples, settings.gate);
+        gate.delayInPlace (audio, numCh, numSamples);
+
         onGain.setTargetValue (settings.on ? 1.0f : 0.0f);
         if (! settings.on && ! onGain.isSmoothing())
         {
             onGain.setCurrentAndTargetValue (0.0f);
-            return;   // off: the signal passes untouched
+            return;   // off: the (delayed) signal passes untouched
         }
 
         for (int c = 0; c < numCh; ++c)
@@ -143,11 +153,9 @@ public:
         const bool runNam = useNam || namMix.isSmoothing();
         const bool runModel = ! useNam || namMix.isSmoothing();
 
-        // the gate: keyed from the input, applied to the input and again to the output below
-        const float* gateCurve = gate.compute (audio, numCh, numSamples, settings.gate);
         if (gateCurve != nullptr)
             for (int c = 0; c < numCh; ++c)
-                juce::FloatVectorOperations::multiply (audio[c], gateCurve, numSamples);
+                juce::FloatVectorOperations::multiply (audio[c], gate.inputCurve_(), numSamples);
         if (runNam)
             for (int c = 0; c < numCh; ++c)
                 namCopy.copyFrom (c, 0, audio[c], numSamples);

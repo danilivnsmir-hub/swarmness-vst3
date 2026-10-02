@@ -23,6 +23,8 @@ public:
 
     explicit MainPanel (SwarmnessAudioProcessor&);
 
+    ~MainPanel() override;
+
     void resized() override;
     void tick();   // called by the editor's timer
 
@@ -50,6 +52,7 @@ private:
     // MIDI learn: right-click any control (or a chain tile) for its menu
     void mouseDown (const juce::MouseEvent&) override;
     void showMidiMenu (const juce::String& paramID, juce::Component* target, int value = -1);
+    void addStompWiring (juce::PopupMenu&, bool venom);
     juce::Component* findLearnable (const juce::String& paramID);
     struct LearnMarker : juce::Component
     {
@@ -60,6 +63,20 @@ private:
 
     SwarmnessAudioProcessor& processor;
     APVTS& state;
+
+    /** A block's MORE pill and the secondary controls it reveals (bit = Chain::Block, saved with the session). */
+    struct Disclosure
+    {
+        MoreToggle button;
+        std::vector<juce::Component*> hidden;
+        std::vector<const char*> paramIds;
+        int bit = 0;
+    };
+    Disclosure moreSmoke, moreHive, moreShift;
+    void setupDisclosure (Disclosure&, juce::Component& parent, int block, std::initializer_list<juce::Component*> hidden,
+                          std::initializer_list<const char*> paramIds, const juce::String& tooltip);
+    void applyDisclosure (Disclosure&);
+    bool moreOpen (const Disclosure& d) const { return (processor.getUiMore() & (1 << d.bit)) != 0; }
 
     juce::Image logo, emblem;
     Backdrop backdrop;
@@ -91,8 +108,8 @@ private:
     PowerButton hivePower;
     PillToggle snapToggle { "SNAP" };
     Knob pitchKnob { "PITCH", true }, primaryKnob { "DRONE" }, secondaryKnob { "QUEEN" }, trackingKnob { "TRACKING" };
-    PillToggle rbSyncToggle { "SYNC" }, trDryToggle { "DRY" };
-    Knob magicKnob { "TRAILS" }, rbTimeKnob { "TIME" }, rbDivKnob { "DIV" }, toneKnob { "TONE" }, gateKnob { "GATE" };
+    PillToggle rbSyncToggle { "SYNC" }, trDryToggle { "DRY" }, hvStopToggle { "STOP" };
+    Knob magicKnob { "TRAILS" }, rbTimeKnob { "TIME" }, rbDivKnob { "DIV" }, toneKnob { "TONE" }, gateKnob { "GATE" }, hvStopTimeKnob { "STOP" };
     StepGrid stepGrid;
     PillToggle rbRawToggle { "RAW" };
     Knob hvMangleKnob { "MANGLE" }, rbDetuneKnob { "DETUNE", true }, rbMixKnob { "MIX" };
@@ -100,36 +117,63 @@ private:
     // SWARM
     PowerButton swarmPower;
     PillToggle deepToggle { "DEEP" };
-    Knob swarmDepthKnob { "DEPTH" }, swarmRateKnob { "RATE" }, swarmMixKnob { "MIX" };
+    Knob swarmDepthKnob { "DEPTH" }, swarmRateKnob { "RATE" }, swarmMixKnob { "MIX" }, swarmRingKnob { "RING" };
 
     // SMOKE (fuzz)
     PowerButton fuzzPower;
     SegmentedChoice fuzzVoiceSelector;
     Knob fuzzKnob { "FUZZ" }, fuzzToneKnob { "TONE" }, fuzzScoopKnob { "SCOOP" };
-    Knob fuzzGlareKnob { "GLARE" }, fuzzGateKnob { "GATE" }, fuzzSagKnob { "SAG" }, fuzzBlendKnob { "CLEAN" };
+    Knob fuzzGlareKnob { "GLARE" }, fuzzGateKnob { "GATE" }, fuzzSagKnob { "SAG" }, fuzzBlendKnob { "CLEAN" }, fuzzCrushKnob { "CRUSH" };
+
+    // HONEY (compressor)
+    PowerButton honeyPower;
+    PillToggle limitToggle { "LIMIT" };
+    Knob honeySustainKnob { "SUSTAIN" }, honeyAttackKnob { "ATTACK" }, honeyBlendKnob { "BLEND" }, honeyLevelKnob { "LEVEL", true };
+    GainReductionMeter honeyMeter;
 
     // WINGS (gate)
     PowerButton flowPower;
     PillToggle hardToggle { "HARD" }, syncToggle { "SYNC" };
     Knob flowAmountKnob { "AMOUNT" }, flowSpeedKnob { "SPEED" }, flowDivKnob { "DIV" };
+    StepGrid wingsGrid;
 
     // Levels (footer, next to the meters)
     Knob inputKnob { "INPUT", true }, volumeKnob { "VOLUME", true };
 
     // Footswitches
-    Footswitch oct1Switch, oct2Switch, magicSwitch, bypassSwitch;
+    Footswitch oct1Switch, oct2Switch, magicSwitch, stingSwitch, bypassSwitch;
+    bool blockEngaged (int block) const;
     MiniSwitch link1Switch { "LINK" }, link2Switch { "LINK" };
     LevelMeter inMeter { "IN" }, outMeter { "OUT" };
+    juce::TextButton learnButton { "LEARN" };
 
     InfoOverlay infoOverlay;
+
+    /** The licence: ACTIVATE / DEACTIVATE with a key, the trial countdown, the store link. */
+    struct LicencePanel : public juce::Component
+    {
+        explicit LicencePanel (SwarmnessAudioProcessor&);
+        void paint (juce::Graphics&) override;
+        void resized() override;
+        void mouseDown (const juce::MouseEvent& e) override { if (! card.contains (e.position)) setVisible (false); }
+        void refresh();
+        SwarmnessAudioProcessor& processor;
+        juce::Rectangle<float> card;
+        juce::TextEditor keyEditor;
+        juce::TextButton activateButton { "ACTIVATE" }, deactivateButton { "DEACTIVATE" }, buyButton { "BUY A LICENCE" }, closeButton { "CLOSE" };
+        juce::String status;
+    };
+    LicencePanel licencePanel;
+    juce::TextButton licenceButton;   // bottom-left: TRIAL - n DAYS / TRIAL OVER - ACTIVATE
+    void refreshLicence();
     TunerOverlay tunerOverlay;
 
     std::vector<std::unique_ptr<APVTS::ButtonAttachment>> buttonAttachments;
 
     // Section rectangles (base coordinates)
-    juce::Rectangle<float> hiveArea, shiftArea, swarmArea, fuzzArea, flowArea, footswitchArea;
+    juce::Rectangle<float> hiveArea, shiftArea, swarmArea, fuzzArea, flowArea, honeyArea, footswitchArea;
     std::array<juce::Rectangle<float>, 3> hiveSections;   // VOICES, TRAILS, MANGLE
-    std::array<bool, 5> lastSectionStates {};   // SHIFT engaged, HIVE on, SWARM, SMOKE, WINGS
+    std::array<bool, 6> lastSectionStates {};   // SHIFT engaged, HIVE on, SWARM, SMOKE, WINGS, HONEY
     int lastShiftA = 999, lastShiftB = 999;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainPanel)

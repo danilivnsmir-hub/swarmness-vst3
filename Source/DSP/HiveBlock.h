@@ -40,14 +40,9 @@ public:
     static constexpr int kMaxSteps = 16;
 
     /** What a TRAILS step does to its repeat. */
-    enum StepMove : int { hold = 0, up, down, random, reverse, numStepMoves };
+    enum StepMove : int { hold = 0, up, down, random, reverse, stutter, numStepMoves };   // stutter: the repeat chopped into a re-triggered slice
 
-    struct StepPattern
-    {
-        int numSteps = 8;
-        std::array<float, kMaxSteps> level { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
-        std::array<int, kMaxSteps> move { up, up, up, up, up, up, up, up, up, up, up, up, up, up, up, up };
-    };
+    using StepPattern = swarm::StepPattern;   // moves default to up
 
     /** Ready-made step patterns (the first five match the old PATTERN choice, so it migrates 1:1). */
     enum Fill : int { fillLadder = 0, fillBounce, fillScatter, fillReverse, fillSwell, fillEcho, fillStutter,
@@ -114,6 +109,8 @@ public:
         bool fromDry = false;       // the repeats start from the input instead of the DRONE (a pitch delay)
         double hostStep = -1.0;     // SYNC: the host position in steps (< 0 = restart the pattern on every note)
         bool venom = false;
+        bool stop = false;          // STOP: the repeats slow to a halt like a tape (pitch falls with them), back when released
+        float stopSeconds = 0.8f;   // how long the halt (and the restart) takes
 
         // MANGLE
         float anger = 0.0f, frenzy = 0.0f, buzz = 0.0f, detuneCents = 0.0f, mix = 0.5f;
@@ -350,6 +347,21 @@ private:
         const auto& s = settings;
         const float loopD = sw::jmax ((float) (kControlBlock + 2), loopDelay.process (loopDelayTarget));
 
+        // STOP: the tape slows down (speed 1 -> 0 over stopSeconds) and starts again when released
+        const float stopStep = 1.0f / sw::jmax (0.02f, s.stopSeconds) / (float) sampleRate;
+        const bool stopping = s.stop;
+        if (stopping && stopMixTarget < 0.5f)
+        {
+            stopMixTarget = 1.0f;
+            if (stopMix < 1.0e-3f)
+            {
+                stopPos = (float) loopWrite - loopD;   // the read head where it is now
+                stopSpeed = 1.0f;
+            }
+        }
+        if (! stopping && stopMixTarget > 0.5f && stopSpeed >= 0.999f)
+            stopMixTarget = 0.0f;   // back up to speed: fade back to the live loop
+
         // Humanise: slow random pitch drift, independent per voice
         if (++driftCounter >= (int) (0.4 * sampleRate / kControlBlock))
         {
@@ -447,9 +459,30 @@ private:
                 if (flutterPhase >= 1.0f) flutterPhase -= 1.0f;
                 const float mod = wowDepth * std::sin (swarm::kTwoPi * wowPhase) + flutterDepth * std::sin (swarm::kTwoPi * flutterPhase);
                 const float g = loopGain.getNextValue();
+                // STOP: a second read head rolls over the (frozen) loop at the tape's speed
+                stopSpeed = sw::jlimit (0.0f, 1.0f, stopSpeed + (stopping ? -stopStep : stopStep));
+                stopMix += 0.002f * (stopMixTarget - stopMix);
+                const float tape = std::sqrt (stopSpeed);   // quieter as it halts (no DC when it stands still)
+                stopPos += stopSpeed;
+                if (stopPos >= (float) loopSize) stopPos -= (float) loopSize;
+                // STUTTER: the first sixth of the repeat, re-triggered over and over (a 2 ms window on each slice)
+                float stutterRewind = 0.0f, stutterWindow = 1.0f;
+                if (stepMove == stutter)
+                {
+                    const float slice = sw::jmax ((float) kControlBlock * 2.0f, loopD / 6.0f);
+                    const float elapsed = stepPos + (float) i;
+                    const float back = elapsed - slice * std::floor (elapsed / slice);
+                    stutterRewind = elapsed - back;
+                    const float edge = 0.002f * (float) sampleRate;
+                    const float w = sw::jmin (1.0f, back / edge, (slice - back) / edge);
+                    stutterWindow = 0.5f - 0.5f * std::cos (swarm::kPi * sw::jmax (0.0f, w));
+                }
                 for (int ch = 0; ch < numChannels; ++ch)
                 {
-                    const float fb = readSteps (ch, i, loopD, mod);
+                    float fb = stepMove == stutter ? stutterWindow * readForward (ch, i, loopD, mod + stutterRewind)
+                                                   : readSteps (ch, i, loopD, mod);
+                    if (stopMix > 1.0e-4f)
+                        fb += stopMix * (tape * readLoop (ch, stopPos) - fb);
                     trailIn.setSample (ch, i, g * 0.5f * std::tanh (2.0f * fb));
                 }
                 if (debugTap)
@@ -538,7 +571,9 @@ private:
                 auto& lt = loopTone[(size_t) ch];
                 lt = fbIn + toneCoeff * (lt - fbIn);
                 const float banded = loopHp[(size_t) ch].process (loopLp[(size_t) ch].process (lt));
-                loopBuf[(size_t) ch][(size_t) ((loopWrite + i) & loopMask)] = dc[(size_t) ch].process (banded);
+                const float written = dc[(size_t) ch].process (banded);
+                if (stopMix < 0.999f)   // STOP holds the tape: nothing is recorded over it while it stands
+                    loopBuf[(size_t) ch][(size_t) ((loopWrite + i) & loopMask)] = written;
 
                 voicesOut.setSample (ch, i, on * 0.9f * std::tanh (z * (1.0f / 0.9f)));
             }
@@ -632,6 +667,10 @@ private:
             case reverse:
                 stepSemis = 0.0f;
                 reverseTarget = 1.0f;
+                trailPanTarget = { 1.0f, 1.0f };
+                break;
+            case stutter:
+                stepSemis = 0.0f;
                 trailPanTarget = { 1.0f, 1.0f };
                 break;
             case up:
@@ -741,6 +780,7 @@ private:
     int loopSize = 0, loopMask = 0, loopWrite = 0;
     bool loopCleared = false;
     float loopDelayTarget = 8000.0f, toneCoeff = 0.0f;
+    float stopPos = 0.0f, stopSpeed = 1.0f, stopMix = 0.0f, stopMixTarget = 0.0f;   // STOP (tape stop) read head
     std::array<float, 2> toneState {}, droneLp {}, queenLp {}, trailLp {}, loopTone {};
     std::array<swarm::SVF, 2> loopLp, loopHp, voiceSubsonic;
     std::array<swarm::DCBlocker, 2> dc;

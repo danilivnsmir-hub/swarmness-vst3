@@ -4,6 +4,7 @@
 #include <array>
 #include <cstdint>
 #include <cstring>
+#include "NoiseGate.h"
 
 /**
  * SMOKE: high-gain, three-stage jumbo fuzz,
@@ -32,7 +33,8 @@
  * little at full FUZZ (a jumbo fuzz at max sustain is compressed; there the touch is in the texture).
  * The input also loads the pickup like a real fuzz input does (damped resonance, earlier roll-off).
  *
- * Built-in noise gate (always on, like the gate every high-gain rig needs): a soft
+ * Built-in noise gate (always on, like the gate every high-gain rig needs; NoiseGate with an
+ * automatic threshold that follows the noise floor): a soft
  * downward expander on the fuzz input. Around 50 dB of fuzz gain would otherwise turn
  * interface hiss and pickup hum into a roar between notes. It opens instantly on a pick,
  * holds briefly and fades smoothly, so note decays are not chopped.
@@ -46,11 +48,12 @@ class FuzzStage
 public:
     static constexpr int kMaxChannels = 2;
     static constexpr int kControlBlock = 32;
-    static constexpr float kGateThresholdDb = -58.0f;   // input peak level (after INPUT) where the gate is fully open
+    // (the input gate follows the noise floor - NoiseGate with the automatic threshold)
 
     struct Settings
     {
         float fuzz = 0.7f, tone = 0.5f, scoop = 0.4f, glare = 0.0f, gate = 0.0f, blend = 0.0f, sag = 0.4f;
+        float crush = 0.0f;   // CRUSH: bit depth 16 -> 4 and sample rate 48 -> 4 kHz together (the aliasing is the point)
         int voice = 1;   // 0 = down, 1 = mid, 2 = up
     };
 
@@ -86,9 +89,8 @@ public:
         const double osRate = sr * (double) (1 << osFactorLog2);
         osSampleRate = osRate;
         gateEnvRelease  = (float) (1.0 - std::exp (-1.0 / (0.03 * sr)));
-        gateOpen        = (float) (1.0 - std::exp (-1.0 / (0.0005 * sr)));
-        gateClose       = (float) (1.0 - std::exp (-1.0 / (0.08 * sr)));
-        gateHoldSamples = (int) (0.04 * sr);
+        inputGate.prepare (sr, kControlBlock);
+        inputGate.setAutoThreshold (true);
         sagAttack  = (float) (1.0 - std::exp (-1.0 / (0.002 * osRate)));
         slowAttack  = (float) (1.0 - std::exp (-1.0 / (0.04 * osRate)));
         slowRelease = (float) (1.0 - std::exp (-1.0 / (0.5 * osRate)));
@@ -103,7 +105,7 @@ public:
 
         // Control smoothing, advanced once per control block
         const double controlRate = sr / kControlBlock;
-        for (auto* s : { &sFuzz, &sGate, &sGlare, &sTone, &sScoop, &sBlend, &sSag,
+        for (auto* s : { &sFuzz, &sGate, &sGlare, &sTone, &sScoop, &sBlend, &sSag, &sCrush,
                          &sHpFreq, &sBoostFreq, &sBoostDb, &sScoopFreq, &sThumpDb, &sTrimDb })
             s->setTime (controlRate, 0.03);
         snapControls();
@@ -122,15 +124,16 @@ public:
         if (oversampler != nullptr) oversampler->reset();
         cleanDelay.reset();
         for (auto& d : dc) d.reset();
+        crushCount = {};
+        crushHeld = {};
         for (auto& d : preDc) d.reset();
         for (auto* bank : { &preHp, &preBoost, &scoopBell, &thump, &fizzLp, &loadLp, &loadBell })
             for (auto& f : *bank) f.reset();
         env = lp1 = lp2 = octHpState = octHpIn = tiltLp = { 0.0f, 0.0f };
         gateEnv = 0.0f;
-        gateGain = 0.0f;
+        inputGate.reset();
         sagEnv = slowEnv = capState = { 0.0f, 0.0f };
         for (auto& d : driftGain) d.reset (1.0f);
-        gateHoldCounter = 0;
     }
 
     int getLatencySamples() const { return oversampler != nullptr ? (int) std::round (oversampler->getLatencyInSamples()) : 0; }
@@ -179,28 +182,19 @@ public:
             const int n = juce::jmin (kControlBlock, numSamples - start);
             advanceControls();
 
+            // the pick envelope (tone dynamics below) and the input gate, keyed from the fuzz's input
             for (int i = start; i < start + n; ++i)
             {
                 float a = 0.0f;
                 for (int c = 0; c < numChannels; ++c)
                     a = juce::jmax (a, std::abs (audio[c][i]));
                 gateEnv = a > gateEnv ? a : gateEnv + gateEnvRelease * (a - gateEnv);
-
-                // Expander: fully open above the threshold, closed 8 dB below it (squared, in dB)
-                const float db = juce::Decibels::gainToDecibels (gateEnv, -120.0f);
-                float target = juce::jlimit (0.0f, 1.0f, (db - (kGateThresholdDb - 8.0f)) / 8.0f);
-                target *= target;
-                if (target >= 1.0f)
-                    gateHoldCounter = gateHoldSamples;
-                else if (gateHoldCounter > 0)
-                {
-                    --gateHoldCounter;
-                    target = 1.0f;
-                }
-                gateGain += (target > gateGain ? gateOpen : gateClose) * (target - gateGain);
-
-                for (int c = 0; c < numChannels; ++c)
-                    audio[c][i] *= gateGain;
+            }
+            {
+                float* sub[2] { audio[0] + start, audio[numChannels > 1 ? 1 : 0] + start };
+                if (const float* curve = inputGate.compute (sub, numChannels, n, 1.0f))
+                    for (int c = 0; c < numChannels; ++c)
+                        juce::FloatVectorOperations::multiply (audio[c] + start, curve, n);
             }
 
             for (int c = 0; c < numChannels; ++c)
@@ -330,6 +324,10 @@ public:
             // Voice trim, plus make-up at low FUZZ where the clippers do not compress yet
             const float lowFuzz = 1.0f - sFuzz.get();
             const float level = 0.42f * juce::Decibels::decibelsToGain (sTrimDb.get() + 10.0f * lowFuzz * lowFuzz);
+            // CRUSH: fewer bits and a sample-and-hold on the fuzz (the clean signal underneath stays clean)
+            const float crush = sCrush.get();
+            const int holdN = 1 + (int) std::round (11.0f * crush * crush);
+            const float quantum = crush > 0.001f ? std::exp2 (1.0f - (16.0f - 12.0f * crush)) : 0.0f;
 
             for (int c = 0; c < numChannels; ++c)
             {
@@ -354,6 +352,16 @@ public:
                     x = scoopBell[(size_t) c].process (x);
                     x = thump[(size_t) c].process (x);
                     x = fizzLp[(size_t) c].process (x);
+
+                    if (quantum > 0.0f)
+                    {
+                        if (++crushCount[(size_t) c] >= holdN)
+                        {
+                            crushCount[(size_t) c] = 0;
+                            crushHeld[(size_t) c] = std::round (x / quantum) * quantum;
+                        }
+                        x = crushHeld[(size_t) c];
+                    }
 
                     const float fx = level * x + blend * clean;
                     audio[c][i] = clean + mixNow * (fx - clean);
@@ -413,7 +421,7 @@ private:
         auto set = [snap] (swarm::OnePole& s, float value) { if (snap) s.reset (value); else s.process (value); };
         set (sFuzz, target.fuzz);   set (sGate, target.gate);     set (sGlare, target.glare);
         set (sTone, target.tone);   set (sScoop, target.scoop);   set (sBlend, target.blend);
-        set (sSag, target.sag);
+        set (sSag, target.sag);     set (sCrush, target.crush);
         set (sHpFreq, v.hpHz);      set (sBoostFreq, v.boostHz);  set (sBoostDb, v.boostDb);
         set (sScoopFreq, v.scoopHz); set (sThumpDb, v.thumpDb); set (sTrimDb, v.trimDb);
     }
@@ -428,7 +436,7 @@ private:
     juce::AudioBuffer<float> cleanCopy;
     juce::SmoothedValue<float> onMix;
 
-    swarm::OnePole sFuzz, sGate, sGlare, sTone, sScoop, sBlend, sSag, sHpFreq, sBoostFreq, sBoostDb, sScoopFreq, sThumpDb, sTrimDb;
+    swarm::OnePole sFuzz, sGate, sGlare, sTone, sScoop, sBlend, sSag, sCrush, sHpFreq, sBoostFreq, sBoostDb, sScoopFreq, sThumpDb, sTrimDb;
 
     std::array<swarm::DCBlocker, kMaxChannels> dc, preDc;
     std::array<swarm::SVF, kMaxChannels> preHp, preBoost, scoopBell, thump, fizzLp, loadLp, loadBell;
@@ -442,7 +450,9 @@ private:
     swarm::FastRandom rng { 0xF022F022u };
     int driftCounter = 0;
     float sagAttack = 0.001f, capCoeff = 0.0001f, slowAttack = 0.0001f, slowRelease = 0.00001f;
-    float gateEnv = 0.0f, gateGain = 0.0f, gateEnvRelease = 0.001f, gateOpen = 0.04f, gateClose = 0.0003f;
-    int gateHoldSamples = 2000, gateHoldCounter = 0;
+    float gateEnv = 0.0f, gateEnvRelease = 0.001f;
+    NoiseGate inputGate;
+    std::array<int, kMaxChannels> crushCount {};
+    std::array<float, kMaxChannels> crushHeld {};
     float envAttack = 0.1f, envRelease = 0.001f, lp1Coeff = 0.9f, lp2Coeff = 0.9f, octHpCoeff = 0.99f, tiltCoeff = 0.9f;
 };

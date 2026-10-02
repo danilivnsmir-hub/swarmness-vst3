@@ -1,5 +1,9 @@
 #pragma once
 
+#include "../DSP/DSPUtils.h"
+#include <functional>
+#include <map>
+
 #include "Theme.h"
 #include "../Preset/PresetManager.h"
 #include <array>
@@ -43,6 +47,11 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
     void mouseDown (const juce::MouseEvent&) override;     // click the value to type an exact number
+    void mouseEnter (const juce::MouseEvent&) override { repaint(); }
+    void mouseExit (const juce::MouseEvent&) override { repaint(); }
+
+    /** The value readout is shown while the mouse is over the knob (or always, a user setting). */
+    static inline bool alwaysShowValues = false;
 
 private:
     struct SnappingSlider : public RightClickSafeSlider
@@ -106,6 +115,15 @@ public:
     SWARM_RIGHT_CLICK_SAFE_BUTTON
 };
 
+/** The MORE pill of a block: opens the secondary controls; a dot while any hidden parameter is off its default. */
+class MoreToggle : public PillToggle
+{
+public:
+    MoreToggle() : PillToggle ("MORE") {}
+    std::function<bool()> hasHiddenChanges;
+    void paintButton (juce::Graphics&, bool isMouseOver, bool isDown) override;
+};
+
 //==============================================================================
 /** Segmented selector bound to a choice parameter (octave, quality...). */
 class SegmentedChoice : public juce::Component,
@@ -146,7 +164,21 @@ class StepGrid : public juce::Component,
                  public juce::SettableTooltipClient
 {
 public:
-    explicit StepGrid (juce::AudioProcessorValueTreeState&);
+    /** Which parameters the grid edits: TRAILS (levels + moves) or WINGS (levels only). */
+    struct Spec
+    {
+        const char* stepsId = nullptr;
+        const char* const* levelIds = nullptr;
+        const char* const* moveIds = nullptr;                       // nullptr = no MOVE row
+        const juce::StringArray* fillNames = nullptr;
+        std::function<swarm::StepPattern (int)> makeFill;
+        std::function<void (std::map<juce::String, float>&, int)> writeFill;
+        juce::String tooltip;
+    };
+    static Spec trails();
+    static Spec wings();
+
+    StepGrid (juce::AudioProcessorValueTreeState&, Spec);
 
     /** From the editor timer: repaints when a step value or the playing step changed. */
     void refresh (int playingStep);
@@ -179,6 +211,8 @@ private:
     void applyFill (int fill);
 
     juce::AudioProcessorValueTreeState& state;
+    const Spec spec;
+    const bool hasMoves;
     std::array<float, kSteps> shownLevel {};
     std::array<int, kSteps> shownMove {};
     int shownSteps = -1, shownPlaying = -2;
@@ -260,6 +294,18 @@ public:
 };
 
 //==============================================================================
+/** HONEY's gain reduction: a thin bar that grows from the right, with the figure. */
+class GainReductionMeter : public juce::Component,
+                           public juce::SettableTooltipClient
+{
+public:
+    void set (float reductionDb);
+    void paint (juce::Graphics&) override;
+private:
+    float shown = 0.0f;
+};
+
+//==============================================================================
 /** Stereo horizontal peak meter with hold. */
 class LevelMeter : public juce::Component,
                    public juce::SettableTooltipClient
@@ -314,6 +360,9 @@ public:
     void refresh();
     void resized() override;
     void paint (juce::Graphics&) override;
+
+    /** Extra items for the "..." menu (view settings), added by the editor. */
+    std::function<void (juce::PopupMenu&)> extraMenuItems;
 
 private:
     void showActionsMenu();

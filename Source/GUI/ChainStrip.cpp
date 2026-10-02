@@ -42,6 +42,7 @@ const char* ChainStrip::powerParamFor (int block)
         case Chain::amp:   return ParamIDs::ampOn;
         case Chain::cab:   return ParamIDs::cabOn;
         case Chain::drive: return ParamIDs::drvOn;
+        case Chain::honey: return ParamIDs::hnOn;
         default:           return nullptr;
     }
 }
@@ -569,7 +570,8 @@ juce::String ChainStrip::getTooltip()
         "SHIFT: pitch shifter (on = SHIFT A all the time); the SHIFT A / B footswitches engage it while held",
         "AMP: amplifier - CLEAN (CHROME) / CRUNCH (BRIT) / LEAD (STEEL) models, or a NAM capture",
         "CAB: speaker cabinet - modelled cabinets or two impulse-response slots (A / B MIX)",
-        "WASP: overdrive in front of the amp - tightens the lows and pushes the gain, or a NAM pedal capture" };
+        "WASP: overdrive in front of the amp - tightens the lows and pushes the gain, or a NAM pedal capture",
+        "HONEY: sustainer / compressor - sticky, even sustain, like a compressor pedal in front of the amp" };
     juce::String tip (what[hover]);
     tip << ". Click to open; drag sideways to move, up / down for parallel paths";
     if (powerParamFor (hover) != nullptr)

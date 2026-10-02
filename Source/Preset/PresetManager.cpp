@@ -1,6 +1,7 @@
 #include "PresetManager.h"
 #include "../Parameters.h"
 #include "../DSP/HiveBlock.h"
+#include "../DSP/FlowGate.h"
 
 const juce::String PresetManager::extension = ".swpreset";
 
@@ -73,6 +74,11 @@ void PresetManager::initialiseFactoryPresets()
           { { rise, 0 }, { fall, 0 }, { stingMix, 50 } } },
         { "Slow Rise", basics, "RISE and FALL: hold a footswitch and the pitch sweeps up over ~1 s; release and it slides back down over ~1.5 s.",
           { { rise, 950 }, { fall, 1500 } } },
+        { "Sticky Clean", basics, "HONEY into the CHROME clean: a compressor pedal in front of the amp - even picking, sticky sustain, a little SWARM.",
+          { { hnOn, 1 }, { hnSustain, 65 }, { hnAttack, 70 }, { hnBlend, 100 }, { hnLevel, 1 },
+            { ampOn, 1 }, { ampChannel, 0 }, { ampGain, 4 }, { ampTreble, 6 }, { ampLevel, 6 },
+            { cabOn, 1 }, { cabType, 1 }, { cabMic, 15 }, { cabDist, 30 },
+            { swarmOn, 1 }, { swarmMix, 25 }, { swarmDepth, 35 } } },
 
         // ---------------------------------------------------------------- recipes
         { "Panic - Octave Panic", recipes, "Fuzz into a footswitch octave: SMOKE into SHIFT. Hold SHIFT A (+1 oct) or SHIFT B (+2 oct); ANGER sours it, FRENZY throws the pitch around, BUZZ grinds, RISE slides into the note.",
@@ -172,6 +178,18 @@ void PresetManager::initialiseFactoryPresets()
           { { fuzzOn, 1 }, { fuzz, 85 }, { fuzzGate, 75 }, { fuzzTone, 45 }, { fuzzScoop, 50 }, { fuzzSag, 90 } } },
         { "Wing Beat Breakdown", texture, "Tempo-synced 1/16 hard WINGS gate on SMOKE. Hold SHIFT A for angry stabs.",
           { { rise, 0 }, { fall, 0 }, { panic, 30 }, { fuzzOn, 1 }, { fuzzVoice, 0 }, { fuzz, 80 }, { fuzzScoop, 60 }, { fuzzBlend, 15 }, { flowOn, 1 }, { flowSync, 1 }, { flowDiv, 4 }, { flowHard, 1 } } },
+        { "Gallop Gate", texture, "WINGS as a pattern gate: the Gallop fill (on, off, on, on) over a quarter note - a rhythm the amp plays for you. Change DIV for the tempo feel.",
+          { { flowOn, 1 }, { flowSync, 1 }, { flowDiv, 2 }, { flowHard, 1 }, { flowAmount, 100 }, { wgSteps, 4 }, { wgLevels[0], 100 }, { wgLevels[1], 0 }, { wgLevels[2], 100 }, { wgLevels[3], 100 },
+            { ampOn, 1 }, { ampChannel, 1 }, { ampGain, 6 }, { cabOn, 1 }, { cabType, 2 } } },
+        { "Glitch Wings", texture, "A 16-step Glitch pattern over one bar, smooth, on a fuzz with trails: broken, stuttering textures that still follow the song.",
+          { { fuzzOn, 1 }, { fuzzVoice, 1 }, { fuzz, 60 }, { flowOn, 1 }, { flowSync, 1 }, { flowDiv, 0 }, { flowHard, 0 }, { flowAmount, 90 },
+            { wgSteps, 16 }, { wgLevels[0], 100 }, { wgLevels[1], 80 }, { wgLevels[2], 0 }, { wgLevels[3], 100 }, { wgLevels[4], 60 }, { wgLevels[5], 0 }, { wgLevels[6], 100 }, { wgLevels[7], 70 },
+            { wgLevels[8], 100 }, { wgLevels[9], 0 }, { wgLevels[10], 50 }, { wgLevels[11], 100 }, { wgLevels[12], 0 }, { wgLevels[13], 100 }, { wgLevels[14], 70 }, { wgLevels[15], 90 },
+            { revOn, 1 }, { revType, 2 }, { revMix, 25 } } },
+        { "Bitten Smoke", texture, "SMOKE with CRUSH: the fuzz through a 6-bit, 8 kHz grinder - digital splinters on top of the diodes, the CLEAN underneath keeps the note readable.",
+          { { fuzzOn, 1 }, { fuzzVoice, 1 }, { fuzz, 65 }, { fuzzScoop, 30 }, { fuzzBlend, 20 }, { fuzzCrush, 70 }, { ampOn, 1 }, { ampChannel, 1 }, { ampGain, 3 }, { cabOn, 1 }, { cabType, 2 } } },
+        { "Bell Swarm", texture, "SWARM DEEP with RING up: the chorus voices ring-modulated into metallic bells over the dry note - clangs and sum tones, CRYPT behind it.",
+          { { swarmOn, 1 }, { swarmDeep, 1 }, { swarmDepth, 40 }, { swarmRate, 0.4f }, { swarmMix, 50 }, { swarmRing, 72 }, { revOn, 1 }, { revType, 2 }, { revMix, 30 }, { revDecay, 4 } } },
         { "Ghost Swarm", texture, "Smooth WINGS tremolo, a quiet octave-up DRONE with trails and SWARM - eerie clean parts.",
           { { rbOn, 1 }, { rbPitch, 12 }, { rbPrimary, 30 }, { rbMagic, 35 }, { rbTime, 300 }, { rbTracking, 85 }, { rbTone, 45 },
             { swarmOn, 1 }, { swarmMix, 35 }, { flowOn, 1 }, { flowHard, 0 }, { flowSpeed, 5.5f }, { flowAmount, 70 } } },
@@ -223,11 +241,13 @@ void PresetManager::initialiseFactoryPresets()
             { revOn, 1 }, { revType, 0 }, { revDecay, 1.1f }, { revMix, 35 }, { revDuck, 80 }, { revLowCut, 250 } } },
         // ------------------------------------------------------------- amps & cabs (CLEAN = CHROME, CRUNCH = BRIT, LEAD = STEEL)
         { "Glass Clean", amps, "CLEAN: the crystal clean into an open 2x12, a little SWARM and a HALL behind it.",
-          { { ampOn, 1 }, { ampChannel, 0 }, { ampGain, 3.5f }, { ampBass, 4.5f }, { ampMid, 5 }, { ampTreble, 6 }, { ampLevel, 9 }, { ampMaster, 4.5f },
-            { cabOn, 1 }, { cabType, 1 }, { cabMic, 35 }, { cabDist, 30 },
+          { { hnOn, 1 }, { hnSustain, 40 }, { hnAttack, 60 }, { hnBlend, 70 },
+            { ampOn, 1 }, { ampChannel, 0 }, { ampGain, 3.5f }, { ampBass, 4.5f }, { ampMid, 5 }, { ampTreble, 6 }, { ampLevel, 9 }, { ampMaster, 4.5f },
+            { cabOn, 1 }, { cabType, 1 }, { cabMic, 15 }, { cabDist, 30 },
             { swarmOn, 1 }, { swarmMix, 30 }, { swarmDepth, 40 }, { revOn, 1 }, { revType, 2 }, { revMix, 20 }, { revDecay, 2.8f } } },
         { "Thall Intro", amps, "The crystal clean for intros: glassy, almost piezo-bright, a tight bottom, wide SWARM and a long HALL - arpeggios that ring like a piano.",
-          { { ampOn, 1 }, { ampChannel, 0 }, { ampGain, 5 }, { ampBass, 4 }, { ampMid, 4 }, { ampTreble, 6.5f }, { ampLevel, 0 },
+          { { hnOn, 1 }, { hnSustain, 40 }, { hnAttack, 60 }, { hnBlend, 70 },
+            { ampOn, 1 }, { ampChannel, 0 }, { ampGain, 5 }, { ampBass, 4 }, { ampMid, 4 }, { ampTreble, 6.5f }, { ampLevel, 0 },
             { cabOn, 1 }, { cabType, 1 }, { cabMic, 15 }, { cabDist, 30 }, { cabLowCut, 90 },
             { swarmOn, 1 }, { swarmMix, 45 }, { swarmDepth, 55 }, { revOn, 1 }, { revType, 2 }, { revMix, 32 }, { revDecay, 4.5f } } },
         { "Brit Crunch", amps, "CRUNCH: bright, barking upper mids and a tight bottom - rock rhythm into the BRIT 4x12. Roll the guitar's volume back to clean it up.",
@@ -253,6 +273,19 @@ void PresetManager::initialiseFactoryPresets()
           { { drvOn, 1 }, { drvDrive, 6 }, { drvVolume, 5.5f }, { drvBright, 5 }, { drvAttack, 4 }, { drvGate, 35 },
             { ampOn, 1 }, { ampChannel, 1 }, { ampGain, 3.5f }, { ampBass, 5 }, { ampMid, 6.5f }, { ampTreble, 6 }, { ampMaster, 6 },
             { cabOn, 1 }, { cabType, 2 }, { cabMic, 30 }, { cabDist, 15 } } },
+        { "Clean Push", amps, "WASP as a clean BOOST into the CHROME amp on the edge of breaking up: flat, no clipper, just more level - the amp does the grit. "
+                              "DRIVE sets how hard it is pushed.",
+          { { drvOn, 1 }, { drvCharacter, 1 }, { drvDrive, 5 }, { drvVolume, 5 }, { drvBright, 5 }, { drvAttack, 2 }, { drvGate, 0 },
+            { ampOn, 1 }, { ampChannel, 0 }, { ampGain, 5.5f }, { ampBass, 5 }, { ampMid, 5 }, { ampTreble, 5.5f }, { ampMaster, 5 }, { ampLevel, -6 },
+            { cabOn, 1 }, { cabType, 1 }, { cabMic, 25 }, { cabDist, 20 } } },
+        { "Smooth Lead", amps, "The classic SMOOTH overdrive into the BRIT amp: soft, symmetric clipping, the mids pushed - a singing, even lead that cleans up with the volume knob.",
+          { { drvOn, 1 }, { drvCharacter, 2 }, { drvDrive, 5.5f }, { drvVolume, 6 }, { drvBright, 6 }, { drvAttack, 3.5f }, { drvGate, 30 },
+            { ampOn, 1 }, { ampChannel, 1 }, { ampGain, 5 }, { ampBass, 5 }, { ampMid, 6 }, { ampTreble, 5.5f }, { ampPresence, 5.5f }, { ampMaster, 6 },
+            { cabOn, 1 }, { cabType, 2 }, { cabMic, 25 }, { cabDist, 15 } } },
+        { "Rasp Rhythm", amps, "RASP, the hard-clipping distortion, into a clean amp: the pedal is the whole sound - grainy, saturated, a tight ATTACK for riffs.",
+          { { drvOn, 1 }, { drvCharacter, 3 }, { drvDrive, 6.5f }, { drvVolume, 5 }, { drvBright, 4.5f }, { drvAttack, 6 }, { drvGate, 40 },
+            { ampOn, 1 }, { ampChannel, 0 }, { ampGain, 4 }, { ampBass, 5.5f }, { ampMid, 5 }, { ampTreble, 5 }, { ampMaster, 5 },
+            { cabOn, 1 }, { cabType, 3 }, { cabMic, 30 }, { cabDist, 15 } } },
         { "Sludge Wall", amps, "LEAD scooped and huge: low MID, BASS and DEPTH up, the mic backed off the grille. Slow riffs, big stops.",
           { { ampOn, 1 }, { ampChannel, 2 }, { ampGain, 6 }, { ampBass, 7 }, { ampMid, 3 }, { ampTreble, 6 }, { ampPresence, 5.5f }, { ampDepth, 7.5f },
             { ampGate, 40 }, { ampMaster, 6.5f }, { ampLevel, -0.5f }, { cabOn, 1 }, { cabType, 3 }, { cabMic, 35 }, { cabDist, 40 } } },
@@ -469,6 +502,14 @@ void PresetManager::writeTrailFill (ValueMap& values, int fill)
         values[ParamIDs::trLevels[k]] = 100.0f * pattern.level[k];
         values[ParamIDs::trMoves[k]] = (float) pattern.move[k];
     }
+}
+
+void PresetManager::writeWingFill (ValueMap& values, int fill)
+{
+    const auto pattern = FlowGate::makeFill (fill);
+    values[ParamIDs::wgSteps] = (float) pattern.numSteps;
+    for (size_t k = 0; k < (size_t) FlowGate::kMaxSteps; ++k)
+        values[ParamIDs::wgLevels[k]] = 100.0f * pattern.level[k];
 }
 
 void PresetManager::migrateLegacyValues (ValueMap& values)

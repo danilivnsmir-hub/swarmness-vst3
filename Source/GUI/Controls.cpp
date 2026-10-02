@@ -1,6 +1,7 @@
 #include "Controls.h"
 #include "../Parameters.h"
 #include "../DSP/HiveBlock.h"   // the ready-made STEPS fills, for the pattern's name
+#include "../DSP/FlowGate.h"
 #include <limits>
 
 using namespace Theme;
@@ -34,6 +35,7 @@ Knob::Knob (const juce::String& c, bool bipolar) : caption (c)
     configureCommonSlider (slider);
     slider.getProperties().set ("bipolar", bipolar);
     slider.onValueChange = [this] { repaint(); };
+    slider.addMouseListener (this, false);   // hover over the knob itself shows the value
     addAndMakeVisible (slider);
 }
 
@@ -97,11 +99,16 @@ void Knob::resized()
 void Knob::paint (juce::Graphics& g)
 {
     auto r = getLocalBounds().toFloat();
-    g.setFont (font (15.0f, true));
-    g.setColour (isEnabled() ? Colours::text.withAlpha (0.78f) : Colours::textFaint);
+    const bool small = getHeight() < 100;   // secondary knobs: smaller lettering
+    g.setFont (font (small ? 12.5f : 15.0f, true));
+    g.setColour (isEnabled() ? Colours::text.withAlpha (small ? 0.62f : 0.78f) : Colours::textFaint);
     g.drawText (caption, r.removeFromTop (18.0f), juce::Justification::centred, false);
 
-    g.setFont (font (15.0f, true));
+    // the value: on hover / while dragging (or always, if the user wants it)
+    const bool showValue = alwaysShowValues || isMouseOver (true) || slider.isMouseButtonDown() || valueEditor != nullptr;
+    if (! showValue)
+        return;
+    g.setFont (font (small ? 12.5f : 15.0f, true));
     g.setColour (isEnabled() ? Colours::accentBright : Colours::textFaint);
     g.drawText (slider.getTextFromValue (slider.getValue()), r.removeFromBottom (18.0f), juce::Justification::centred, false);
 }
@@ -144,6 +151,18 @@ void Fader::paint (juce::Graphics& g)
     g.setFont (font (compact ? 13.0f : 15.0f, true));
     g.setColour (Colours::accentBright);
     g.drawText (value, r.removeFromBottom (18.0f), juce::Justification::centred, false);
+}
+
+void MoreToggle::paintButton (juce::Graphics& g, bool isMouseOver, bool isDown)
+{
+    PillToggle::paintButton (g, isMouseOver, isDown);
+    if (hasHiddenChanges != nullptr && hasHiddenChanges() && ! getToggleState())
+    {
+        // a dot: something under MORE is set away from its default
+        const auto r = getLocalBounds().toFloat();
+        g.setColour (Colours::accentBright);
+        g.fillEllipse (r.getRight() - 11.0f, r.getY() + 4.0f, 5.0f, 5.0f);
+    }
 }
 
 //==============================================================================
@@ -597,6 +616,39 @@ void MiniSwitch::paintButton (juce::Graphics& g, bool isMouseOver, bool)
 }
 
 //==============================================================================
+void GainReductionMeter::set (float reductionDb)
+{
+    const float v = juce::jlimit (0.0f, 30.0f, reductionDb);
+    if (std::abs (v - shown) > 0.05f)
+    {
+        shown = v;
+        repaint();
+    }
+}
+
+void GainReductionMeter::paint (juce::Graphics& g)
+{
+    auto r = getLocalBounds().toFloat();
+    g.setFont (font (11.5f, true));
+    g.setColour (Colours::textDim);
+    g.drawText ("GR", r.removeFromLeft (22.0f), juce::Justification::centredLeft, false);
+    auto value = r.removeFromRight (52.0f);
+    const auto slot = r.reduced (2.0f, r.getHeight() * 0.3f);
+    g.setColour (Colours::inset);
+    g.fillRoundedRectangle (slot, 2.0f);
+    g.setColour (Colours::panelBorder);
+    g.drawRoundedRectangle (slot, 2.0f, 1.0f);
+    if (shown > 0.1f)
+    {
+        const auto bar = slot.reduced (1.0f).removeFromRight ((slot.getWidth() - 2.0f) * juce::jmin (1.0f, shown / 24.0f));
+        g.setGradientFill (juce::ColourGradient (Colours::accentDeep, bar.getX(), 0.0f, Colours::accentBright, bar.getRight(), 0.0f, false));
+        g.fillRoundedRectangle (bar, 1.5f);
+    }
+    g.setColour (shown > 0.1f ? Colours::accentBright : Colours::textFaint);
+    g.drawText (shown > 0.1f ? "-" + juce::String (shown, 1) + " dB" : juce::String ("0 dB"), value, juce::Justification::centredRight, false);
+}
+
+//==============================================================================
 LevelMeter::LevelMeter (const juce::String& c) : caption (c) {}
 
 void LevelMeter::update (float left, float right)
@@ -913,6 +965,11 @@ void PresetBar::showActionsMenu()
     menu.addItem ("Open Presets Folder", [] { PresetManager::getPresetsDirectory().startAsProcess(); });
     menu.addSeparator();
     menu.addItem ("Reset to Init", [this] { presets.loadPreset ("Init"); refresh(); });
+    if (extraMenuItems != nullptr)
+    {
+        menu.addSeparator();
+        extraMenuItems (menu);
+    }
 
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&menuButton));
 }
@@ -1037,15 +1094,19 @@ void InfoOverlay::paint (juce::Graphics& g)
         { "HIVE",     "Harmonies of whatever reaches it (after SHIFT: of the shifted note). DRONE at PITCH and QUEEN (its octave), TRACKING tight..laggy. "
                       "VENOM switches it on while held." },
         { "TRAILS",   "Repeats of the DRONE, shaped by STEPS like a pattern tremolo: each bar = one repeat (LEVEL, 0 = silent) and its MOVE "
-                      "(= hold, up / down by PITCH, ? random, < backwards). GATE chops every step (0 = full repeats). DRY = repeats of your note (a delay). FILL = ready-made patterns. TIME / SYNC = step length. "
-                      "The VENOM footswitch = self-oscillation; LINK drags SHIFT A / B in." },
+                      "(= hold, up / down by PITCH, ? random, < backwards, ||| stutter). GATE chops every step (0 = full repeats). DRY = repeats of your note (a delay). FILL = ready-made patterns. TIME / SYNC = step length. "
+                      "A stomp wired to HIVE (VENOM out of the box) = self-oscillation. STOP = a tape stop of the repeats (the knob = how long)." },
         { "MANGLE",   "HIVE's MANGLE is one knob: sour detuned voices first, then random pitch jumps, then buzz / AM on top. "
                       "RAW = cheap-pedal-DSP character, DETUNE = width, MIX = dry vs voices (100% = voices only)." },
-        { "SWARM",    "Stereo chorus with bucket-brigade colour (DEEP = 8 voices with feedback). WINGS = rhythmic gate: HARD = stutter, off = tremolo, SYNC = host tempo." },
+        { "HONEY",    "Sustainer / compressor, pedal style: SUSTAIN = threshold down and ratio up together (sticky sustain), ATTACK = slower lets the pick through, "
+                      "BLEND = parallel blend with the dry signal, LEVEL on top of the automatic make-up, LIMIT = a fast peak limiter after it (ceiling -6 dBFS). First in the chain by default - in front of the amp for clean parts." },
+        { "SWARM",    "Stereo chorus with bucket-brigade colour (DEEP = 8 voices with feedback; RING = the voices ring-modulated, tremble to bells). WINGS = pattern gate: one cycle (SPEED / DIV) cut into STEPS "
+                      "with a level each (FILL = ready-made patterns); HARD = stutter, off = tremolo, SYNC = host tempo." },
         { "SMOKE",    "Jumbo fuzz. VOICE: DOWN doom / MID / UP scream. SCOOP = mid cut, GLARE = gated octave-up, GATE = starved sputter, SAG = breathing "
-                      "(the pick sags, the note blooms), CLEAN = clean signal under the fuzz." },
-        { "WASP",     "Tight overdrive in front of the AMP (asymmetric hard clipping): DRIVE = tight boost .. square overdrive, ATTACK = how tight the low end is "
-                      "before the clipping, BRIGHT = voicing, VOLUME (5 = about unity), GATE = noise gate keyed from the guitar." },
+                      "(the pick sags, the note blooms), CLEAN = clean signal under the fuzz, CRUSH = fewer bits and a lower sample rate on the fuzz." },
+        { "WASP",     "Overdrive in front of the AMP in four characters: TIGHT (the precision metal drive, asymmetric hard clipping), BOOST (clean, flat), "
+                      "SMOOTH (the classic soft-clipping overdrive), RASP (hard-clipping distortion). DRIVE, ATTACK = how tight the low end is before the "
+                      "clipping, BRIGHT = voicing, VOLUME (5 = about unity), GATE = noise gate keyed from the guitar." },
         { "AMP",      "Three amps: CLEAN = CHROME (crystal clean), CRUNCH = BRIT (barking crunch), LEAD = STEEL (tight high gain). "
                       "NAM = a Neural Amp Modeler capture with its own INPUT / EQ / OUTPUT knobs (all at 5 = the capture as it is) - LOAD .NAM, drop one or browse captures on TONE3000. GATE = noise gate keyed from the guitar (on the amp's input and output)." },
         { "CAB",      "Speaker cabinet: four modelled cabinets (MIC = cap..edge, DISTANCE = grille..room) or your own IRs in two slots A / B "
@@ -1055,11 +1116,18 @@ void InfoOverlay::paint (juce::Graphics& g)
                       "the knob at the merge balances A and B. Order and paths are saved with presets." },
         { "EQ",       "COMB = 10-band graphic EQ (+/-12 dB) with LEVEL. CARVE = parametric: 24 dB/oct LOW / HIGH CUT, shelves and 3 bells - drag the nodes, "
                       "wheel = Q, double-click = reset; the output spectrum runs behind the curve." },
-        { "CRYPT",    "Reverb: ROOM / PLATE / HALL / ABYSS or your own IR (LOAD IR or drop a file). DUCK dips the tail while you play, "
+        { "CRYPT",    "Reverb: ROOM / PLATE / HALL / ABYSS or your own IR (LOAD IR or drop a file). FREEZE holds the tail as a pad. DUCK dips the tail while you play, "
                       "LOW CUT keeps it out of the low end. Switching it off lets the tail ring out." },
+        { "STOMPS",   "VENOM and STING are footswitches you wire yourself: right-click one and pick, per block, On / Off while held (or -), plus SHIFT A / B "
+                      "CRYPT FREEZE and HIVE STOP. The wiring is a scene setting, so every scene can use them differently. VENOM out of the box = HIVE + self-oscillation." },
+        { "LICENCE",  "A 7-day trial from the first run, then a licence key from the store (the TRIAL / ACTIVATE button, bottom left). "
+                      "One key = three of your computers; DEACTIVATE frees one. Checked online once a month, works offline for 45 days." },
+        { "MORE",     "The busier blocks (SMOKE, HIVE, SHIFT, CRYPT) show their main knobs; MORE opens the rest (a dot = something in there is set). "
+                      "Knob values appear when you hover; \"...\" > Always show knob values brings them back for good." },
         { "MIDI",     "Right-click ANY control for MIDI learn: switches toggle on each press, selectors step, knobs follow the CC. "
-                      "One pedal can drive several controls (e.g. ON and WINGS)." },
-        { "LIVE",     "SCENES A..D = four versions of the sound inside one preset (click to switch; right-click = MIDI learn or copy the current scene there). "
+                      "One pedal can drive several controls (e.g. ON and WINGS). Program Change n = preset n of the list." },
+        { "LIVE",     "LEARN under the IN meter: play loud for 5 s and INPUT sets itself (peaks at -12 dBFS). "
+                      "SCENES A..D = four versions of the sound inside one preset (click to switch; right-click = MIDI learn or copy the current scene there). "
                       "TUNE = the tuner (MUTE silences the output while it is open). MINI = a small window with the chain, scenes and footswitches for playing live." },
         { "LEVELS",   "INPUT = input gain: how hard the effects and amps are hit (aim for the green zone of the IN meter). "
                       "VOLUME = output level. Footswitches: MOMENTARY = while held, LATCH = click on / off (they work even while bypassed)." },
@@ -1101,19 +1169,47 @@ void InfoOverlay::paint (juce::Graphics& g)
 }
 
 //==============================================================================
-StepGrid::StepGrid (juce::AudioProcessorValueTreeState& s) : state (s)
+StepGrid::Spec StepGrid::trails()
 {
-    setTooltip ("STEPS - a pattern for the repeats (like a pattern tremolo): every bar is one repeat after the note "
+    Spec s;
+    s.stepsId = ParamIDs::trSteps;
+    s.levelIds = ParamIDs::trLevels;
+    s.moveIds = ParamIDs::trMoves;
+    s.fillNames = &ParamChoices::trailFills;
+    s.makeFill = [] (int f) { return HiveBlock::makeFill (f); };
+    s.writeFill = [] (std::map<juce::String, float>& v, int f) { PresetManager::writeTrailFill (v, f); };
+    s.tooltip = "STEPS - a pattern for the repeats (like a pattern tremolo): every bar is one repeat after the note "
                 "(the pattern restarts on each picked note, or follows the song with SYNC). "
                 "Drag the bars = LEVEL of each repeat (0 = silent, the tail keeps running), double-click = on / off. "
-                "Click the symbol below = MOVE: = hold, up / down by PITCH, ? random chord tone, < backwards. "
-                "STEPS -/+ = pattern length, FILL = ready-made patterns.");
+                "Click the symbol below = MOVE: = hold, up / down by PITCH, ? random chord tone, < backwards, ||| stutter (a slice re-triggered). "
+                "STEPS -/+ = pattern length, FILL = ready-made patterns.";
+    return s;
+}
+
+StepGrid::Spec StepGrid::wings()
+{
+    Spec s;
+    s.stepsId = ParamIDs::wgSteps;
+    s.levelIds = ParamIDs::wgLevels;
+    s.fillNames = &ParamChoices::wingFills;
+    s.makeFill = [] (int f) { return FlowGate::makeFill (f); };
+    s.writeFill = [] (std::map<juce::String, float>& v, int f) { PresetManager::writeWingFill (v, f); };
+    s.tooltip = "STEPS - the gate's pattern: one cycle (SPEED, or DIV of the tempo with SYNC) cut into steps, each with its own "
+                "level. Drag the bars = level of each step, double-click = on / off. HARD holds every step (a stutter), "
+                "off = glides from step to step (a tremolo). STEPS -/+ = pattern length, FILL = ready-made patterns "
+                "(Pulse = the plain on / off gate).";
+    return s;
+}
+
+StepGrid::StepGrid (juce::AudioProcessorValueTreeState& s, Spec sp) : state (s), spec (std::move (sp)), hasMoves (spec.moveIds != nullptr)
+{
+    setTooltip (spec.tooltip);
     setRepaintsOnMouseActivity (false);
 }
 
-float StepGrid::level (int step) const { return state.getRawParameterValue (ParamIDs::trLevels[step])->load() * 0.01f; }
-int StepGrid::move (int step) const    { return juce::roundToInt (state.getRawParameterValue (ParamIDs::trMoves[step])->load()); }
-int StepGrid::numSteps() const         { return juce::jlimit (1, kSteps, juce::roundToInt (state.getRawParameterValue (ParamIDs::trSteps)->load())); }
+float StepGrid::level (int step) const { return state.getRawParameterValue (spec.levelIds[step])->load() * 0.01f; }
+int StepGrid::move (int step) const    { return hasMoves ? juce::roundToInt (state.getRawParameterValue (spec.moveIds[step])->load()) : 0; }
+int StepGrid::numSteps() const         { return juce::jlimit (1, kSteps, juce::roundToInt (state.getRawParameterValue (spec.stepsId)->load())); }
 
 void StepGrid::refresh (int playingStep)
 {
@@ -1133,12 +1229,12 @@ void StepGrid::refresh (int playingStep)
 }
 
 juce::Rectangle<float> StepGrid::headerArea() const { return getLocalBounds().toFloat().withHeight (20.0f); }
-juce::Rectangle<float> StepGrid::movesArea() const  { return getLocalBounds().toFloat().removeFromBottom (18.0f); }
+juce::Rectangle<float> StepGrid::movesArea() const  { return hasMoves ? getLocalBounds().toFloat().removeFromBottom (18.0f) : juce::Rectangle<float>(); }
 juce::Rectangle<float> StepGrid::barsArea() const
 {
     auto r = getLocalBounds().toFloat();
     r.removeFromTop (23.0f);
-    r.removeFromBottom (19.0f);
+    r.removeFromBottom (hasMoves ? 19.0f : 1.0f);
     return r;
 }
 juce::Rectangle<float> StepGrid::minusArea() const { return { 50.0f, 1.0f, 18.0f, 18.0f }; }
@@ -1170,7 +1266,7 @@ void StepGrid::setParam (const char* id, float value, bool gesture)
 
 void StepGrid::paintLevel (int step, float value)
 {
-    auto* p = state.getParameter (ParamIDs::trLevels[step]);
+    auto* p = state.getParameter (spec.levelIds[step]);
     if (p == nullptr)
         return;
     if (std::find (painting.begin(), painting.end(), p) == painting.end())
@@ -1194,7 +1290,7 @@ void StepGrid::mouseDown (const juce::MouseEvent& e)
     const auto pos = e.position;
     if (minusArea().contains (pos) || plusArea().contains (pos))
     {
-        setParam (ParamIDs::trSteps, (float) juce::jlimit (1, kSteps, numSteps() + (plusArea().contains (pos) ? 1 : -1)));
+        setParam (spec.stepsId, (float) juce::jlimit (1, kSteps, numSteps() + (plusArea().contains (pos) ? 1 : -1)));
         return;
     }
     if (fillArea().contains (pos))
@@ -1203,19 +1299,20 @@ void StepGrid::mouseDown (const juce::MouseEvent& e)
         return;
     }
     const int step = stepAt (pos.x);
-    if (movesArea().contains (pos))
+    if (hasMoves && movesArea().contains (pos))
     {
         if (e.mods.isPopupMenu())
             showMoveMenu (step);
         else
-            setParam (ParamIDs::trMoves[step], (float) ((move (step) + 1) % ParamChoices::stepMoves.size()));
+            setParam (spec.moveIds[step], (float) ((move (step) + 1) % ParamChoices::stepMoves.size()));
         return;
     }
     if (barsArea().expanded (0.0f, 3.0f).contains (pos))
     {
         if (e.mods.isPopupMenu())
         {
-            showMoveMenu (step);
+            if (hasMoves)
+                showMoveMenu (step);
             return;
         }
         lastPaintStep = step;
@@ -1249,7 +1346,7 @@ void StepGrid::mouseDoubleClick (const juce::MouseEvent& e)
     if (! barsArea().contains (e.position))
         return;
     const int step = stepAt (e.position.x);
-    setParam (ParamIDs::trLevels[step], level (step) > 0.01f ? 0.0f : 100.0f);
+    setParam (spec.levelIds[step], level (step) > 0.01f ? 0.0f : 100.0f);
 }
 
 void StepGrid::showMoveMenu (int step)
@@ -1268,10 +1365,10 @@ void StepGrid::showMoveMenu (int step)
         {
             const int mv = safe->move (step);
             for (int k = 0; k < kSteps; ++k)
-                safe->setParam (ParamIDs::trMoves[k], (float) mv);
+                safe->setParam (safe->spec.moveIds[k], (float) mv);
             return;
         }
-        safe->setParam (ParamIDs::trMoves[step], (float) (r - 1));
+        safe->setParam (safe->spec.moveIds[step], (float) (r - 1));
     });
 }
 
@@ -1279,8 +1376,8 @@ void StepGrid::showFillMenu()
 {
     juce::PopupMenu m;
     m.addSectionHeader ("Ready-made patterns");
-    for (int i = 0; i < ParamChoices::trailFills.size(); ++i)
-        m.addItem (i + 1, ParamChoices::trailFills[i]);
+    for (int i = 0; i < spec.fillNames->size(); ++i)
+        m.addItem (i + 1, (*spec.fillNames)[i]);
     m.addSeparator();
     m.addItem (200, "All steps on");
     m.addItem (201, "Every second step");
@@ -1289,7 +1386,7 @@ void StepGrid::showFillMenu()
     m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this), [safe] (int r)
     {
         if (safe == nullptr || r <= 0) return;
-        if (r <= ParamChoices::trailFills.size())
+        if (r <= safe->spec.fillNames->size())
         {
             safe->applyFill (r - 1);
             return;
@@ -1300,7 +1397,7 @@ void StepGrid::showFillMenu()
             float v = 100.0f;
             if (r == 201) v = k % 2 == 0 ? 100.0f : 0.0f;
             if (r == 202) v = rnd.nextFloat() < 0.25f ? 0.0f : 30.0f + 70.0f * rnd.nextFloat();
-            safe->setParam (ParamIDs::trLevels[k], v);
+            safe->setParam (safe->spec.levelIds[k], v);
         }
     });
 }
@@ -1308,7 +1405,7 @@ void StepGrid::showFillMenu()
 void StepGrid::applyFill (int fill)
 {
     PresetManager::ValueMap values;
-    PresetManager::writeTrailFill (values, fill);
+    spec.writeFill (values, fill);
     for (const auto& [id, v] : values)
         setParam (id.toRawUTF8(), v);
 }
@@ -1336,13 +1433,13 @@ void StepGrid::paint (juce::Graphics& g)
     g.drawText (juce::String (n), juce::Rectangle<float> (68.0f, 0.0f, 24.0f, 20.0f), juce::Justification::centred, false);
     // the pattern's name when it is one of the ready-made fills, "Custom" once it has been edited
     juce::String fillName ("Custom");
-    for (int f = 0; f < HiveBlock::numFills; ++f)
+    for (int f = 0; f < spec.fillNames->size(); ++f)
     {
-        const auto pat = HiveBlock::makeFill (f);
+        const auto pat = spec.makeFill (f);
         bool same = pat.numSteps == n;
         for (int k = 0; same && k < n; ++k)
-            same = std::abs (pat.level[(size_t) k] - level (k)) < 0.005f && pat.move[(size_t) k] == move (k);
-        if (same) { fillName = ParamChoices::trailFills[f]; break; }
+            same = std::abs (pat.level[(size_t) k] - level (k)) < 0.005f && (! hasMoves || pat.move[(size_t) k] == move (k));
+        if (same) { fillName = (*spec.fillNames)[f]; break; }
     }
     const auto fr = fillArea();
     g.setColour (Colours::inset);
@@ -1381,6 +1478,8 @@ void StepGrid::paint (juce::Graphics& g)
             g.fillRoundedRectangle (cell, 2.0f);
         }
 
+        if (! hasMoves)
+            continue;
         // MOVE symbol
         const auto sym = juce::Rectangle<float> (bars.getX() + k * w, movesArea().getY(), w, movesArea().getHeight()).reduced (3.0f, 4.0f);
         g.setColour (active ? Colours::text : Colours::textFaint);
@@ -1392,7 +1491,11 @@ void StepGrid::paint (juce::Graphics& g)
             case 1: p.addTriangle (cx - r, cy + r * 0.8f, cx + r, cy + r * 0.8f, cx, cy - r); g.fillPath (p); break;           // up
             case 2: p.addTriangle (cx - r, cy - r * 0.8f, cx + r, cy - r * 0.8f, cx, cy + r); g.fillPath (p); break;           // down
             case 3: g.setFont (font (13.0f, true)); g.drawText ("?", sym.expanded (3.0f), juce::Justification::centred, false); break;
-            default: p.addTriangle (cx + r * 0.8f, cy - r, cx + r * 0.8f, cy + r, cx - r, cy); g.fillPath (p); break;          // reverse
+            case 4: p.addTriangle (cx + r * 0.8f, cy - r, cx + r * 0.8f, cy + r, cx - r, cy); g.fillPath (p); break;           // reverse
+            default:                                                                                                          // stutter
+                for (int b = -1; b <= 1; ++b)
+                    g.fillRect (juce::Rectangle<float> (cx + (float) b * r * 0.7f - 1.0f, cy - r, 2.0f, 2.0f * r));
+                break;
         }
     }
 }

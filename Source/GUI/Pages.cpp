@@ -752,6 +752,11 @@ ReverbPage::ReverbPage (SwarmnessAudioProcessor& p)
     typeSelector.setTooltip ("ROOM = tight and close, PLATE = dense and bright, HALL = big, ABYSS = huge, dark, moving. "
                              "IR = your impulse response (load it on the right)");
     addAndMakeVisible (typeSelector);
+    freezeToggle.setTooltip ("FREEZE: hold the tail - what is ringing stays as a pad while you play over it (the dry signal and the early "
+                             "reflections still pass). Off again, the tail decays as set. Right-click = MIDI learn a pedal");
+    MidiLearnable::tag (freezeToggle, revFreeze);
+    freezeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (state, revFreeze, freezeToggle);
+    addAndMakeVisible (freezeToggle);
     addAndMakeVisible (tail);
 
     mixKnob     .attach (state, revMix,      "MIX: dry / reverb. 50% = both at full level, 100% = reverb only");
@@ -764,6 +769,23 @@ ReverbPage::ReverbPage (SwarmnessAudioProcessor& p)
     duckKnob    .attach (state, revDuck,     "DUCK: the reverb dips while you play and blooms in the gaps - big space without the mud");
     for (auto* k : { &mixKnob, &decayKnob, &sizeKnob, &preDelayKnob, &toneKnob, &lowCutKnob, &modKnob, &duckKnob })
         addAndMakeVisible (k);
+    moreButton.setTooltip ("MORE: SIZE, PRE-DELAY, LOW CUT, MOD and DUCK. A dot = something in there is set away from its default");
+    moreButton.setToggleState (moreOpen(), juce::dontSendNotification);
+    moreButton.hasHiddenChanges = [this]
+    {
+        for (auto* id : { revSize, revPreDelay, revLowCut, revMod, revDuck })
+            if (auto* p = state.getParameter (id))
+                if (std::abs (p->getValue() - p->getDefaultValue()) > 1.0e-3f)
+                    return true;
+        return false;
+    };
+    moreButton.onClick = [this]
+    {
+        const int bits = processor.getUiMore();
+        processor.setUiMore (moreButton.getToggleState() ? bits | (1 << Chain::crypt) : bits & ~(1 << Chain::crypt));
+        resized();
+    };
+    addAndMakeVisible (moreButton);
 
     loadButton.setTooltip ("Load an impulse response (WAV / AIFF / FLAC, up to 12 s). Or drop a file on this page");
     loadButton.onClick = [this] { chooseFile(); };
@@ -778,21 +800,33 @@ void ReverbPage::resized()
     panelArea = getLocalBounds().toFloat();
     power.setBounds ((int) panelArea.getRight() - 40, 8, 26, 26);
     typeSelector.setBounds ((int) panelArea.getRight() - 52 - 400, 10, 400, 24);
+    freezeToggle.setBounds (typeSelector.getX() - 12 - 76, 10, 76, 24);
+    moreButton.setBounds (freezeToggle.getX() - 12 - 60, 10, 60, 24);
 
     tail.setBounds (16, 46, 700, 244);
     irArea = { 728.0f, 46.0f, panelArea.getWidth() - 744.0f, 244.0f };
     loadButton .setBounds ((int) irArea.getX() + 16, (int) irArea.getBottom() - 46, 150, 30);
     clearButton.setBounds (loadButton.getRight() + 10, loadButton.getY(), 90, 30);
 
-    const int slots = 8, y = 312;
-    const float slotW = (panelArea.getWidth() - 32.0f) / (float) slots;
+    // MIX, DECAY and TONE large; SIZE, PRE-DELAY, LOW CUT, MOD, DUCK small and under MORE
+    const bool open = moreOpen();
+    const std::vector<Knob*> shown = open ? std::vector<Knob*> { &mixKnob, &decayKnob, &toneKnob, &sizeKnob, &preDelayKnob, &lowCutKnob, &modKnob, &duckKnob }
+                                          : std::vector<Knob*> { &mixKnob, &decayKnob, &toneKnob };
+    for (auto* k : { &sizeKnob, &preDelayKnob, &lowCutKnob, &modKnob, &duckKnob })
+        k->setVisible (open);
+    const float left = open ? 16.0f : 200.0f, width = panelArea.getWidth() - 2.0f * left;
+    const float slotW = width / (float) shown.size();
     int i = 0;
-    for (auto* k : { &mixKnob, &decayKnob, &sizeKnob, &preDelayKnob, &toneKnob, &lowCutKnob, &modKnob, &duckKnob })
+    for (auto* k : shown)
     {
-        const int cx = (int) (16.0f + slotW * ((float) i++ + 0.5f));
-        k->setBounds (cx - 50, y, 100, 110);
+        const bool primary = k == &mixKnob || k == &decayKnob || k == &toneKnob;
+        const int w = primary ? 100 : 70, h = primary ? 110 : 90;
+        const int cx = (int) (left + slotW * ((float) i++ + 0.5f));
+        k->setBounds (cx - w / 2, 312 + (110 - h) / 2, w, h);
     }
 }
+
+bool ReverbPage::moreOpen() const { return (processor.getUiMore() & (1 << Chain::crypt)) != 0; }
 
 void ReverbPage::paint (juce::Graphics& g)
 {
@@ -852,6 +886,8 @@ void ReverbPage::tick()
 
     for (auto* k : { &decayKnob, &sizeKnob, &modKnob })
         k->setAlpha (irMode ? 0.35f : 1.0f);
+    freezeToggle.setAlpha (irMode ? 0.35f : (on ? 1.0f : 0.6f));
+    moreButton.repaint();
     for (auto* k : { &mixKnob, &preDelayKnob, &toneKnob, &lowCutKnob, &duckKnob })
         k->setAlpha (on ? 1.0f : 0.6f);
     clearButton.setEnabled (irDescription.isNotEmpty());
@@ -945,7 +981,7 @@ AmpCabSection::AmpCabSection (SwarmnessAudioProcessor& p)
     presenceKnob.attach (state, ampPresence, "PRESENCE: power-amp feedback - more bite and air up top");
     depthKnob   .attach (state, ampDepth,    "DEPTH: power-amp resonance - the low-end thump of a closed cabinet");
     masterKnob  .attach (state, ampMaster,   "MASTER: how hard the power amp is pushed - sag, compression and power-tube grind as it goes up");
-    gateKnob    .attach (state, ampGate,     "GATE: noise gate keyed from the guitar, on the amp's input and output - silences hiss and hum between riffs (0 = off)");
+    gateKnob    .attach (state, ampGate,     "GATE: noise gate keyed from the guitar (0 = off, then -75 .. -20 dBFS): opens on the pick a moment early, shuts fast after a mute and gently on a decay, turns quiet playing down rather than chopping it; on the amp's output (and, softened, its input)");
     levelKnob   .attach (state, ampLevel,    "LEVEL: AMP output level");
     for (auto* k : { &gainKnob, &bassKnob, &midKnob, &trebleKnob, &presenceKnob, &depthKnob, &masterKnob, &gateKnob, &levelKnob })
         addAndMakeVisible (k);
@@ -1339,7 +1375,8 @@ void AmpCabSection::choose (bool nam)
 //==============================================================================
 WaspSection::WaspSection (SwarmnessAudioProcessor& p)
     : processor (p), state (p.getAPVTS()),
-      modeSelector (*p.getAPVTS().getParameter (ParamIDs::drvNam), { "WASP", "NAM" })
+      modeSelector (*p.getAPVTS().getParameter (ParamIDs::drvNam), { "WASP", "NAM" }),
+      characterSelector (*p.getAPVTS().getParameter (ParamIDs::drvCharacter), { "TIGHT", "BOOST", "SMOOTH", "RASP" })
 {
     using namespace ParamIDs;
     setBufferedToImage (true);
@@ -1349,12 +1386,16 @@ WaspSection::WaspSection (SwarmnessAudioProcessor& p)
     powerAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (state, drvOn, power);
     modeSelector.setTooltip ("WASP: the built-in tight overdrive.  NAM: a pedal capture (.nam) - any overdrive, boost or fuzz from TONE3000");
     addAndMakeVisible (modeSelector);
+    characterSelector.setTooltip ("Character - the same circuit, four sets of parts.  TIGHT: the modern precision metal drive, asymmetric hard clipping.  "
+                                  "BOOST: a transparent clean boost, flat to the lows, no clipper.  SMOOTH: the classic mid-focused overdrive, soft symmetric clipping.  "
+                                  "RASP: a hard-clipping distortion - grainy, saturated, fuzz-like at the top of DRIVE");
+    addAndMakeVisible (characterSelector);
 
     volumeKnob.attach (state, drvVolume, "VOLUME: output level - 5 is about unity at a medium DRIVE; crank it to slam the amp's input");
     driveKnob .attach (state, drvDrive,  "DRIVE: from a tight boost to a hard, square overdrive - the op-amp's gain into diodes to ground that clip one side first (asymmetric hard clipping)");
     brightKnob.attach (state, drvBright, "BRIGHT: output voicing - darker and smoother down, more bite and pick attack up");
     attackKnob.attach (state, drvAttack, "ATTACK: tightens the low end in front of the clipping - up for chugs that stay tight on a high-gain amp, down for a full-range boost");
-    gateKnob  .attach (state, drvGate,   "GATE: noise gate keyed from your guitar (0 = off) - silences the hiss of the drive and the amp behind it");
+    gateKnob  .attach (state, drvGate,   "GATE: noise gate keyed from your guitar (0 = off, then -75 .. -20 dBFS): opens on the pick a moment early, shuts fast after a mute and gently on a decay - silences the hiss of the drive and the amp behind it");
     namInputKnob .attach (state, drvNamInput,  "INPUT: level into the pedal capture, 5 = as captured (+/-18 dB) - more = the pedal's DRIVE");
     namOutputKnob.attach (state, drvNamOutput, "OUTPUT: level after the capture, 5 = as captured (+/-18 dB) - the pedal's LEVEL");
     for (auto* k : { &volumeKnob, &driveKnob, &brightKnob, &attackKnob, &gateKnob })
@@ -1402,6 +1443,7 @@ DriveBlock::Settings WaspSection::current() const
     s.bright = get (ParamIDs::drvBright) * 0.1f;
     s.attack = get (ParamIDs::drvAttack) * 0.1f;
     s.gate = get (ParamIDs::drvGate) * 0.01f;
+    s.character = (int) get (ParamIDs::drvCharacter);
     s.nam = get (ParamIDs::drvNam) > 0.5f;
     s.namInput = get (ParamIDs::drvNamInput) * 0.1f;
     s.namOutput = get (ParamIDs::drvNamOutput) * 0.1f;
@@ -1413,6 +1455,7 @@ void WaspSection::resized()
     panelArea = getLocalBounds().toFloat();
     power.setBounds ((int) panelArea.getRight() - 40, 8, 26, 26);
     modeSelector.setBounds ((int) panelArea.getRight() - 40 - 12 - 150, 9, 150, 24);
+    characterSelector.setBounds (modeSelector.getX() - 12 - 250, 9, 250, 24);
     const float knobsW = 470.0f;
     {
         const std::initializer_list<Knob*> row { &driveKnob, &volumeKnob, &brightKnob, &attackKnob, &gateKnob };
@@ -1445,6 +1488,7 @@ void WaspSection::updateVisibility()
 {
     for (auto* k : { &volumeKnob, &driveKnob, &brightKnob, &attackKnob })
         k->setVisible (! namMode);
+    characterSelector.setVisible (! namMode);
     for (auto* k : { &namInputKnob, &namOutputKnob })
         k->setVisible (namMode);
     for (auto* b : { &loadButton, &toneButton, &clearButton })
@@ -1512,7 +1556,11 @@ void WaspSection::paint (juce::Graphics& g)
                           t.removeFromTop (36.0f).toNearestInt(), juce::Justification::topLeft, 2, 0.85f);
         return;
     }
-    drawPanelTitle (g, panelArea, "WASP", "tight overdrive  -  op-amp gain into asymmetric hard-clipping diodes; in front of the AMP it tightens and pushes it", s.on);
+    static const char* subtitles[] { "tight overdrive  -  op-amp gain into asymmetric hard-clipping diodes; in front of the AMP it tightens and pushes it",
+                                     "clean boost  -  flat to the lows, no clipper; pushes the AMP's input without colouring it",
+                                     "smooth overdrive  -  the classic mid-focused soft clipping; warm and even in front of the AMP",
+                                     "rasp distortion  -  hard-clipping, grainy and saturated; a distortion pedal on its own" };
+    drawPanelTitle (g, panelArea, "WASP", subtitles[juce::jlimit (0, 3, s.character)], s.on);
 
     const auto curveColour = Colours::accent.withAlpha (s.on ? 0.95f : 0.4f);
     for (auto a : { responseArea, clipArea })
@@ -1554,12 +1602,12 @@ void WaspSection::paint (juce::Graphics& g)
     {
         const auto a = clipArea.reduced (8.0f, 8.0f);
         const float range = 0.5f;
-        const float volts = DriveBlock::kVolts * juce::Decibels::decibelsToGain (DriveBlock::tune().inDb);
+        const float volts = DriveBlock::kVolts * juce::Decibels::decibelsToGain (DriveBlock::tuneFor (s.character).inDb);
         std::array<float, 81> ys {};
         float peak = 1.0e-6f;
         for (int i = 0; i <= 80; ++i)
         {
-            ys[(size_t) i] = DriveBlock::transferVolts (s.drive, (-range + 2.0f * range * (float) i / 80.0f) * volts);
+            ys[(size_t) i] = DriveBlock::transferVolts (s.drive, (-range + 2.0f * range * (float) i / 80.0f) * volts, s.character);
             peak = juce::jmax (peak, std::abs (ys[(size_t) i]));
         }
         auto xFor = [a, range] (float v) { return a.getCentreX() + a.getWidth() * 0.5f * v / range; };

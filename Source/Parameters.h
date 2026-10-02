@@ -56,6 +56,26 @@ namespace ParamIDs
     inline constexpr const char* magicHold   = "magicHold";    // footswitch: VENOM (self-oscillation)
     inline constexpr const char* linkOct1    = "linkOct1";     // VENOM also engages SHIFT A
     inline constexpr const char* linkOct2    = "linkOct2";     // VENOM also engages SHIFT B
+    // 1.1: the stomps are configurable. STING is a second footswitch like VENOM; each stomp has, per
+    // block (in Chain::Block order, SHIFT excluded - its A / B links are above), an action: - / On / Off
+    // while held, plus CRYPT's FREEZE. Scene parameters, so every scene can wire them differently.
+    inline constexpr const char* stingHold   = "stingHold";    // footswitch: STING
+    inline constexpr const char* stingShiftA = "stingShiftA";  // STING also engages SHIFT A
+    inline constexpr const char* stingShiftB = "stingShiftB";  // STING also engages SHIFT B
+    inline constexpr const char* venomBlock[] { "venomPitch", "venomSmoke", "venomSwarm", "venomWings", "venomComb", "venomCarve",
+                                                "venomCrypt", nullptr, "venomAmp", "venomCab", "venomDrive", "venomHoney" };
+    inline constexpr const char* stingBlock[] { "stingPitch", "stingSmoke", "stingSwarm", "stingWings", "stingComb", "stingCarve",
+                                                "stingCrypt", nullptr, "stingAmp", "stingCab", "stingDrive", "stingHoney" };
+    inline constexpr const char* venomFreeze = "venomFreeze";
+    inline constexpr const char* stingFreeze = "stingFreeze";
+    // 1.1: HIVE STOP (tape stop of the repeats) - a switch, a time, and the stomps can drive it
+    inline constexpr const char* hvStop      = "hvStop";
+    inline constexpr const char* hvStopTime  = "hvStopTime";
+    inline constexpr const char* venomStop   = "venomStop";
+    inline constexpr const char* stingStop   = "stingStop";
+    // 1.1: SMOKE CRUSH (bit / rate reduction of the fuzz) and SWARM RING (ring modulation of the voices)
+    inline constexpr const char* fuzzCrush   = "fuzzCrush";
+    inline constexpr const char* swarmRing   = "swarmRing";
     // MANGLE (on the voices and trails)
     inline constexpr const char* hvMangle    = "hvMangle";     // one knob: ANGER -> FRENZY -> BUZZ
     inline constexpr const char* rbRaw       = "rbRaw";        // RAW engine character
@@ -103,6 +123,18 @@ namespace ParamIDs
     inline constexpr const char* flowAmount  = "flowAmount";
     inline constexpr const char* flowSpeed   = "flowSpeed";
     inline constexpr const char* flowDiv     = "flowDiv";
+    // 1.1: the step pattern (levels per step, like TRAILS)
+    inline constexpr const char* wgSteps     = "wgSteps";
+    inline constexpr const char* wgLevels[]  { "wgL1", "wgL2", "wgL3", "wgL4", "wgL5", "wgL6", "wgL7", "wgL8",
+                                               "wgL9", "wgL10", "wgL11", "wgL12", "wgL13", "wgL14", "wgL15", "wgL16" };
+
+    // HONEY (sustainer / compressor)
+    inline constexpr const char* hnOn        = "hnOn";
+    inline constexpr const char* hnSustain   = "hnSustain";    // threshold down + ratio up, one knob
+    inline constexpr const char* hnAttack    = "hnAttack";
+    inline constexpr const char* hnBlend     = "hnBlend";      // parallel blend
+    inline constexpr const char* hnLevel     = "hnLevel";      // dB on top of the make-up
+    inline constexpr const char* hnLimit     = "hnLimit";      // peak limiter after the compressor
 
     // COMB (10-band graphic EQ)
     inline constexpr const char* geqOn       = "geqOn";
@@ -139,6 +171,7 @@ namespace ParamIDs
     inline constexpr const char* revLowCut   = "revLowCut";
     inline constexpr const char* revMod      = "revMod";
     inline constexpr const char* revDuck     = "revDuck";
+    inline constexpr const char* revFreeze   = "revFreeze";    // 1.1: hold the tail
 
     // AMP (amp models CLEAN / CRUNCH / LEAD with CHARACTER, or a NAM capture)
     inline constexpr const char* ampOn       = "ampOn";
@@ -174,6 +207,7 @@ namespace ParamIDs
     inline constexpr const char* drvNamInput  = "drvNamInput";
     inline constexpr const char* drvNamOutput = "drvNamOutput";
     inline constexpr const char* drvNamLite   = "drvNamLite";
+    inline constexpr const char* drvCharacter = "drvCharacter";   // 1.1: TIGHT / BOOST / SMOOTH / RASP
 
     // CAB (modelled cabinets or a loaded IR)
     inline constexpr const char* cabOn       = "cabOn";
@@ -210,7 +244,12 @@ namespace ParamChoices
     inline const juce::StringArray reverbTypes { "Room", "Plate", "Hall", "Abyss", "IR" };
     inline const juce::StringArray ampChannels { "Clean", "Crunch", "Lead", "NAM" };
     inline const juce::StringArray cabTypes    { "1x12 Open", "2x12 Open", "4x12 Brit", "4x12 Modern", "IR" };
-    inline const juce::StringArray stepMoves { "Hold", "Up", "Down", "Random", "Reverse" };
+    inline const juce::StringArray waspCharacters { "Tight", "Boost", "Smooth", "Rasp" };
+    /** Ready-made WINGS step patterns, in FlowGate::Fill order. */
+    inline const juce::StringArray wingFills { "Pulse", "Offbeat", "Gallop", "Triplet", "Ramp Up", "Ramp Down", "Stutter", "Glitch" };
+    /** What a stomp (VENOM / STING) does to a block while held. */
+    inline const juce::StringArray stompActions { "-", "On", "Off" };
+    inline const juce::StringArray stepMoves { "Hold", "Up", "Down", "Random", "Reverse", "Stutter" };
     /** Ready-made TRAILS step patterns, in HiveBlock::Fill order. */
     inline const juce::StringArray trailFills { "Ladder", "Bounce", "Scatter", "Reverse", "Swell",
                                                 "Echo", "Stutter", "Gallop", "Offbeat", "Glitch" };
@@ -271,19 +310,20 @@ namespace Chain
     // (pitch = HIVE; SHIFT was split off in beta.25 and sits right before HIVE by default)
     // (AMP and CAB came in v3.1, between HIVE and SWARM - where an amp sits on a pedalboard)
     // (WASP, the overdrive, came in v3.1 too, right in front of the AMP)
-    enum Block : int { pitch = 0, smoke, swarm, wings, comb, carve, crypt, shift, amp, cab, drive, numBlocks };
+    // (HONEY, the compressor, came in 1.1 and sits first by default)
+    enum Block : int { pitch = 0, smoke, swarm, wings, comb, carve, crypt, shift, amp, cab, drive, honey, numBlocks };
 
     inline constexpr const char* slotIds[numBlocks] { "chainPitch", "chainSmoke", "chainSwarm", "chainWings",
                                                       "chainComb", "chainCarve", "chainCrypt", "chainShift",
-                                                      "chainAmp", "chainCab", "chainDrive" };
-    // SMOKE, SHIFT, HIVE, WASP, AMP, CAB, SWARM, WINGS, COMB, CARVE, CRYPT
-    inline constexpr int defaultSlots[numBlocks] { 20, 10, 30, 40, 50, 60, 70, 15, 23, 26, 22 };
+                                                      "chainAmp", "chainCab", "chainDrive", "chainHoney" };
+    // HONEY, SMOKE, SHIFT, HIVE, WASP, AMP, CAB, SWARM, WINGS, COMB, CARVE, CRYPT
+    inline constexpr int defaultSlots[numBlocks] { 20, 10, 30, 40, 50, 60, 70, 15, 23, 26, 22, 8 };
     inline constexpr int slotMax = 99;
     inline constexpr int legacyPostSmokeSlot = 35;   // old "SMOKE POST" = after SWARM, before WINGS
 
-    inline constexpr const char* names[numBlocks]     { "HIVE", "SMOKE", "SWARM", "WINGS", "COMB", "CARVE", "CRYPT", "SHIFT", "AMP", "CAB", "WASP" };
+    inline constexpr const char* names[numBlocks]     { "HIVE", "SMOKE", "SWARM", "WINGS", "COMB", "CARVE", "CRYPT", "SHIFT", "AMP", "CAB", "WASP", "HONEY" };
     inline constexpr const char* subtitles[numBlocks] { "HARMONIES", "FUZZ", "CHORUS", "TREMOLO", "GRAPHIC EQ", "PARAM EQ", "REVERB", "PITCH SHIFT",
-                                                        "AMPLIFIER", "CABINET", "OVERDRIVE" };
+                                                        "AMPLIFIER", "CABINET", "OVERDRIVE", "SUSTAIN" };
 
     using Order = std::array<int, numBlocks>;
 
@@ -306,7 +346,7 @@ namespace Chain
     enum Lane : int { series = 0, pathA, pathB };
     inline constexpr const char* laneIds[numBlocks] { "lanePitch", "laneSmoke", "laneSwarm", "laneWings",
                                                       "laneComb", "laneCarve", "laneCrypt", "laneShift",
-                                                      "laneAmp", "laneCab", "laneDrive" };
+                                                      "laneAmp", "laneCab", "laneDrive", "laneHoney" };
     /** A / B balance of each split, numbered left to right (a fifth split shares the fourth's mix). */
     inline constexpr int maxSplits = 4;
     inline constexpr const char* parallelMixIds[maxSplits] { "chainParMix", "chainParMix2", "chainParMix3", "chainParMix4" };
@@ -389,11 +429,16 @@ namespace Chain
     }
 }
 
+/** The footswitches: SHIFT A / B, VENOM, STING - they follow MOMENTARY / LATCH. */
+inline bool isFootswitchParameter (const juce::String& id)
+{
+    return id == ParamIDs::oct1 || id == ParamIDs::oct2 || id == ParamIDs::magicHold || id == ParamIDs::stingHold;
+}
+
 /** Performance switches: not stored in presets (like a pedal's footswitch position). */
 inline bool isPerformanceParameter (const juce::String& id)
 {
-    return id == ParamIDs::bypass || id == ParamIDs::oct1 || id == ParamIDs::oct2 || id == ParamIDs::magicHold
-        || id == ParamIDs::scene;
+    return id == ParamIDs::bypass || isFootswitchParameter (id) || id == ParamIDs::scene;
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();

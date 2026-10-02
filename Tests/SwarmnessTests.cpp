@@ -639,11 +639,431 @@ namespace
                juce::String::formatted ("INPUT -18 -> +12 dB into SMOKE: output +%.1f dB (plain gain, fuzz compresses)", stepDb));
     }
 
+    double toneDb (const juce::AudioBuffer<float>& b, double sr, double freq, int from, int length);
+
+    void testWings()
+    {
+        std::printf ("\nWINGS: a pattern gate (steps per cycle, HARD / smooth, fills)\n");
+        const double sr = 48000.0;
+        auto run = [&] (const swarm::StepPattern& pat, bool hard, float hz, int numSamples, std::function<void (FlowGate&, int)> onBlock = nullptr)
+        {
+            FlowGate g;
+            g.prepare (sr);
+            g.setParams (1.0f, hard);
+            g.setPattern (pat);
+            g.setRateHz (hz);
+            auto buf = makeSine (sr, numSamples, 1000.0, 0.25f);
+            for (int i = 0; i < numSamples; i += 256)
+            {
+                if (onBlock) onBlock (g, i);
+                float* ptr[2] { buf.getWritePointer (0, i), buf.getWritePointer (1, i) };
+                g.process (ptr, 2, juce::jmin (256, numSamples - i));
+            }
+            return buf;
+        };
+        auto rmsAt = [] (const juce::AudioBuffer<float>& b, int from, int len) { return b.getRMSLevel (0, from, len); };
+        const float sineRms = 0.25f * 0.70710678f;
+        {
+            // the default 2-step pattern = the old square gate: on for the first half, off for the second
+            auto out = run (FlowGate::makeFill (FlowGate::fillPulse), true, 4.0f, 48000);
+            const float on = rmsAt (out, 24000 + 1000, 4000), off = rmsAt (out, 24000 + 7000, 4000);
+            check (std::abs (on / sineRms - 1.0f) < 0.02f && off < 1.0e-4f,
+                   juce::String::formatted ("Pulse, HARD: first half %.3f (sine %.3f), second half %.5f", on, sineRms, off));
+            // smooth: a cosine, half way down at a quarter of the cycle
+            auto sm = run (FlowGate::makeFill (FlowGate::fillPulse), false, 4.0f, 48000);
+            const float quarter = rmsAt (sm, 24000 + 3000 - 48, 96);
+            check (std::abs (quarter / sineRms - 0.5f) < 0.03f, juce::String::formatted ("Pulse, smooth: %.2f of the level at a quarter cycle (0.5)", quarter / sineRms));
+        }
+        {
+            // a 4-step pattern at 2 Hz: every step 6000 samples, levels 1, 0, 0.5, 0
+            swarm::StepPattern pat;
+            pat.numSteps = 4;
+            pat.level = { 1.0f, 0.0f, 0.5f, 0.0f };
+            auto out = run (pat, true, 2.0f, 96000);
+            const float l0 = rmsAt (out, 48000 + 1000, 4000), l1 = rmsAt (out, 54000 + 1000, 4000), l2 = rmsAt (out, 60000 + 1000, 4000), l3 = rmsAt (out, 66000 + 1000, 4000);
+            check (std::abs (l0 / sineRms - 1.0f) < 0.02f && l1 < 1.0e-4f && std::abs (l2 / sineRms - 0.5f) < 0.02f && l3 < 1.0e-4f,
+                   juce::String::formatted ("4 steps [1 0 0.5 0]: %.2f %.2f %.2f %.2f of the level", l0 / sineRms, l1 / sineRms, l2 / sineRms, l3 / sineRms));
+            // the step edges are short but rounded: no energy above 8 kHz from a 1 kHz sine beyond -40 dB
+            const double hf = toneDb (out, sr, 9000.0, 48000, 48000) - toneDb (out, sr, 1000.0, 48000, 48000);
+            check (hf < -40.0, juce::String::formatted ("HARD edges are rounded: 9 kHz vs 1 kHz %.1f dB", hf));
+        }
+        {
+            // editing a level while it plays: the change glides (no click)
+            swarm::StepPattern pat;
+            pat.numSteps = 1;
+            pat.level[0] = 1.0f;
+            auto out = run (pat, true, 2.0f, 48000, [&] (FlowGate& g, int i)
+            {
+                if (i == 24064) { pat.level[0] = 0.0f; g.setPattern (pat); }
+            });
+            float worst = 0.0f;
+            for (int i = 2; i < out.getNumSamples(); ++i)
+                worst = juce::jmax (worst, std::abs (out.getSample (0, i) - 2.0f * out.getSample (0, i - 1) + out.getSample (0, i - 2)));
+            // a 1 kHz sine's own second difference is ~0.004; a jump of 0.25 would be a click
+            check (worst < 0.01f && rmsAt (out, 40000, 8000) < 1.0e-4f, juce::String::formatted ("level 1 -> 0 while playing: largest step %.4f, then silent", worst));
+        }
+        {
+            // the fills: Pulse is the parameter default; through the processor, Gallop gates the steps
+            PresetManager::ValueMap v;
+            PresetManager::writeWingFill (v, FlowGate::fillPulse);
+            check (v[ParamIDs::wgSteps] == 2.0f && v[ParamIDs::wgLevels[0]] == 100.0f && v[ParamIDs::wgLevels[1]] == 0.0f, "Pulse = 2 steps, on / off (the default)");
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            setParam (p, ParamIDs::flowOn, 1.0f);
+            setParam (p, ParamIDs::flowAmount, 100.0f);
+            setParam (p, ParamIDs::flowSpeed, 2.0f);
+            PresetManager::writeWingFill (v, FlowGate::fillGallop);
+            for (const auto& [id, val] : v)
+                setParam (p, id.toRawUTF8(), val);
+            auto out = render (p, makeSine (sr, 96000, 1000.0, 0.25f), sr, 256);
+            const float l0 = rmsAt (out, 48000 + 1000, 4000), l1 = rmsAt (out, 54000 + 1000, 4000), l2 = rmsAt (out, 60000 + 1000, 4000), l3 = rmsAt (out, 66000 + 1000, 4000);
+            check (l0 > 0.9f * sineRms && l1 < 1.0e-3f && l2 > 0.9f * sineRms && l3 > 0.9f * sineRms,
+                   juce::String::formatted ("processor, Gallop [1 0 1 1]: %.2f %.2f %.2f %.2f of the level", l0 / sineRms, l1 / sineRms, l2 / sineRms, l3 / sineRms));
+            // a session without the step parameters opens as the old gate: Pulse
+            check (p.getAPVTS().getRawParameterValue (ParamIDs::wgSteps)->load() == 4.0f, "steps parameter applied");
+        }
+    }
+
+    void testStomps()
+    {
+        std::printf ("\nStomps: VENOM and STING engage / disengage what they are wired to\n");
+        const double sr = 48000.0;
+        auto guitar = makeGuitar (sr, 48000);
+        auto rendered = [&] (std::function<void (SwarmnessAudioProcessor&)> setup)
+        {
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            setup (p);
+            return render (p, guitar, sr, 256);
+        };
+        auto clean = rendered ([] (SwarmnessAudioProcessor&) {});
+        auto fuzzOn = rendered ([] (SwarmnessAudioProcessor& p) { setParam (p, ParamIDs::fuzzOn, 1.0f); });
+        {
+            // VENOM wired to SMOKE (On) and not to HIVE: holding it = the fuzz, nothing else
+            auto out = rendered ([] (SwarmnessAudioProcessor& p)
+            {
+                setParam (p, ParamIDs::venomBlock[Chain::pitch], 0.0f);
+                setParam (p, ParamIDs::venomBlock[Chain::smoke], 1.0f);
+                setParam (p, ParamIDs::magicHold, 1.0f);
+            });
+            const double vsFuzz = nullDb (out, fuzzOn, 0, 9600, 38400), vsClean = nullDb (out, clean, 0, 9600, 38400);
+            check (vsFuzz < -60.0 && vsClean > -20.0, juce::String::formatted ("VENOM -> SMOKE on: equals SMOKE on (%.1f dB), not the clean signal (%.1f dB)", vsFuzz, vsClean));
+        }
+        {
+            // STING wired to SMOKE (Off) while SMOKE's power is on: holding it drops the fuzz
+            auto out = rendered ([] (SwarmnessAudioProcessor& p)
+            {
+                setParam (p, ParamIDs::fuzzOn, 1.0f);
+                setParam (p, ParamIDs::stingBlock[Chain::smoke], 2.0f);
+                setParam (p, ParamIDs::stingHold, 1.0f);
+            });
+            const double vsClean = nullDb (out, clean, 0, 9600, 38400);
+            check (vsClean < -60.0, juce::String::formatted ("STING -> SMOKE off: the clean signal (%.1f dB)", vsClean));
+        }
+        {
+            // the default wiring is the old VENOM: HIVE on with self-oscillation
+            auto out = rendered ([] (SwarmnessAudioProcessor& p) { setParam (p, ParamIDs::magicHold, 1.0f); });
+            check (nullDb (out, clean, 0, 9600, 38400) > -20.0, "VENOM by default: HIVE engaged");
+            // STING drags SHIFT A in
+            auto shifted = rendered ([] (SwarmnessAudioProcessor& p) { setParam (p, ParamIDs::stingShiftA, 1.0f); setParam (p, ParamIDs::stingHold, 1.0f); });
+            auto octave = rendered ([] (SwarmnessAudioProcessor& p) { setParam (p, ParamIDs::oct1, 1.0f); });
+            check (nullDb (shifted, octave, 0, 9600, 38400) < -60.0, "STING -> SHIFT A: the same as the SHIFT A footswitch");
+        }
+        {
+            // the wiring is a scene / preset setting, the footswitch itself is not
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            setParam (p, ParamIDs::stingBlock[Chain::crypt], 1.0f);
+            setParam (p, ParamIDs::stingHold, 1.0f);
+            p.getPresetManager().saveUserPreset ("Stomp Test");
+            SwarmnessAudioProcessor q;
+            resetToInit (q);
+            q.getPresetManager().loadPreset ("Stomp Test");
+            check (q.getAPVTS().getRawParameterValue (ParamIDs::stingBlock[Chain::crypt])->load() == 1.0f
+                   && q.getAPVTS().getRawParameterValue (ParamIDs::stingHold)->load() == 0.0f, "the wiring is saved with the preset, the footswitch state is not");
+            p.getPresetManager().deleteUserPreset ("Stomp Test");
+        }
+    }
+
+    /** Dominant frequency by zero crossings (Hz) over a window. */
+    static double zeroCrossingHz (const juce::AudioBuffer<float>& b, double sr, int from, int len)
+    {
+        int crossings = 0;
+        for (int i = from + 1; i < from + len; ++i)
+            if ((b.getSample (0, i) >= 0.0f) != (b.getSample (0, i - 1) >= 0.0f))
+                ++crossings;
+        return 0.5 * crossings * sr / len;
+    }
+
+    void testHiveStop()
+    {
+        std::printf ("\nHIVE STOP: the repeats slow to a halt like a tape and come back\n");
+        const double sr = 48000.0;
+        // a 440 Hz burst, then silence: HIVE as a plain delay (DRY, HOLD steps) repeats it
+        juce::AudioBuffer<float> in (2, (int) (sr * 4.0));
+        in.clear();
+        for (int i = 0; i < (int) (0.25 * sr); ++i)
+        {
+            const float v = 0.3f * std::sin (2.0f * juce::MathConstants<float>::pi * 440.0f * (float) i / (float) sr) * juce::jmin (1.0f, (float) i / 480.0f);
+            in.setSample (0, i, v); in.setSample (1, i, v);
+        }
+        HiveBlock h;
+        h.prepare (sr, 256);
+        HiveBlock::Settings s;
+        s.voicesOn = true; s.drone = 0.0f; s.queen = 0.0f; s.trails = 1.0f; s.repeatSeconds = 0.3f; s.fromDry = true; s.mix = 1.0f; s.tone = 1.0f;
+        for (auto& m : s.steps.move) m = HiveBlock::hold;
+        s.stopSeconds = 1.0f;
+        h.setParams (s);
+        juce::AudioBuffer<float> out (in);
+        for (int i = 0; i < out.getNumSamples(); i += 256)
+        {
+            if (i == 256 * (int) (1.0 * sr / 256.0)) { s.stop = true;  h.setParams (s); }
+            if (i == 256 * (int) (2.5 * sr / 256.0)) { s.stop = false; h.setParams (s); }
+            float* ptr[2] { out.getWritePointer (0, i), out.getWritePointer (1, i) };
+            h.process (ptr, 2, 256);
+        }
+        const double before = zeroCrossingHz (out, sr, (int) (0.65 * sr), (int) (0.1 * sr));
+        const double halfway = zeroCrossingHz (out, sr, (int) (1.45 * sr), (int) (0.1 * sr));
+        const float stopped = out.getRMSLevel (0, (int) (2.2 * sr), (int) (0.2 * sr));
+        const float playing = out.getRMSLevel (0, (int) (0.65 * sr), (int) (0.1 * sr));
+        check (allFinite (out) && std::abs (before - 440.0) < 60.0 && halfway < before * 0.75 && halfway > before * 0.2,
+               juce::String::formatted ("repeats at %.0f Hz; half way into the stop %.0f Hz (slowing, pitch falling)", before, halfway));
+        check (stopped < 0.05f * playing, juce::String::formatted ("halted: %.1f dB under the repeats", juce::Decibels::gainToDecibels (stopped / (playing + 1.0e-9f))));
+        float worst = 0.0f;
+        for (int i = 2; i < out.getNumSamples(); ++i)
+            worst = juce::jmax (worst, std::abs (out.getSample (0, i) - 2.0f * out.getSample (0, i - 1) + out.getSample (0, i - 2)));
+        check (worst < 0.05f, juce::String::formatted ("no click on the way in or out (largest step %.4f)", worst));
+    }
+
+    void testStutter()
+    {
+        std::printf ("\nHIVE STUTTER move: the repeat is a re-triggered slice\n");
+        const double sr = 48000.0;
+        auto renderMove = [&] (int move)
+        {
+            juce::AudioBuffer<float> in (2, (int) (sr * 2.0));
+            in.clear();
+            for (int i = 0; i < (int) (0.25 * sr); ++i)
+            {
+                const float v = 0.3f * std::sin (2.0f * juce::MathConstants<float>::pi * 440.0f * (float) i / (float) sr) * juce::jmin (1.0f, (float) i / 480.0f);
+                in.setSample (0, i, v); in.setSample (1, i, v);
+            }
+            HiveBlock h;
+            h.prepare (sr, 256);
+            HiveBlock::Settings s;
+            s.voicesOn = true; s.drone = 0.0f; s.queen = 0.0f; s.trails = 1.0f; s.repeatSeconds = 0.3f; s.fromDry = true; s.mix = 1.0f; s.tone = 1.0f;
+            for (auto& m : s.steps.move) m = move;
+            h.setParams (s);
+            for (int i = 0; i < in.getNumSamples(); i += 256)
+            {
+                float* ptr[2] { in.getWritePointer (0, i), in.getWritePointer (1, i) };
+                h.process (ptr, 2, 256);
+            }
+            return in;
+        };
+        auto held = renderMove (HiveBlock::hold), stuttered = renderMove (HiveBlock::stutter);
+        // the second repeat (0.6 .. 0.9 s): HOLD plays the burst through, STUTTER re-triggers its first 50 ms slice with gaps
+        const int from = (int) (0.6 * sr), slice = (int) (0.3 * sr / 6.0);
+        float loud = 0.0f, quiet = 1.0f;
+        for (int k = 0; k < 5; ++k)
+        {
+            loud  = juce::jmax (loud,  stuttered.getRMSLevel (0, from + k * slice + slice / 4, slice / 4));
+            quiet = juce::jmin (quiet, stuttered.getRMSLevel (0, from + k * slice - 48, 96));   // the window's edge
+        }
+        const float heldLevel = held.getRMSLevel (0, from, 3 * slice);
+        check (allFinite (stuttered) && loud > 0.3f * heldLevel && quiet < 0.25f * loud && nullDb (stuttered, held, 0, from, from + 3 * slice) > -20.0,
+               juce::String::formatted ("slices %.3f, edges %.3f (HOLD %.3f)", loud, quiet, heldLevel));
+    }
+
+    void testCrushAndRing()
+    {
+        std::printf ("\nSMOKE CRUSH and SWARM RING\n");
+        const double sr = 48000.0;
+        {
+            auto renderFuzz = [&] (float crush)
+            {
+                FuzzStage f;
+                f.prepare (sr, 256);
+                FuzzStage::Settings s;
+                s.fuzz = 0.5f; s.crush = crush; s.sag = 0.0f;
+                f.setParams (true, s);
+                auto buf = makeSine (sr, 48000, 220.0, 0.1f);
+                for (int i = 0; i < 48000; i += 256)
+                {
+                    float* ptr[2] { buf.getWritePointer (0, i), buf.getWritePointer (1, i) };
+                    f.process (ptr, 2, juce::jmin (256, 48000 - i));
+                }
+                return buf;
+            };
+            auto plain = renderFuzz (0.0f), crushed = renderFuzz (1.0f);
+            int held = 0;
+            for (int i = 24001; i < 48000; ++i)
+                held += std::abs (crushed.getSample (0, i) - crushed.getSample (0, i - 1)) < 1.0e-4f ? 1 : 0;
+            const double heldRatio = held / 23999.0;
+            const double diff = nullDb (crushed, plain, 0, 24000, 48000);
+            check (allFinite (crushed) && diff > -20.0 && heldRatio > 0.8,
+                   juce::String::formatted ("CRUSH 100: the fuzz is sample-held (%.0f%% repeated samples), %.1f dB away from CRUSH 0", 100.0 * heldRatio, diff));
+            const double again = nullDb (plain, renderFuzz (0.0f), 0, 24000, 48000);
+            check (again < -200.0, juce::String::formatted ("CRUSH 0: untouched (%.1f dB)", again));
+        }
+        {
+            auto renderSwarm = [&] (float ring)
+            {
+                SwarmChorus c;
+                c.prepare (sr);
+                c.setParams (0.5f, 0.0f, 1.0f, false, ring);
+                auto buf = makeSine (sr, 48000, 1000.0, 0.25f);
+                for (int i = 0; i < 48000; i += 256)
+                {
+                    float* ptr[2] { buf.getWritePointer (0, i), buf.getWritePointer (1, i) };
+                    c.process (ptr, 2, juce::jmin (256, 48000 - i));
+                }
+                return buf;
+            };
+            auto ringed = renderSwarm (1.0f), plain = renderSwarm (0.0f);
+            const double hz = SwarmChorus::ringHz (1.0f);
+            const double tone = toneDb (ringed, sr, 1000.0, 24000, 24000);   // (from, length)
+            const double lo = toneDb (ringed, sr, 1000.0 - hz, 24000, 24000), hi = toneDb (ringed, sr, 1000.0 + hz, 24000, 24000);
+            const double plainHi = toneDb (plain, sr, 1000.0 + hz, 24000, 24000) - toneDb (plain, sr, 1000.0, 24000, 24000);
+            check (allFinite (ringed) && lo > tone - 3.0 && hi > tone - 3.0 && plainHi < -40.0,
+                   juce::String::formatted ("RING 100 (%.0f Hz): sidebands %.1f / %.1f dB vs the tone %.1f dB; RING 0: %.1f dB", hz, lo, hi, tone, plainHi));
+        }
+    }
+
+    void testProgramChange()
+    {
+        std::printf ("\nMIDI Program Change -> presets\n");
+        SwarmnessAudioProcessor p;
+        p.prepareToPlay (48000.0, 256);
+        const auto names = p.getPresetManager().getAllPresetNames();
+        juce::AudioBuffer<float> audio (2, 256);
+        audio.clear();
+        juce::MidiBuffer midi;
+        midi.addEvent (juce::MidiMessage::programChange (1, 5), 0);
+        p.processBlock (audio, midi);
+        p.flushPendingChanges();
+        check (p.getPresetManager().getCurrentPresetName() == names[5], "Program Change 5 loads preset #5 (" + names[5] + ")");
+        juce::MidiBuffer out;
+        out.addEvent (juce::MidiMessage::programChange (1, 127), 0);
+        p.processBlock (audio, out);
+        p.flushPendingChanges();
+        check (p.getPresetManager().getCurrentPresetName() == names[5], "a number past the list is ignored");
+    }
+
+    void testInputLearn()
+    {
+        std::printf ("\nINPUT LEARN: five seconds of playing set the input gain\n");
+        const double sr = 48000.0;
+        SwarmnessAudioProcessor p;
+        resetToInit (p);
+        p.prepareToPlay (sr, 256);
+        auto in = makeSine (sr, (int) (6.0 * sr), 220.0, 0.1f);   // peaks at -20 dBFS
+        p.startInputLearn();
+        juce::MidiBuffer midi;
+        for (int i = 0; i + 256 <= in.getNumSamples(); i += 256)
+        {
+            juce::AudioBuffer<float> block (2, 256);
+            for (int ch = 0; ch < 2; ++ch)
+                block.copyFrom (ch, 0, in, ch, i, 256);
+            p.processBlock (block, midi);
+        }
+        p.flushPendingChanges();
+        const float db = p.getAPVTS().getRawParameterValue (ParamIDs::input)->load();
+        check (! p.isInputLearning() && std::abs (db - 8.0f) < 0.3f, juce::String::formatted ("peaks at -20 dBFS -> INPUT %+.1f dB (expected +8)", db));
+    }
+
+    void testLicence()
+    {
+        std::printf ("\nLicence: a 7-day trial, activation with a key, the dry signal after the trial\n");
+        const auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("swarmness-licence-test");
+        dir.deleteRecursively();
+        dir.createDirectory();
+        const auto previous = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("swarmness-tests-licence");
+        Licence::setSettingsDirectory (dir);
+        const auto t0 = juce::Time::getCurrentTime();
+        auto at = [t0] (double days) { return [t0, days] { return t0 + juce::RelativeTime::days (days); }; };
+        auto okJson = [] (const juce::String& endpoint, const juce::StringPairArray& form)
+        {
+            Licence::Response r;
+            r.ok = true; r.status = 200;
+            if (endpoint == "activate")
+                r.body = "{\"activated\":true,\"instance\":{\"id\":\"inst-1\"},\"license_key\":{\"key\":\"" + form["license_key"] + "\"}}";
+            else if (endpoint == "validate")
+                r.body = "{\"valid\":true}";
+            else
+                r.body = "{\"deactivated\":true}";
+            return r;
+        };
+        {
+            Licence l;
+            l.setClock (at (0.0));
+            check (l.getState() == Licence::State::trial && l.trialDaysLeft() == 7, "first run: a 7-day trial");
+            l.setClock (at (6.5));
+            check (l.getState() == Licence::State::trial && l.trialDaysLeft() == 1, "day 6.5: one day left");
+            l.setClock (at (7.1));
+            check (l.getState() == Licence::State::expired, "day 7.1: the trial is over");
+            l.setClock (at (2.0));
+            check (l.getState() == Licence::State::expired, "the clock moved back: still over (the last date seen counts)");
+        }
+        {
+            // the processor passes the dry signal once the trial is over
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            setParam (p, ParamIDs::fuzzOn, 1.0f);
+            p.getLicence().setClock (at (8.0));
+            const double sr = 48000.0;
+            auto in = makeGuitar (sr, 48000);
+            auto out = render (p, in, sr, 256);
+            check (nullDb (out, in, p.getLatencySamples(), 9600, 48000) < -100.0, "trial over: SMOKE on, but the output is the dry guitar");
+        }
+        {
+            Licence l;
+            l.setTransport (okJson);
+            l.setClock (at (8.0));
+            l.activate ("ABCD-EFGH-1234");
+            l.finishForTesting();
+            check (l.getState() == Licence::State::activated && l.getKey() == "ABCD-EFGH-1234", "a key accepted by the store: activated (" + l.getMessage() + ")");
+            Licence again;
+            again.setClock (at (20.0));
+            check (again.getState() == Licence::State::activated, "another instance / a restart reads the activation");
+            // a store that says the key is no longer valid revokes it at the monthly check
+            again.setTransport ([] (const juce::String& endpoint, const juce::StringPairArray&)
+            {
+                Licence::Response r; r.ok = true; r.status = 200;
+                r.body = endpoint == "validate" ? "{\"valid\":false,\"error\":\"license_key not found\"}" : "{}";
+                return r;
+            });
+            again.setClock (at (40.0));
+            again.validateIfDue();
+            again.finishForTesting();
+            check (again.getState() == Licence::State::expired, "the store revokes the key: back to the (over) trial");
+            // a quiet network keeps it, up to the grace period
+            Licence l2;
+            l2.setTransport (okJson);
+            l2.setClock (at (41.0));
+            l2.activate ("ABCD-EFGH-1234");
+            l2.finishForTesting();
+            l2.setTransport ([] (const juce::String&, const juce::StringPairArray&) { return Licence::Response {}; });
+            l2.setClock (at (80.0));
+            l2.validateIfDue();
+            l2.finishForTesting();
+            check (l2.getState() == Licence::State::activated, "no network for 39 days: still activated");
+            l2.setClock (at (41.0 + 46.0));
+            check (l2.getState() == Licence::State::expired, "no network for 46 days: the grace period is over");
+            l2.setTransport (okJson);
+            l2.deactivate();
+            l2.finishForTesting();
+            check (l2.getKey().isEmpty(), "deactivated: the key is gone from this machine");
+        }
+        Licence::setSettingsDirectory (previous);
+        dir.deleteRecursively();
+    }
+
     void testFuzzIdleNoise()
     {
         std::printf ("\nSMOKE with nothing played: no self-oscillation, interface hiss not blown up\n");
         const double sr = 48000.0;
-        for (float noiseDb : { -200.0f, -90.0f, -75.0f, -68.0f })
+        for (float noiseDb : { -200.0f, -90.0f, -75.0f, -68.0f, -60.0f })
         {
             juce::AudioBuffer<float> input (2, 48000 * 2);
             juce::Random rng (7);
@@ -1138,11 +1558,12 @@ namespace
             for (int b = 0; b < Chain::numBlocks; ++b)
                 slots[(size_t) b] = (float) Chain::defaultSlots[b];
             const auto def = Chain::orderFromSlots (slots);
-            check (def[0] == Chain::smoke && def[1] == Chain::shift && def[2] == Chain::pitch && def[3] == Chain::drive && def[4] == Chain::amp
-                   && def[5] == Chain::cab && def[6] == Chain::swarm && def[10] == Chain::crypt, "default order: SMOKE, SHIFT, HIVE, WASP, AMP, CAB, SWARM, ..., CRYPT");
+            check (def[0] == Chain::honey && def[1] == Chain::smoke && def[2] == Chain::shift && def[3] == Chain::pitch && def[4] == Chain::drive
+                   && def[5] == Chain::amp && def[6] == Chain::cab && def[7] == Chain::swarm && def[11] == Chain::crypt,
+                   "default order: HONEY, SMOKE, SHIFT, HIVE, WASP, AMP, CAB, SWARM, ..., CRYPT");
             slots.fill (0.0f);   // all tied -> default order
             check (Chain::orderFromSlots (slots) == def, "tied slots fall back to the default order");
-            Chain::Order custom { Chain::crypt, Chain::comb, Chain::cab, Chain::pitch, Chain::shift, Chain::wings, Chain::smoke, Chain::amp, Chain::carve, Chain::swarm, Chain::drive };
+            Chain::Order custom { Chain::crypt, Chain::comb, Chain::cab, Chain::pitch, Chain::shift, Chain::wings, Chain::smoke, Chain::amp, Chain::carve, Chain::swarm, Chain::drive, Chain::honey };
             check (Chain::orderFromSlots (Chain::slotsForOrder (custom)) == custom, "slots <-> order round trip");
         }
 
@@ -1308,6 +1729,210 @@ namespace
         }
     }
 
+    void testGates()
+    {
+        std::printf ("\nNoise gates (AMP / WASP): staccato, soft notes, the floor, swells\n");
+        const double sr = 48000.0;
+        juce::Random rng (3);
+        // 1 s of floor, 16 palm-muted 16th-note chugs at 180 bpm (-10 dBFS, 12 ms mutes), 0.5 s, 8 quiet staccato
+        // notes (-30 dBFS), 1 s of floor; the floor = hum + hiss at -65 dBFS rms
+        const int n = (int) (4.5 * sr);
+        juce::AudioBuffer<float> di (2, n);
+        di.clear();
+        auto note = [&] (double at, double hz, double tau, float amp, double len)
+        {
+            const int s0 = (int) (at * sr);
+            for (int i = 0; i < (int) (len * sr) && s0 + i < n; ++i)
+            {
+                const double t = i / sr;
+                const float v = amp * (float) ((std::sin (juce::MathConstants<double>::twoPi * hz * t) + 0.5 * std::sin (juce::MathConstants<double>::twoPi * 2.0 * hz * t)
+                                                + 0.3 * std::sin (juce::MathConstants<double>::twoPi * 3.0 * hz * t)) / 1.8 * std::exp (-t / tau) * (1.0 - std::exp (-t / 0.0015)));
+                for (int ch = 0; ch < 2; ++ch)
+                    di.addSample (ch, s0 + i, v);
+            }
+        };
+        std::vector<double> chugAt, quietAt;
+        for (int k = 0; k < 16; ++k) { chugAt.push_back (1.0 + k * 0.0833); note (chugAt.back(), 82.41, 0.012, juce::Decibels::decibelsToGain (-10.0f), 0.06); }
+        for (int k = 0; k < 8; ++k) { quietAt.push_back (2.9 + k * 0.1); note (quietAt.back(), 329.6, 0.03, juce::Decibels::decibelsToGain (-30.0f), 0.07); }
+        for (int i = 0; i < n; ++i)
+        {
+            const float floor = juce::Decibels::decibelsToGain (-64.0f) * (float) std::sin (juce::MathConstants<double>::twoPi * 50.0 * i / sr)
+                              + juce::Decibels::decibelsToGain (-68.0f) * (rng.nextFloat() * 2.0f - 1.0f) * 1.7f;
+            for (int ch = 0; ch < 2; ++ch)
+                di.addSample (ch, i, floor);
+        }
+        auto rmsDb = [] (const juce::AudioBuffer<float>& b, int from, int len) { return juce::Decibels::gainToDecibels (b.getRMSLevel (0, from, len), -200.0f); };
+        auto renderGate = [&] (float gate)
+        {
+            SwarmnessAudioProcessor p;
+            p.getPresetManager().loadPreset ("Steel Lead");
+            setParam (p, ParamIDs::ampGate, gate);
+            auto out = render (p, di, sr, 256);
+            return std::make_pair (std::move (out), p.getLatencySamples());
+        };
+        auto [off, lat] = renderGate (0.0f);
+        auto [on, lat2] = renderGate (45.0f);
+        auto [tight, lat3] = renderGate (55.0f);
+        juce::ignoreUnused (lat2, lat3);
+        // the floor
+        const float floorOff = rmsDb (off, (int) (0.2 * sr), (int) (0.7 * sr)), floorOn = rmsDb (on, (int) (0.2 * sr), (int) (0.7 * sr));
+        check (floorOff - floorOn > 40.0f, juce::String::formatted ("GATE 45 takes a -65 dBFS floor from %.1f to %.1f dBFS out of the lead amp", floorOff, floorOn));
+        // staccato separation: in every 16th, the 5 ms RMS's drop from its peak to its dip
+        auto gapDepth = [&] (const juce::AudioBuffer<float>& b)
+        {
+            std::vector<float> depths;
+            for (double at : chugAt)
+            {
+                float hi = -200.0f, lo = 200.0f;
+                for (int s = (int) (at * sr) + lat; s + 240 < (int) ((at + 0.0833) * sr) + lat; s += 240)
+                {
+                    const float v = rmsDb (b, s, 240);
+                    hi = juce::jmax (hi, v); lo = juce::jmin (lo, v);
+                }
+                depths.push_back (hi - lo);
+            }
+            std::sort (depths.begin(), depths.end());
+            return depths[depths.size() / 2];
+        };
+        const float depthOff = gapDepth (off), depthOn = gapDepth (on), depthTight = gapDepth (tight);
+        check (depthTight - depthOff > 8.0f && depthOn > depthOff,
+               juce::String::formatted ("16th-note chugs: the gap between them is %.1f dB deep with GATE 55, %.1f with 45 (%.1f without)", depthTight, depthOn, depthOff));
+        // the chugs' attacks and the quiet notes are untouched
+        std::vector<float> atk;
+        for (double at : chugAt)
+            atk.push_back (rmsDb (on, (int) (at * sr) + lat, 144) - rmsDb (off, (int) (at * sr) + lat, 144));
+        std::sort (atk.begin(), atk.end());
+        check (std::abs (atk[atk.size() / 2]) < 2.0f, juce::String::formatted ("the chugs' first 3 ms: %+.1f dB vs no gate (lookahead)", atk[atk.size() / 2]));
+        const float quietOff = rmsDb (off, (int) (2.9 * sr) + lat, (int) (0.8 * sr)), quietOn = rmsDb (on, (int) (2.9 * sr) + lat, (int) (0.8 * sr));
+        check (std::abs (quietOn - quietOff) < 3.0f, juce::String::formatted ("quiet (-30 dBFS) staccato notes still come through: %.1f vs %.1f dBFS", quietOn, quietOff));
+        // a swell opens the gate gently (NoiseGate alone: the gain never moves faster than 3 dB / ms)
+        {
+            NoiseGate g;
+            g.prepare (sr, 32, 0.001);
+            juce::AudioBuffer<float> swell (2, (int) (2.0 * sr));
+            for (int i = 0; i < swell.getNumSamples(); ++i)
+            {
+                const double t = i / sr;
+                const float v = (float) (std::sin (juce::MathConstants<double>::twoPi * 110.0 * t) * juce::Decibels::decibelsToGain (-70.0 + 50.0 * juce::jmin (1.0, t / 1.2)));
+                for (int ch = 0; ch < 2; ++ch) swell.setSample (ch, i, v);
+            }
+            float last = g.currentGainDb(), worst = 0.0f;
+            for (int s = 0; s + 48 <= swell.getNumSamples(); s += 48)
+            {
+                const float* key[2] { swell.getReadPointer (0, s), swell.getReadPointer (1, s) };
+                g.compute (key, 2, 48, 0.35f);
+                worst = juce::jmax (worst, std::abs (g.currentGainDb() - last));
+                last = g.currentGainDb();
+            }
+            check (worst < 3.0f && g.isOpen(), juce::String::formatted ("a swell: the gate opens with at most %.1f dB per ms", worst));
+        }
+        check (lat == 61 + 2 * (int) std::round (0.001 * sr), juce::String::formatted ("latency = SMOKE's oversampling + the two gates' lookahead (%d samples)", lat));
+    }
+
+    void testHoney()
+    {
+        std::printf ("\nHONEY: sustainer / compressor\n");
+        const double sr = 48000.0;
+        check (Chain::defaultOrder()[0] == Chain::honey, "HONEY sits first in the default chain");
+        {
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            auto in = makeSine (sr, (int) sr, 220.0, 0.3f);
+            auto out = render (p, in, sr, 256);
+            const int lat = p.getLatencySamples();
+            double diff = 0.0;
+            for (int i = 0; i + lat < in.getNumSamples(); ++i)
+                diff = juce::jmax (diff, (double) std::abs (out.getSample (0, i + lat) - in.getSample (0, i)));
+            check (diff < 1.0e-6, juce::String::formatted ("off: transparent (max diff %.1e, latency %d)", diff, lat));
+        }
+        auto levelDb = [&] (SwarmnessAudioProcessor& p, float amp, double from = 0.6, double to = 0.95)
+        {
+            auto out = render (p, makeSine (sr, (int) sr, 220.0, amp), sr, 256);
+            return juce::Decibels::gainToDecibels (out.getRMSLevel (0, (int) (from * sr), (int) ((to - from) * sr)) * std::sqrt (2.0f));
+        };
+        auto honeyProc = [&] (float sustain, float attack, float blend)
+        {
+            auto p = std::make_unique<SwarmnessAudioProcessor>();
+            resetToInit (*p);
+            setParam (*p, ParamIDs::hnOn, 1.0f);
+            setParam (*p, ParamIDs::hnSustain, sustain);
+            setParam (*p, ParamIDs::hnAttack, attack);
+            setParam (*p, ParamIDs::hnBlend, blend);
+            return p;
+        };
+        // the static curve: a -10 dBFS sine at SUSTAIN 0 / 50 / 100 lands where the curve says
+        for (float s : { 0.0f, 50.0f, 100.0f })
+        {
+            auto p = honeyProc (s, 0.0f, 100.0f);
+            const float amp = juce::Decibels::decibelsToGain (-10.0f);
+            const float det = juce::Decibels::gainToDecibels (HoneyBlock::detectorOfSine (amp));
+            const float expected = -10.0f - HoneyBlock::gainReductionFor (det, s * 0.01f) + HoneyBlock::makeupDb (s * 0.01f);
+            const float got = levelDb (*p, amp);
+            check (std::abs (got - expected) < 1.0f, juce::String::formatted ("SUSTAIN %.0f: -10 dBFS sine -> %.1f dB (curve says %.1f)", s, got, expected));
+        }
+        // sustain: at SUSTAIN 100 a -40 dBFS note sits within 6 dB of a -10 dBFS one
+        {
+            auto p = honeyProc (100.0f, 0.0f, 100.0f);
+            const float loud = levelDb (*p, juce::Decibels::decibelsToGain (-10.0f));
+            auto q = honeyProc (100.0f, 0.0f, 100.0f);
+            const float quiet = levelDb (*q, juce::Decibels::decibelsToGain (-40.0f));
+            check (loud - quiet < 6.0f, juce::String::formatted ("SUSTAIN 100: a 30 dB quieter note comes out only %.1f dB quieter", loud - quiet));
+        }
+        // attack: a -20 dBFS burst - ATTACK 0 (1 ms) has settled 4 ms in, ATTACK 100 (40 ms) lets the first ms through
+        for (float a : { 0.0f, 100.0f })
+        {
+            auto p = honeyProc (100.0f, a, 100.0f);
+            auto in = makeSine (sr, (int) sr, 220.0, juce::Decibels::decibelsToGain (-20.0f));
+            for (int i = 0; i < (int) (0.3 * sr); ++i)
+                for (int ch = 0; ch < in.getNumChannels(); ++ch)
+                    in.setSample (ch, i, 0.0f);
+            auto out = render (*p, in, sr, 256);
+            const int lat = p->getLatencySamples(), t0 = (int) (0.3 * sr) + lat;
+            const float early = juce::Decibels::gainToDecibels (out.getMagnitude (0, t0 + (int) (0.004 * sr), (int) (0.005 * sr)));
+            const float settled = juce::Decibels::gainToDecibels (out.getMagnitude (0, t0 + (int) (0.5 * sr), (int) (0.1 * sr)));
+            if (a < 50.0f)
+                check (early - settled < 3.0f, juce::String::formatted ("ATTACK 0: 4-9 ms in %.1f dB vs settled %.1f dB", early, settled));
+            else
+                check (early - settled > 6.0f, juce::String::formatted ("ATTACK 100: the pick gets through (4-9 ms in %.1f dB vs settled %.1f dB)", early, settled));
+        }
+        // no clicks: a tremolo-shaped sine through full compression stays smooth
+        {
+            auto p = honeyProc (100.0f, 0.0f, 100.0f);
+            auto in = makeSine (sr, (int) sr * 2, 220.0, 0.5f);
+            for (int i = 0; i < in.getNumSamples(); ++i)
+            {
+                const float env = 0.55f + 0.45f * std::sin (juce::MathConstants<float>::twoPi * 4.0f * (float) i / (float) sr);
+                for (int ch = 0; ch < in.getNumChannels(); ++ch)
+                    in.setSample (ch, i, in.getSample (ch, i) * env);
+            }
+            auto out = render (*p, in, sr, 256);
+            double sumSq = 0.0, peak = 0.0;
+            const int from = (int) (0.3 * sr), to = (int) (1.8 * sr);
+            for (int i = from; i < to; ++i)
+            {
+                const float v = out.getSample (0, i + 1) - 2.0f * out.getSample (0, i) + out.getSample (0, i - 1);
+                sumSq += (double) v * v;
+                peak = juce::jmax (peak, (double) std::abs (v));
+            }
+            const double rms = std::sqrt (sumSq / (double) (to - from));
+            check (peak / rms < 10.0 * std::sqrt (2.0), juce::String::formatted ("compressing a swelling sine: 2nd-difference peak / rms %.1f dB", 20.0 * std::log10 (peak / rms)));
+        }
+        // LIMIT: a 0 dBFS sine is held at the -6 dBFS ceiling (within 1 dB after 20 ms), off it is not
+        {
+            auto p = honeyProc (0.0f, 100.0f, 100.0f);
+            setParam (*p, ParamIDs::hnLimit, 1.0f);
+            auto out = render (*p, makeSine (sr, (int) sr, 220.0, 1.0f), sr, 256);
+            const float pk = juce::Decibels::gainToDecibels (out.getMagnitude (0, (int) (0.02 * sr), (int) (0.9 * sr)));
+            check (std::abs (pk - HoneyBlock::kLimitCeilingDb) < 1.0f, juce::String::formatted ("LIMIT: 0 dBFS sine held at %.1f dBFS", pk));
+        }
+        // BLEND 0 = dry
+        {
+            auto p = honeyProc (100.0f, 0.0f, 0.0f);
+            const float got = levelDb (*p, juce::Decibels::decibelsToGain (-10.0f));
+            check (std::abs (got + 10.0f) < 0.5f, juce::String::formatted ("BLEND 0: dry (%.1f dB)", got));
+        }
+    }
+
     void testNonFiniteInput()
     {
         std::printf ("\nNon-finite input\n");
@@ -1392,23 +2017,23 @@ namespace
     {
         std::printf ("\nParallel paths (split -> A || B -> merge)\n");
         {
-            Chain::Layout l { { Chain::smoke, Chain::shift, Chain::pitch, Chain::swarm, Chain::crypt, Chain::wings, Chain::comb, Chain::carve, Chain::drive, Chain::amp, Chain::cab }, {} };
+            Chain::Layout l { { Chain::smoke, Chain::shift, Chain::pitch, Chain::swarm, Chain::crypt, Chain::wings, Chain::comb, Chain::carve, Chain::drive, Chain::amp, Chain::cab, Chain::honey }, {} };
             l.lanes[Chain::swarm] = Chain::pathA;
             l.lanes[Chain::crypt] = Chain::pathB;
             const auto plan = Chain::planFor (l);
             const auto& split = plan.stages[3];
-            check (plan.numStages == 10 && plan.numSplits == 1 && split.parallel && split.numA == 1 && split.numB == 1
+            check (plan.numStages == 11 && plan.numSplits == 1 && split.parallel && split.numA == 1 && split.numB == 1
                    && split.a[0] == Chain::swarm && split.b[0] == Chain::crypt && plan.stages[4].block == Chain::wings,
                    "plan: SMOKE, SHIFT, HIVE -> [SWARM || CRYPT] -> WINGS, COMB, CARVE");
 
-            // two splits with series blocks between: [SMOKE, SHIFT || HIVE] -> WASP -> AMP -> CAB -> SWARM -> [WINGS || COMB] -> CARVE -> CRYPT
+            // two splits with series blocks between: HONEY -> [SMOKE, SHIFT || HIVE] -> WASP -> AMP -> CAB -> SWARM -> [WINGS || COMB] -> CARVE -> CRYPT
             Chain::Layout two { Chain::defaultOrder(), {} };
             two.lanes[Chain::smoke] = Chain::pathA;  two.lanes[Chain::shift] = Chain::pathA;  two.lanes[Chain::pitch] = Chain::pathB;
             two.lanes[Chain::wings] = Chain::pathA;  two.lanes[Chain::comb]  = Chain::pathB;
             const auto p2 = Chain::planFor (two);
-            check (p2.numSplits == 2 && p2.numStages == 8 && p2.stages[0].parallel && p2.stages[0].split == 0
-                   && p2.stages[1].block == Chain::drive && p2.stages[2].block == Chain::amp && p2.stages[4].block == Chain::swarm
-                   && p2.stages[5].parallel && p2.stages[5].split == 1 && p2.stages[5].a[0] == Chain::wings && p2.stages[5].b[0] == Chain::comb,
+            check (p2.numSplits == 2 && p2.numStages == 9 && p2.stages[0].block == Chain::honey && p2.stages[1].parallel && p2.stages[1].split == 0
+                   && p2.stages[2].block == Chain::drive && p2.stages[3].block == Chain::amp && p2.stages[5].block == Chain::swarm
+                   && p2.stages[6].parallel && p2.stages[6].split == 1 && p2.stages[6].a[0] == Chain::wings && p2.stages[6].b[0] == Chain::comb,
                    "two splits separated by a series block, each with its own MIX");
         }
 
@@ -1707,8 +2332,8 @@ namespace
             auto v = [&b] (const char* id) { return b.getAPVTS().getRawParameterValue (id)->load(); };
             check (v (ParamIDs::shiftA) < -11.5f && v (ParamIDs::shiftB) < -23.5f && v (ParamIDs::shRaw) < 0.5f && std::abs (v (ParamIDs::shDetune) + 20.0f) < 0.1f,
                    "old session: DIVE -> SHIFT -12 / -24, STING RAW off and DETUNE -20 ct carried over to SHIFT");
-            check (b.getRequestedLayout().order[0] == Chain::smoke && b.getRequestedLayout().order[1] == Chain::shift
-                   && b.getRequestedLayout().order[2] == Chain::pitch, "old session: SHIFT lands right before HIVE");
+            check (b.getRequestedLayout().order[0] == Chain::honey && b.getRequestedLayout().order[1] == Chain::smoke && b.getRequestedLayout().order[2] == Chain::shift
+                   && b.getRequestedLayout().order[3] == Chain::pitch, "old session: SHIFT lands right before HIVE (and HONEY, new, goes first)");
             {
                 PresetManager::ValueMap beta25 { { "hvAnger", 0.0f }, { "hvFrenzy", 55.0f }, { "hvBuzz", 0.0f }, { ParamIDs::shRaw, 1.0f } };
                 PresetManager::migrateLegacyValues (beta25);
@@ -1849,6 +2474,29 @@ namespace
                        juce::String::formatted ("%s, DECAY %.1f s: measured RT60 %.2f s", ParamChoices::reverbTypes[type].toRawUTF8(), decay, rt));
             }
 
+        {
+            // FREEZE: the tail is held (no growth, no decay) while frozen, decays again once released
+            ReverbStage r;
+            r.prepare (sr, 256);
+            ReverbStage::Settings s;
+            s.on = true; s.mix = 1.0f; s.type = ReverbStage::hall; s.decay = 1.0f; s.lowCutHz = 20.0f;
+            r.setParams (s);
+            juce::AudioBuffer<float> buf (2, (int) (sr * 9.0));
+            buf.clear();
+            buf.setSample (0, 4800, 0.5f);
+            buf.setSample (1, 4800, 0.5f);
+            for (int i = 0; i < buf.getNumSamples(); i += 256)
+            {
+                if (i == 256 * (int) (0.3 * sr / 256.0)) { s.freeze = true;  r.setParams (s); }
+                if (i == 256 * (int) (6.0 * sr / 256.0)) { s.freeze = false; r.setParams (s); }
+                float* ptr[2] { buf.getWritePointer (0, i), buf.getWritePointer (1, i) };
+                r.process (ptr, 2, juce::jmin (256, buf.getNumSamples() - i));
+            }
+            auto level = [&] (double at) { return juce::Decibels::gainToDecibels (buf.getRMSLevel (0, (int) (at * sr), (int) (0.5 * sr)) + 1.0e-9f); };
+            const double a = level (1.0), b = level (3.0), c = level (5.5), d = level (8.0);
+            check (allFinite (buf) && std::abs (b - a) < 2.0 && std::abs (c - a) < 3.0 && d < c - 20.0,
+                   juce::String::formatted ("FREEZE: tail %.1f dB at 1 s, %.1f at 3 s, %.1f at 5.5 s; released: %.1f dB at 8 s", a, b, c, d));
+        }
         {
             // quality of the HALL tail: wide (decorrelated L / R), dense, highs die faster than lows with a dark TONE
             SwarmnessAudioProcessor p;
@@ -2186,7 +2834,8 @@ namespace
         {
             AmpBlock::Settings s;
             auto out = renderAmp (s, guitar);
-            check (nullDb (out, guitar, 0, 0, guitar.getNumSamples()) < -200.0, "off: bit-transparent");
+            const int look = (int) std::round (AmpBlock::kGateLookaheadSeconds * 48000.0);
+            check (nullDb (out, guitar, look, 0, guitar.getNumSamples()) < -200.0, "off: bit-transparent (behind the gate's lookahead)");
         }
 
         // GATE silences the hiss between notes, keeps the notes
@@ -2778,7 +3427,8 @@ namespace
         {
             DriveBlock::Settings s;
             auto out = renderWasp (s, guitar);
-            check (nullDb (out, guitar, 0, 0, guitar.getNumSamples()) < -200.0, "off: bit-transparent");
+            const int look = (int) std::round (DriveBlock::kGateLookaheadSeconds * 48000.0);
+            check (nullDb (out, guitar, look, 0, guitar.getNumSamples()) < -200.0, "off: bit-transparent (behind the gate's lookahead)");
         }
         DriveBlock::Settings s;
         s.on = true;
@@ -2818,6 +3468,68 @@ namespace
             auto dark = s, bright = s; dark.bright = 0.0f; bright.bright = 1.0f;
             const double d = toneAt (dark, 4000.0) - toneAt (dark, 500.0), b = toneAt (bright, 4000.0) - toneAt (bright, 500.0);
             check (b > d + 12.0, juce::String::formatted ("BRIGHT: 4 kHz vs 500 Hz %.1f dB -> %.1f dB", d, b));
+        }
+        {
+            // the four characters: one circuit, four sets of parts
+            std::printf ("  characters\n");
+            auto harmonic = [&] (DriveBlock::Settings t, int h, float amp)
+            {
+                auto out = renderWasp (t, makeSine (sr, 24000, 220.0, amp));
+                return toneDb (out, sr, 220.0 * h, 12000, 9600) - toneDb (out, sr, 220.0, 12000, 9600);
+            };
+            std::array<juce::AudioBuffer<float>, DriveBlock::numCharacters> outs;
+            for (int c = 0; c < DriveBlock::numCharacters; ++c)
+            {
+                auto t = s; t.character = c;
+                outs[(size_t) c] = renderWasp (t, guitar);
+                const double db = juce::Decibels::gainToDecibels (outs[(size_t) c].getRMSLevel (0, 9600, 38400)) - inDb;
+                check (allFinite (outs[(size_t) c]) && std::abs (db) < 6.0,
+                       juce::String::formatted ("%s at DRIVE 3, VOLUME 5: %+.1f dB vs the input", DriveBlock::characterName (c), db));
+                if (c > 0)
+                {
+                    const double diff = nullDb (outs[(size_t) c], outs[0], 0, 9600, 38400);
+                    check (diff > -20.0, juce::String::formatted ("%s sounds different from TIGHT (residual %.1f dB)", DriveBlock::characterName (c), diff));
+                }
+            }
+            auto b = s; b.character = DriveBlock::boost; b.drive = 0.0f; b.attack = 0.0f;
+            const double bFlat = toneAt (b, 80.0) - toneAt (b, 1000.0), bH3 = harmonic (b, 3, 0.1f);
+            check (std::abs (bFlat) < 3.0 && bH3 < -60.0,
+                   juce::String::formatted ("BOOST at DRIVE 0: flat (80 Hz vs 1 kHz %+.1f dB), clean (3rd harmonic %.1f dB)", bFlat, bH3));
+            auto m = s; m.character = DriveBlock::smooth; m.drive = 0.5f;
+            auto r = s; r.character = DriveBlock::rasp; r.drive = 0.5f;
+            auto ti = s; ti.drive = 0.5f;
+            const double mH2 = harmonic (m, 2, 0.1f), tH2 = harmonic (ti, 2, 0.1f), mH3 = harmonic (m, 3, 0.1f), rH3 = harmonic (r, 3, 0.1f);
+            check (mH2 < tH2 - 20.0, juce::String::formatted ("SMOOTH clips symmetrically: 2nd harmonic %.1f dB (TIGHT %.1f dB)", mH2, tH2));
+            check (rH3 > mH3 + 6.0, juce::String::formatted ("RASP clips harder: 3rd harmonic %.1f dB (SMOOTH %.1f dB)", rH3, mH3));
+            for (int c = 1; c < DriveBlock::numCharacters; ++c)
+            {
+                auto t = s; t.character = c;
+                const double model = DriveBlock::responseDb (t, 80.0) - DriveBlock::responseDb (t, 1000.0);
+                const double audio = toneAt (t, 80.0) - toneAt (t, 1000.0);
+                check (std::abs (model - audio) < 1.5,
+                       juce::String::formatted ("%s: the editor's response matches the audio (%.1f vs %.1f dB)", DriveBlock::characterName (c), model, audio));
+            }
+            {
+                // switching the character mid-note: a short fade, no click
+                DriveBlock d;
+                d.prepare (sr, 256);
+                auto in = makeSine (sr, 48000, 220.0, 0.1f);
+                juce::AudioBuffer<float> out (in);
+                auto t = s; t.character = DriveBlock::smooth;
+                d.setParams (t);
+                for (int i = 0; i < out.getNumSamples(); i += 256)
+                {
+                    if (i == 24064) { t.character = DriveBlock::rasp; d.setParams (t); }
+                    float* ptr[2] { out.getWritePointer (0, i), out.getWritePointer (1, i) };
+                    d.process (ptr, 2, juce::jmin (256, out.getNumSamples() - i));
+                }
+                float worst = 0.0f;
+                for (int i = 2; i < out.getNumSamples(); ++i)
+                    worst = juce::jmax (worst, std::abs (out.getSample (0, i) - 2.0f * out.getSample (0, i - 1) + out.getSample (0, i - 2)));
+                const float steady = out.getMagnitude (0, 40000, 8000);
+                check (allFinite (out) && worst < 0.25f * steady,
+                       juce::String::formatted ("SMOOTH -> RASP mid-note: largest step %.3f vs level %.3f (a fade, no click)", worst, steady));
+            }
         }
         {
             auto quiet = s, loud = s; quiet.volume = 0.25f; loud.volume = 0.75f;
@@ -2954,6 +3666,11 @@ namespace
 int main (int argc, char** argv)
 {
     juce::ScopedJuceInitialiser_GUI juceInit;
+    // the licence settings of the tests live in a temporary folder (never the user's, never a started trial)
+    const auto licenceDir = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("swarmness-tests-licence");
+    licenceDir.deleteRecursively();
+    licenceDir.createDirectory();
+    Licence::setSettingsDirectory (licenceDir);
 
     if (argc >= 2 && juce::String (argv[1]) == "--fuzz-dyn")
     {
@@ -3327,6 +4044,10 @@ int main (int argc, char** argv)
                 p.loadCabIR (juce::File (argv[7 + k]), k);
         }
         p.setUiMini (mini);
+        if (argc >= 7 && juce::String (argv[6]) == "more")   // every block's MORE open
+            p.setUiMore (0xffff);
+        if (argc >= 7 && juce::String (argv[6]) == "licence")   // the trial over, the activation panel open
+            p.getLicence().setClock ([] { return juce::Time::getCurrentTime() + juce::RelativeTime::days (8.0); });
         std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
         const bool tunerShot = argc >= 7 && juce::String (argv[6]) == "tuner";
         const bool infoShot = argc >= 7 && juce::String (argv[6]) == "info";
@@ -3460,6 +4181,38 @@ int main (int argc, char** argv)
         std::printf ("latency %d samples\n", p.getLatencySamples());
         return 0;
     }
+    if (argc >= 4 && juce::String (argv[1]) == "--gate-probe")
+    {
+        // --gate-probe in.wav <knob 0..100 | auto> [fromMs toMs]: NoiseGate alone on a file, its state per ms
+        juce::AudioFormatManager fm;
+        fm.registerBasicFormats();
+        std::unique_ptr<juce::AudioFormatReader> r (fm.createReaderFor (juce::File (argv[2])));
+        if (r == nullptr) { std::printf ("cannot read %s\n", argv[2]); return 1; }
+        juce::AudioBuffer<float> in (2, (int) r->lengthInSamples);
+        r->read (&in, 0, in.getNumSamples(), 0, true, true);
+        if (r->numChannels == 1) in.copyFrom (1, 0, in, 0, 0, in.getNumSamples());
+        const double sr = r->sampleRate;
+        NoiseGate gate;
+        gate.prepare (sr, 32, 0.001);
+        const bool autoMode = juce::String (argv[3]) == "auto";
+        gate.setAutoThreshold (autoMode);
+        const float knob = autoMode ? 1.0f : juce::String (argv[3]).getFloatValue() * 0.01f;
+        const int fromMs = argc >= 5 ? juce::String (argv[4]).getIntValue() : 0, toMs = argc >= 6 ? juce::String (argv[5]).getIntValue() : 1 << 30;
+        std::printf ("ms  in-peak  gate-peak  rms  slow  thr  target  gain  open\n");
+        for (int start = 0; start + 32 <= in.getNumSamples(); start += 32)
+        {
+            const float* key[2] { in.getReadPointer (0, start), in.getReadPointer (1, start) };
+            float inPk = 0.0f;
+            for (int i = 0; i < 32; ++i) inPk = juce::jmax (inPk, std::abs (key[0][i]));
+            gate.compute (key, 2, 32, knob);
+            const int ms = (int) (start * 1000.0 / sr);
+            if (ms >= fromMs && ms <= toMs && (start / 32) % (int) juce::jmax (1.0, sr / 32000.0) == 0)
+                std::printf ("%5d %7.1f %9.1f %5.1f %5.1f %5.1f %6.1f %6.1f %d\n", ms, juce::Decibels::gainToDecibels (inPk, -140.0f), gate.peakDbNow(),
+                             gate.rmsDbNow(), gate.slowDbNow(), gate.thresholdNowDb(), gate.lastTargetDb(), gate.currentGainDb(), (int) gate.isOpen());
+        }
+        return 0;
+    }
+
     if (argc >= 4 && juce::String (argv[1]) == "--hive-probe")
     {
         // --hive-probe in.wav outdir [raw=0|1]: HIVE alone as a DRY / all-HOLD delay, every stage dumped to WAV
@@ -3489,7 +4242,7 @@ int main (int argc, char** argv)
                 m.addTokens (kv.fromFirstOccurrenceOf ("=", false, false), ",", "");
                 s.steps.numSteps = juce::jlimit (1, 8, m.size());
                 for (int k = 0; k < m.size() && k < 8; ++k)
-                    s.steps.move[(size_t) k] = (HiveBlock::StepMove) juce::jlimit (0, 4, m[k].getIntValue());
+                    s.steps.move[(size_t) k] = (HiveBlock::StepMove) juce::jlimit (0, HiveBlock::numStepMoves - 1, m[k].getIntValue());
             }
         }
         hive.setParams (s);
@@ -3583,6 +4336,16 @@ int main (int argc, char** argv)
         if (which == "cab")     testCab();
         if (which == "wasp")    testWasp();
         if (which == "splices") testSpliceContinuity();
+        if (which == "honey")   testHoney();
+        if (which == "wings")   testWings();
+        if (which == "stomps")  testStomps();
+        if (which == "stop")    testHiveStop();
+        if (which == "tricks")  testCrushAndRing();
+        if (which == "stutter") testStutter();
+        if (which == "licence") testLicence();
+        if (which == "program") testProgramChange();
+        if (which == "learn")   testInputLearn();
+        if (which == "gates")   testGates();
         if (which == "tuner")   testTuner();
         std::printf ("\n%s (%d failure%s)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures, failures == 1 ? "" : "s");
         return failures == 0 ? 0 : 1;
@@ -3606,6 +4369,14 @@ int main (int argc, char** argv)
     testTrails();
     reportLag();
     testFuzzIdleNoise();
+    testWings();
+    testStomps();
+    testHiveStop();
+    testCrushAndRing();
+    testStutter();
+    testLicence();
+    testProgramChange();
+    testInputLearn();
     testFuzzSag();
     testMonoToStereo();
     testMidiLearn();
@@ -3622,6 +4393,8 @@ int main (int argc, char** argv)
     testParallelRouting();
     testNonFiniteInput();
     testSpliceContinuity();
+    testHoney();
+    testGates();
     testMissingFiles();
     testParameterOrder();
     testGraphicEq();

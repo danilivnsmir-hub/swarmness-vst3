@@ -21,6 +21,7 @@ SwarmnessAudioProcessor::SwarmnessAudioProcessor()
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       apvts (*this, nullptr, "PARAMETERS", createParameterLayout())
 {
+    licence.validateIfDue();   // the stored licence is checked online once a month (background)
     auto get = [this] (const char* id)
     {
         auto* v = apvts.getRawParameterValue (id);
@@ -53,6 +54,11 @@ SwarmnessAudioProcessor::SwarmnessAudioProcessor()
     p.fuzzScoop = get (id::fuzzScoop);   p.fuzzGlare = get (id::fuzzGlare);     p.fuzzBlend = get (id::fuzzBlend);   p.fuzzSag = get (id::fuzzSag);
     p.flowOn = get (id::flowOn);         p.flowHard = get (id::flowHard);       p.flowSync = get (id::flowSync);
     p.flowAmount = get (id::flowAmount); p.flowSpeed = get (id::flowSpeed);     p.flowDiv = get (id::flowDiv);
+    p.wgSteps = get (id::wgSteps);
+    for (int k = 0; k < 16; ++k)
+        p.wgLevels[(size_t) k] = get (id::wgLevels[k]);
+    p.hnOn = get (id::hnOn);             p.hnSustain = get (id::hnSustain);     p.hnAttack = get (id::hnAttack);
+    p.hnBlend = get (id::hnBlend);       p.hnLevel = get (id::hnLevel);         p.hnLimit = get (id::hnLimit);
     p.output = get (id::output);         p.input = get (id::input);           p.bypass = get (id::bypass);
 
     p.geqOn = get (id::geqOn);           p.geqLevel = get (id::geqLevel);
@@ -66,6 +72,16 @@ SwarmnessAudioProcessor::SwarmnessAudioProcessor()
     p.revOn = get (id::revOn);           p.revType = get (id::revType);         p.revMix = get (id::revMix);
     p.revDecay = get (id::revDecay);     p.revSize = get (id::revSize);         p.revPreDelay = get (id::revPreDelay);
     p.revTone = get (id::revTone);       p.revLowCut = get (id::revLowCut);     p.revMod = get (id::revMod);         p.revDuck = get (id::revDuck);
+    p.revFreeze = get (id::revFreeze);
+    p.stingHold = get (id::stingHold);   p.stingShiftA = get (id::stingShiftA);   p.stingShiftB = get (id::stingShiftB);
+    for (int b = 0; b < Chain::numBlocks; ++b)
+    {
+        p.venomBlock[(size_t) b] = id::venomBlock[b] != nullptr ? get (id::venomBlock[b]) : nullptr;
+        p.stingBlock[(size_t) b] = id::stingBlock[b] != nullptr ? get (id::stingBlock[b]) : nullptr;
+    }
+    p.venomFreeze = get (id::venomFreeze); p.stingFreeze = get (id::stingFreeze);
+    p.hvStop = get (id::hvStop); p.hvStopTime = get (id::hvStopTime); p.venomStop = get (id::venomStop); p.stingStop = get (id::stingStop);
+    p.fuzzCrush = get (id::fuzzCrush); p.swarmRing = get (id::swarmRing);
     p.ampOn = get (id::ampOn);           p.ampChannel = get (id::ampChannel);   p.ampGain = get (id::ampGain);
     p.ampBass = get (id::ampBass);       p.ampMid = get (id::ampMid);           p.ampTreble = get (id::ampTreble);   p.ampPresence = get (id::ampPresence);
     p.ampDepth = get (id::ampDepth);     p.ampMaster = get (id::ampMaster);     p.ampGate = get (id::ampGate);       p.ampLevel = get (id::ampLevel);
@@ -75,6 +91,7 @@ SwarmnessAudioProcessor::SwarmnessAudioProcessor()
     p.drvOn = get (id::drvOn);           p.drvVolume = get (id::drvVolume);     p.drvDrive = get (id::drvDrive);     p.drvBright = get (id::drvBright);
     p.drvAttack = get (id::drvAttack);   p.drvGate = get (id::drvGate);
     p.drvNam = get (id::drvNam);         p.drvNamInput = get (id::drvNamInput); p.drvNamOutput = get (id::drvNamOutput); p.drvNamLite = get (id::drvNamLite);
+    p.drvCharacter = get (id::drvCharacter);
     p.cabOn = get (id::cabOn);           p.cabType = get (id::cabType);         p.cabMic = get (id::cabMic);         p.cabDist = get (id::cabDist);
     p.cabLowCut = get (id::cabLowCut);   p.cabHighCut = get (id::cabHighCut);   p.cabLevel = get (id::cabLevel);
     p.cabIrMix = get (id::cabIrMix);     p.cabIrInvB = get (id::cabIrInvB);
@@ -175,6 +192,7 @@ void SwarmnessAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBl
     fuzzStage.prepare (sampleRate, maxBlockSize);
     shift.prepare (sampleRate, maxBlockSize);
     hive.prepare (sampleRate, maxBlockSize);
+    honey.prepare (sampleRate, maxBlockSize);
     swarmChorus.prepare (sampleRate);
     flow .prepare (sampleRate);
     comb .prepare (sampleRate);
@@ -192,7 +210,11 @@ void SwarmnessAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBl
     cab.commitPending();   // the cabinet is running from the first block (an offline bounce starts right away)
 
     // Only SMOKE (oversampling) adds latency, and it is there wherever SMOKE sits in the chain.
-    const int latency = fuzzStage.getLatencySamples();
+    // the plug-in's latency: every block's own (SMOKE's oversampling, the gates' lookahead in AMP and WASP),
+    // whatever the order - parallel paths are padded to the series total
+    int latency = 0;
+    for (int b = 0; b < Chain::numBlocks; ++b)
+        latency += blockLatency (b);
     dryDelay.setMaximumDelayInSamples (latency + 8);
     dryDelay.prepare ({ sampleRate, (juce::uint32) maxBlockSize, 2 });
     dryDelay.setDelay ((float) latency);
@@ -208,18 +230,19 @@ void SwarmnessAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBl
     init (tunerGain, 0.02, 1.0f);
     init (inputGainSmoothed,  0.03, juce::Decibels::decibelsToGain (p.input->load()));
     init (bypassSmoothed,     0.02, on (p.bypass) ? 1.0f : 0.0f);
+    init (licenceGate,        0.05, licence.isAuthorised() ? 0.0f : 1.0f);
     init (chainFade,          0.008, 1.0f);
     for (int sp = 0; sp < Chain::maxSplits; ++sp)
         init (parMixSmoothed[(size_t) sp], 0.03, pct (p.parMix[(size_t) sp]));
     activeLayout = getRequestedLayout();
     pathBBuffer.setSize (2, maxBlockSize, false, false, true);
-    for (auto* d : { &pathAlignA, &pathAlignB })
-    {
-        d->setMaximumDelayInSamples (latency + 8);
-        d->prepare ({ sampleRate, (juce::uint32) maxBlockSize, 2 });
-        d->setDelay ((float) latency);
-        d->reset();
-    }
+    for (auto& split : pathAlign)
+        for (auto& d : split)
+        {
+            d.setMaximumDelayInSamples (latency + 8);
+            d.prepare ({ sampleRate, (juce::uint32) maxBlockSize, 2 });
+        }
+    applyPathAlignment();
 
     setLatencySamples (latency);
 
@@ -232,6 +255,7 @@ void SwarmnessAudioProcessor::releaseResources()
     fuzzStage.reset();
     shift.reset();
     hive.reset();
+    honey.reset();
     swarmChorus.reset();
     comb.reset();
     carve.reset();
@@ -307,6 +331,22 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     // ---- INPUT gain (how hard everything after it is hit). A NaN / Inf from the host never gets in:
     // once inside a feedback loop (CRYPT, the HIVE trails, the AMP) it would silence the plug-in.
     inputGainSmoothed.setTargetValue (juce::Decibels::decibelsToGain (p.input->load()));
+    if (int left = learnSamplesLeft.load(); left > 0)
+    {
+        // INPUT LEARN: the loudest raw peak over the listening time
+        float pk = learnPeak.load();
+        for (int ch = 0; ch < numChannels; ++ch)
+            pk = juce::jmax (pk, buffer.getMagnitude (ch, 0, numSamples));
+        learnPeak.store (std::isfinite (pk) ? pk : 0.0f);
+        left -= numSamples;
+        learnSamplesLeft.store (juce::jmax (0, left));
+        if (left <= 0)
+        {
+            const float wanted = -12.0f - juce::Decibels::gainToDecibels (juce::jmax (1.0e-5f, learnPeak.load()));
+            pendingInputDb.store (juce::jlimit (ParamRanges::inputMinDb, ParamRanges::inputMaxDb, wanted));
+            triggerAsyncUpdate();
+        }
+    }
     for (int i = 0; i < numSamples; ++i)
     {
         const float g = inputGainSmoothed.getNextValue();
@@ -324,10 +364,32 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     ctx.bpm = transport.bpm;
     ctx.ppq = transport.ppq;
     ctx.magicHeld = on (p.magicHold);
-    // LINK mini switches: the VENOM (magic) footswitch can drag the octaves in with it.
-    ctx.oct1Held = on (p.oct1) || (ctx.magicHeld && on (p.linkOct1));
-    ctx.oct2Held = on (p.oct2) || (ctx.magicHeld && on (p.linkOct2));
-    const bool anySwitchHeld = ctx.oct1Held || ctx.oct2Held || ctx.magicHeld;
+    ctx.stingHeld = on (p.stingHold);
+    // LINK mini switches: the VENOM / STING stomps can drag the octaves in with them.
+    ctx.oct1Held = on (p.oct1) || (ctx.magicHeld && on (p.linkOct1)) || (ctx.stingHeld && on (p.stingShiftA));
+    ctx.oct2Held = on (p.oct2) || (ctx.magicHeld && on (p.linkOct2)) || (ctx.stingHeld && on (p.stingShiftB));
+    // what the stomps do to the blocks while held: On engages, Off disengages (Off wins when both say something)
+    auto action = [] (const std::atomic<float>* a) { return a == nullptr ? 0 : (int) a->load(); };
+    auto forceOf = [&] (int venomAction, int stingAction)
+    {
+        const int v = ctx.magicHeld ? venomAction : 0, s = ctx.stingHeld ? stingAction : 0;
+        if (v == 2 || s == 2) return -1;
+        return v == 1 || s == 1 ? 1 : 0;
+    };
+    for (int b = 0; b < Chain::numBlocks; ++b)
+        ctx.force[(size_t) b] = forceOf (action (p.venomBlock[(size_t) b]), action (p.stingBlock[(size_t) b]));
+    ctx.freezeForce = forceOf (action (p.venomFreeze), action (p.stingFreeze));
+    ctx.stopForce = forceOf (action (p.venomStop), action (p.stingStop));
+    ctx.venom = ctx.force[Chain::pitch] > 0;
+    const bool anySwitchHeld = ctx.oct1Held || ctx.oct2Held || ctx.magicHeld || ctx.stingHeld;
+    {
+        const std::atomic<float>* powers[Chain::numBlocks] { p.rbOn, p.fuzzOn, p.swarmOn, p.flowOn, p.geqOn, p.peqOn, p.revOn, p.shOn, p.ampOn, p.cabOn, p.drvOn, p.hnOn };
+        unsigned mask = 0;
+        for (int b = 0; b < Chain::numBlocks; ++b)
+            if (b == Chain::shift ? (ctx.oct1Held || ctx.oct2Held || on (p.shOn)) : ctx.engaged (b, on (powers[b])))
+                mask |= 1u << b;
+        meters.engagedBlocks.store (mask, std::memory_order_relaxed);
+    }
 
     // ---- the chain:  pre -> split -> [path A || path B] -> merge -> post.
     // A new order / routing is faded in: dip the output, swap, come back (~8 ms each way).
@@ -352,20 +414,13 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
             pathBBuffer.copyFrom (ch, 0, audio[ch], numSamples);
         float* pathB[2] = { pathBBuffer.getWritePointer (0), pathBBuffer.getWritePointer (1) };
 
-        bool smokeA = false, smokeB = false;
         for (int i = 0; i < stage.numA; ++i)
-        {
-            smokeA = smokeA || stage.a[(size_t) i] == Chain::smoke;
             processChainBlock (stage.a[(size_t) i], ctx, audio, numChannels, numSamples);
-        }
         for (int i = 0; i < stage.numB; ++i)
-        {
-            smokeB = smokeB || stage.b[(size_t) i] == Chain::smoke;
             processChainBlock (stage.b[(size_t) i], ctx, pathB, numChannels, numSamples);
-        }
 
-        // Keep both paths time-aligned (SMOKE oversampling) so they never comb-filter.
-        // SMOKE exists once, so at most one split ever needs this.
+        // Keep both paths time-aligned (SMOKE's oversampling, the gates' lookahead) so they never comb-filter:
+        // each path is padded by the other's latency (applyPathAlignment), so the split takes as long as series
         auto align = [numChannels, numSamples] (juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::None>& d, float* const* x)
         {
             for (int ch = 0; ch < numChannels; ++ch)
@@ -375,8 +430,9 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
                     x[ch][i] = d.popSample (ch);
                 }
         };
-        if (smokeA && ! smokeB) align (pathAlignB, pathB);
-        if (smokeB && ! smokeA) align (pathAlignA, audio);
+        const int sp = juce::jlimit (0, Chain::maxSplits - 1, stage.split);
+        if (pathAlignSamples[(size_t) sp][0] > 0) align (pathAlign[(size_t) sp][0], audio);
+        if (pathAlignSamples[(size_t) sp][1] > 0) align (pathAlign[(size_t) sp][1], pathB);
 
         // merge: linear balance, so identical paths add up to exactly the input level
         auto& mix = parMixSmoothed[(size_t) stage.split];
@@ -403,8 +459,7 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
         if (chainFade.getCurrentValue() <= 0.0f && ! chainFade.isSmoothing())
         {
             activeLayout = getRequestedLayout();
-            pathAlignA.reset();
-            pathAlignB.reset();
+            applyPathAlignment();
             chainFade.setTargetValue (1.0f);
         }
     }
@@ -414,11 +469,12 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     outputGainSmoothed.setTargetValue (juce::Decibels::decibelsToGain (p.output->load()));
     // (the NOISE return glide after releasing a footswitch is allowed to finish, too)
     bypassSmoothed.setTargetValue (on (p.bypass) && ! anySwitchHeld && ! (shift.isEngaged() && ! on (p.shOn)) ? 1.0f : 0.0f);
+    licenceGate.setTargetValue (licence.isAuthorised() ? 0.0f : 1.0f);   // the trial over: the dry signal passes
 
     for (int i = 0; i < numSamples; ++i)
     {
         const float g = outputGainSmoothed.getNextValue();
-        const float b = bypassSmoothed.getNextValue();
+        const float b = juce::jmax (bypassSmoothed.getNextValue(), licenceGate.getNextValue());
         for (int ch = 0; ch < numChannels; ++ch)
         {
             const float wet = audio[ch][i] * g;
@@ -455,6 +511,39 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     spectrumTap.push (audio[0], numChannels > 1 ? audio[1] : nullptr, numSamples);
 }
 
+int SwarmnessAudioProcessor::blockLatency (int block) const noexcept
+{
+    switch (block)
+    {
+        case Chain::smoke: return fuzzStage.getLatencySamples();
+        case Chain::amp:   return amp.getLatencySamples();
+        case Chain::drive: return wasp.getLatencySamples();
+        default:           return 0;
+    }
+}
+
+void SwarmnessAudioProcessor::applyPathAlignment() noexcept
+{
+    for (auto& s : pathAlignSamples) s = { 0, 0 };
+    const auto plan = Chain::planFor (activeLayout);
+    for (int k = 0; k < plan.numStages; ++k)
+    {
+        const auto& stage = plan.stages[(size_t) k];
+        if (! stage.parallel) continue;
+        int latA = 0, latB = 0;
+        for (int i = 0; i < stage.numA; ++i) latA += blockLatency (stage.a[(size_t) i]);
+        for (int i = 0; i < stage.numB; ++i) latB += blockLatency (stage.b[(size_t) i]);
+        const int sp = juce::jlimit (0, Chain::maxSplits - 1, stage.split);
+        pathAlignSamples[(size_t) sp] = { latB, latA };   // A waits for B's blocks and vice versa
+    }
+    for (size_t sp = 0; sp < pathAlign.size(); ++sp)
+        for (size_t side = 0; side < 2; ++side)
+        {
+            pathAlign[sp][side].setDelay ((float) pathAlignSamples[sp][side]);
+            pathAlign[sp][side].reset();
+        }
+}
+
 //==============================================================================
 void SwarmnessAudioProcessor::processChainBlock (int block, const BlockContext& ctx, float* const* audio, int numChannels, int numSamples) noexcept
 {
@@ -462,11 +551,27 @@ void SwarmnessAudioProcessor::processChainBlock (int block, const BlockContext& 
     {
         case Chain::shift: processShift (ctx, audio, numChannels, numSamples); break;
         case Chain::pitch: processHive (ctx, audio, numChannels, numSamples); break;
-        case Chain::smoke: processSmoke (audio, numChannels, numSamples); break;
+        case Chain::smoke: processSmoke (ctx, audio, numChannels, numSamples); break;
         case Chain::wings: processWings (ctx, audio, numChannels, numSamples); break;
 
+        case Chain::honey:
+        {
+            HoneyBlock::Settings s;
+            s.on = ctx.engaged (Chain::honey, on (p.hnOn));
+            s.sustain = pct (p.hnSustain);
+            s.attack = pct (p.hnAttack);
+            s.blend = pct (p.hnBlend);
+            s.levelDb = p.hnLevel->load();
+            s.limit = on (p.hnLimit);
+            honey.setParams (s);
+            honey.process (audio, numChannels, numSamples);
+            meters.honeyGr.store (honey.gainReductionDb());
+            break;
+        }
+
         case Chain::swarm:
-            swarmChorus.setParams (p.swarmRate->load(), pct (p.swarmDepth), on (p.swarmOn) ? pct (p.swarmMix) : 0.0f, on (p.swarmDeep));
+            swarmChorus.setParams (p.swarmRate->load(), pct (p.swarmDepth), ctx.engaged (Chain::swarm, on (p.swarmOn)) ? pct (p.swarmMix) : 0.0f, on (p.swarmDeep),
+                                   pct (p.swarmRing));
             swarmChorus.process (audio, numChannels, numSamples);
             break;
 
@@ -475,7 +580,7 @@ void SwarmnessAudioProcessor::processChainBlock (int block, const BlockContext& 
             std::array<float, swarm::GraphicEq::numBands> gains {};
             for (size_t b = 0; b < gains.size(); ++b)
                 gains[b] = p.geqBands[b]->load();
-            comb.setParams (on (p.geqOn), gains, p.geqLevel->load());
+            comb.setParams (ctx.engaged (Chain::comb, on (p.geqOn)), gains, p.geqLevel->load());
             comb.process (audio, numChannels, numSamples);
             break;
         }
@@ -495,7 +600,7 @@ void SwarmnessAudioProcessor::processChainBlock (int block, const BlockContext& 
                 s.bellDb[b] = p.peqBellGain[b]->load();
                 s.bellQ[b]  = p.peqBellQ[b]->load();
             }
-            carve.setParams (on (p.peqOn), s);
+            carve.setParams (ctx.engaged (Chain::carve, on (p.peqOn)), s);
             carve.process (audio, numChannels, numSamples);
             break;
         }
@@ -503,7 +608,7 @@ void SwarmnessAudioProcessor::processChainBlock (int block, const BlockContext& 
         case Chain::crypt:
         {
             ReverbStage::Settings s;
-            s.on = on (p.revOn);
+            s.on = ctx.engaged (Chain::crypt, on (p.revOn));
             s.type = (int) p.revType->load();
             s.mix = pct (p.revMix);
             s.decay = p.revDecay->load();
@@ -513,6 +618,7 @@ void SwarmnessAudioProcessor::processChainBlock (int block, const BlockContext& 
             s.lowCutHz = p.revLowCut->load();
             s.mod = pct (p.revMod);
             s.duck = pct (p.revDuck);
+            s.freeze = ctx.freezeForce > 0 || (ctx.freezeForce == 0 && on (p.revFreeze));
             crypt.setParams (s);
             crypt.process (audio, numChannels, numSamples);
             break;
@@ -521,7 +627,7 @@ void SwarmnessAudioProcessor::processChainBlock (int block, const BlockContext& 
         case Chain::amp:
         {
             AmpBlock::Settings s;
-            s.on = on (p.ampOn);
+            s.on = ctx.engaged (Chain::amp, on (p.ampOn));
             s.channel = juce::jlimit (0, 3, (int) p.ampChannel->load());
             s.character = AmpBlock::channelSide (s.channel);   // one amp per channel
             s.gain = p.ampGain->load() * 0.1f;
@@ -548,12 +654,13 @@ void SwarmnessAudioProcessor::processChainBlock (int block, const BlockContext& 
         case Chain::drive:
         {
             DriveBlock::Settings s;
-            s.on = on (p.drvOn);
+            s.on = ctx.engaged (Chain::drive, on (p.drvOn));
             s.volume = p.drvVolume->load() * 0.1f;
             s.drive = p.drvDrive->load() * 0.1f;
             s.bright = p.drvBright->load() * 0.1f;
             s.attack = p.drvAttack->load() * 0.1f;
             s.gate = pct (p.drvGate);
+            s.character = (int) p.drvCharacter->load();
             s.nam = on (p.drvNam);
             s.namInput = p.drvNamInput->load() * 0.1f;
             s.namOutput = p.drvNamOutput->load() * 0.1f;
@@ -565,7 +672,7 @@ void SwarmnessAudioProcessor::processChainBlock (int block, const BlockContext& 
         case Chain::cab:
         {
             CabBlock::Settings s;
-            s.on = on (p.cabOn);
+            s.on = ctx.engaged (Chain::cab, on (p.cabOn));
             s.type = juce::jlimit (0, (int) CabBlock::numTypes - 1, (int) p.cabType->load());
             s.mic = pct (p.cabMic);
             s.distance = pct (p.cabDist);
@@ -581,7 +688,7 @@ void SwarmnessAudioProcessor::processChainBlock (int block, const BlockContext& 
     }
 }
 
-void SwarmnessAudioProcessor::processSmoke (float* const* audio, int numChannels, int numSamples) noexcept
+void SwarmnessAudioProcessor::processSmoke (const BlockContext& ctx, float* const* audio, int numChannels, int numSamples) noexcept
 {
     FuzzStage::Settings s;
     s.fuzz  = pct (p.fuzz);
@@ -591,8 +698,9 @@ void SwarmnessAudioProcessor::processSmoke (float* const* audio, int numChannels
     s.gate  = pct (p.fuzzGate);
     s.blend = pct (p.fuzzBlend);
     s.sag   = pct (p.fuzzSag);
+    s.crush = pct (p.fuzzCrush);
     s.voice = (int) p.fuzzVoice->load();
-    fuzzStage.setParams (on (p.fuzzOn), s);
+    fuzzStage.setParams (ctx.engaged (Chain::smoke, on (p.fuzzOn)), s);
     fuzzStage.process (audio, numChannels, numSamples);
 }
 
@@ -625,8 +733,10 @@ void SwarmnessAudioProcessor::processShift (const BlockContext& ctx, float* cons
 void SwarmnessAudioProcessor::processHive (const BlockContext& ctx, float* const* audio, int numChannels, int numSamples) noexcept
 {
     HiveBlock::Settings s;
-    s.venom = ctx.magicHeld;
-    s.voicesOn = on (p.rbOn);
+    s.venom = ctx.venom;
+    s.voicesOn = ctx.engaged (Chain::pitch, on (p.rbOn));
+    s.stop = ctx.stopForce > 0 || (ctx.stopForce == 0 && on (p.hvStop));
+    s.stopSeconds = p.hvStopTime->load();
     s.snap = on (p.rbSnap);
     s.pitchSemis = p.rbPitch->load();
     s.drone = pct (p.rbPrimary);
@@ -663,8 +773,15 @@ void SwarmnessAudioProcessor::processHive (const BlockContext& ctx, float* const
 
 void SwarmnessAudioProcessor::processWings (const BlockContext& ctx, float* const* audio, int numChannels, int numSamples) noexcept
 {
-    const bool flowOn = on (p.flowOn);
+    const bool flowOn = ctx.engaged (Chain::wings, on (p.flowOn));
     flow.setParams (flowOn ? pct (p.flowAmount) : 0.0f, on (p.flowHard));
+    {
+        swarm::StepPattern pat;
+        pat.numSteps = (int) p.wgSteps->load();
+        for (int k = 0; k < 16; ++k)
+            pat.level[(size_t) k] = pct (p.wgLevels[(size_t) k]);
+        flow.setPattern (pat);
+    }
 
     if (on (p.flowSync))
     {
@@ -680,6 +797,7 @@ void SwarmnessAudioProcessor::processWings (const BlockContext& ctx, float* cons
 
     if (flowOn || ! flow.isIdle())
         flow.process (audio, numChannels, numSamples);
+    meters.wingStep.store (flowOn ? flow.getCurrentStep() : -1, std::memory_order_relaxed);
 }
 
 //==============================================================================
@@ -1050,10 +1168,33 @@ void SwarmnessAudioProcessor::parameterChanged (const juce::String& parameterID,
         triggerAsyncUpdate();   // from the audio thread (automation / MIDI): switch on the message thread
 }
 
+void SwarmnessAudioProcessor::startInputLearn() noexcept
+{
+    learnPeak.store (0.0f);
+    learnSamplesLeft.store ((int) (5.0 * currentSampleRate));
+}
+
 void SwarmnessAudioProcessor::handleAsyncUpdate()
 {
-    if (presetManager != nullptr)
-        presetManager->selectScene (pendingScene.load());
+    if (presetManager == nullptr)
+        return;
+    if (const float db = pendingInputDb.exchange (-1000.0f); db > -999.0f)
+        if (auto* param = apvts.getParameter (ParamIDs::input))
+        {
+            param->beginChangeGesture();
+            param->setValueNotifyingHost (param->convertTo0to1 (db));
+            param->endChangeGesture();
+        }
+    if (const int program = pendingProgram.exchange (-1); program >= 0)
+    {
+        const auto names = presetManager->getAllPresetNames();
+        if (program < names.size() && names[program] != presetManager->getCurrentPresetName())
+        {
+            presetManager->loadPreset (names[program]);
+            return;   // the preset lands on scene A; a scene change queued before it is void
+        }
+    }
+    presetManager->selectScene (pendingScene.load());
 }
 
 int SwarmnessAudioProcessor::indexOfParam (const juce::String& paramID) const noexcept
@@ -1113,6 +1254,13 @@ void SwarmnessAudioProcessor::handleMidi (const juce::MidiBuffer& midi)
         if (meta.numBytes > 3)
             continue;   // SysEx and the like: not ours (and a MidiMessage of it would allocate)
         const auto msg = meta.getMessage();
+        if (msg.isProgramChange())
+        {
+            // Program Change n = preset n of the list (factory presets first, then the user's), on the message thread
+            pendingProgram.store (msg.getProgramChangeNumber());
+            triggerAsyncUpdate();
+            continue;
+        }
         const bool isCC = msg.isController(), isNote = msg.isNoteOnOrOff();
         if (! isCC && ! isNote)
             continue;
@@ -1174,7 +1322,7 @@ void SwarmnessAudioProcessor::applyMidi (juce::RangedAudioParameter& param, bool
     if (dynamic_cast<juce::AudioParameterBool*> (&param) != nullptr)
     {
         const auto& id = param.paramID;
-        const bool footswitch = id == ParamIDs::oct1 || id == ParamIDs::oct2 || id == ParamIDs::magicHold;
+        const bool footswitch = isFootswitchParameter (id);
         const bool momentary = apvts.getRawParameterValue (ParamIDs::switchMode)->load() < 0.5f;
         if (footswitch && momentary)
             param.setValueNotifyingHost (pressed ? 1.0f : 0.0f);                           // held = on
@@ -1208,6 +1356,8 @@ void SwarmnessAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
     state.setProperty ("pluginVersion", JucePlugin_VersionString, nullptr);
     state.setProperty ("uiScale", uiScale.load(), nullptr);
     state.setProperty ("uiMini", uiMini.load(), nullptr);
+    state.setProperty ("uiMore", uiMore.load(), nullptr);
+    state.setProperty ("uiValues", uiValues.load(), nullptr);
     state.setProperty ("reverbIR", fileReference ("reverbIR", getReverbIRFile()), nullptr);
     state.setProperty ("namModel", fileReference ("namModel", getNamModelFile()), nullptr);
     state.setProperty ("pedalNam", fileReference ("pedalNam", getNamModelFile (true)), nullptr);
@@ -1239,6 +1389,8 @@ void SwarmnessAudioProcessor::setStateInformation (const void* data, int sizeInB
             tree.removeProperty ("scenes", nullptr);
             uiScale = juce::jlimit (0.7f, 2.0f, (float) tree.getProperty ("uiScale", 1.0f));
             uiMini = (bool) tree.getProperty ("uiMini", false);
+            uiMore = (int) tree.getProperty ("uiMore", 0);
+            uiValues = (bool) tree.getProperty ("uiValues", false);
             // MIDI bindings ("paramID:kind:number;..."); up to beta.24 only the footswitches ("midi0".."midi3")
             for (auto& b : midiBindings)
             {
@@ -1323,7 +1475,7 @@ void SwarmnessAudioProcessor::setStateInformation (const void* data, int sizeInB
 
             // Momentary footswitches must never come back "stuck down" after reloading a session.
             if (apvts.getRawParameterValue (ParamIDs::switchMode)->load() < 0.5f)
-                for (auto* id : { ParamIDs::oct1, ParamIDs::oct2, ParamIDs::magicHold })
+                for (auto* id : { ParamIDs::oct1, ParamIDs::oct2, ParamIDs::magicHold, ParamIDs::stingHold })
                     if (auto* param = apvts.getParameter (id))
                         param->setValueNotifyingHost (0.0f);
         }
