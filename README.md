@@ -151,7 +151,7 @@ VST3 / AU / Standalone · Windows, macOS (Universal: Apple Silicon + Intel), Lin
 
 | Канал | Усилитель |
 |---|---|
-| CLEAN | **CHROME** — чистый канал с ламповым поведением: тёплая вторая гармоника уже на обычном ударе (1–2 % на GAIN 4), лёгкая просадка питания и горб динамика, на GAIN 6+ начинает ломаться; HONEY перед ним — для «липкого» клина |
+| CLEAN | **VELVET** — ламповый чистый канал, подогнанный под захваты реального усилителя: тёплая вторая гармоника уже на обычном ударе (около 2 % на GAIN 3), просадка питания и горб динамика, с GAIN 5 начинает ломаться; HONEY перед ним — для «липкого» клина |
 | CRUNCH | **BRIT** — лающий кранч: горячий V1a, «холодный» V1b, катодный повторитель, EL34. Лающая верхняя середина, очищается ручкой громкости гитары |
 | LEAD | **STEEL** — плотный хай-гейн: подрезанный низ первых каскадов, «холодный» клиппер, 6L6. Плотные чаги; WASP перед ним подтягивает ещё сильнее |
 
@@ -208,7 +208,7 @@ VST3 / AU / Standalone · Windows, macOS (Universal: Apple Silicon + Intel), Lin
 Пресеты разделены на два банка — вкладки **FACTORY / USER** слева от имени пресета. Выбранный банк определяет, что показывает список и по чему листают стрелки **< >**; при загрузке или сохранении пресета вкладка переключается сама.
 
 **FACTORY** — 66 звуковых пресетов в восьми категориях (подменю) плюс раздел **Effects only – no amp** (10 пресетов без усилителя и кабинета, с пометкой «(FX)», для тех, кто играет через свой усилитель). Первая категория — готовые тракты под задачу, остальные — приёмы и текстуры, тоже с полным трактом. Уровни выровнены (подстройка хранится в VOLUME пресета, все около −16 dBFS RMS на одном сигнале), лимитер на выходе не даёт ничему вылезти за −0,5 dBFS — лампа **LIM** у индикатора OUT.
-- **Rigs — clean, crunch, metal:** Chorus Clean, Clean Clouds, Shimmer Clean, Glass Clean, Sticky Clean (чистые: CHROME + HONEY), Blues Drive (SMOOTH в CHROME на грани), Rock Rhythm, Brit Crunch, Classic Fuzz Rock, Smooth Lead, Wasp Boost, Clean Push (BRIT / буст), Modern Rhythm, Djent Tight, Lead Singing, Slam Chug (семитон вверх в STEEL с гейтом), Sub Octave Metal (октава вниз в STEEL), Steel Lead, Hornet Lead, Sludge Wall, Brit Doom, Stoner Fuzz, Rasp Rhythm
+- **Rigs — clean, crunch, metal:** Chorus Clean, Clean Clouds, Shimmer Clean, Glass Clean, Sticky Clean (чистые: VELVET + HONEY), Blues Drive (SMOOTH в VELVET на грани), Rock Rhythm, Brit Crunch, Classic Fuzz Rock, Smooth Lead, Wasp Boost, Clean Push (BRIT / буст), Modern Rhythm, Djent Tight, Lead Singing, Slam Chug (семитон вверх в STEEL с гейтом), Sub Octave Metal (октава вниз в STEEL), Steel Lead, Hornet Lead, Sludge Wall, Brit Doom, Stoner Fuzz, Rasp Rhythm
 - **Start here:** Init, Clean Shift, Slow Rise
 - **Pitch tricks — footswitches:** Panic - Octave Panic / Siren Sweep, Killer Bee, Stacked Octaves, Power Stack, Dive Bomb, Glitch Steps, Gallop Octaves
 - **Harmonies & pitch delays:** Harmony Fifth, Atonal Detune, Honey Ladder, Descending Spiral, Drowning Hive, Bounce Trill, Reverse Hive, Pitch Delay, Dotted Echo, Venom Overload

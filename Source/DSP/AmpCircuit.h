@@ -154,7 +154,7 @@ namespace ampsim
                 a.xfHp = 40.0f; a.xfLp = 12000.0f; a.paRef = 27.80f; a.outDb = 4.0f;
                 // fitted on a real DI, through one IR, to the average of three captures of real crunch amps (spectrum,
                 // envelope, attack), with their sine / response features as a regulariser
-                a.gridKg = 9.261e-6f; a.inDb = 30.0f; a.bias = 0.3463f; a.satKnee = 2.494f; a.nfb = 6.036f; a.piMax = 1.157f;
+                a.gridKg = 9.261e-6f; a.inDb = 33.0f; a.bias = 0.3463f; a.satKnee = 2.494f; a.nfb = 6.036f; a.piMax = 1.157f;   // (+3 dB on the fitted input: the captures' DI ran hotter than most interfaces)
                 a.sag = 0.2272f; a.R1 = 2.939e4f; a.R2 = 1.978e6f; a.R3 = 1.95e4f; a.R4 = 1.16e5f; a.C1 = 3.557e-10f;
                 a.C2 = 1.231e-8f; a.C3 = 2.648e-8f; a.voiceHz = 737.6f; a.voiceDb = -2.177f; a.voiceQ = 0.7432f;
                 a.brightDb = 8.558f; a.brightHz = 3052.0f; a.presenceHz = 1717.0f; a.depthHz = 92.07f; a.spkHz = 106.8f;

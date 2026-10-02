@@ -50,9 +50,9 @@ public:
 
     /** Model names: reference A, the in-between amp, reference B. */
     /** One amp per channel (which of the channel's two reference circuits it uses). */
-    /** CLEAN leans on VELVET (the tube clean fitted to captures: sag, a little breakup, the speaker's bump) with
-        CHROME's glassy top kept in - a clean that behaves like an amp, not a DI; CRUNCH = BRIT, LEAD = STEEL. */
-    static float channelSide (int channel) noexcept { return channel == 0 ? 0.7f : 0.0f; }
+    /** CLEAN = VELVET, the tube clean fitted to captures of a real amp (sag, a little breakup, the speaker's
+        bump) - a clean that behaves like an amp, not a DI; CRUNCH = BRIT, LEAD = STEEL. */
+    static float channelSide (int channel) noexcept { return channel == 0 ? 1.0f : 0.0f; }
     static const char* channelModel (int channel) noexcept
     {
         return channel >= 0 && channel < 3 ? referenceName (channel, (int) channelSide (channel)) : "NAM";
@@ -377,8 +377,8 @@ private:
         co.paDtOverC = (float) (dt / 0.02);   // grid leak x coupling cap = 20 ms (normalised units)
         // the in-between amp is its own circuit: its level is matched to the two references too
         static constexpr float middleTrimDb[3] { 0.0f, -8.8f, -1.3f };
-        // (CLEAN leans on VELVET, which comes out ~12 dB hotter than CHROME did at noon: level-matched here)
-        const float channelTrimDb = activeChannel == 0 ? -12.5f * x / 0.7f : 0.0f;
+        // (VELVET comes out hotter than CHROME did at noon: level-matched here)
+        const float channelTrimDb = activeChannel == 0 ? 0.7f * x : 0.0f;
         co.out = juce::Decibels::decibelsToGain (lerp (A.outDb, B.outDb, x) + middleTrimDb[activeChannel] * 4.0f * x * (1.0f - x) + channelTrimDb) * 0.18f;
 
         for (auto& cs : ch)
