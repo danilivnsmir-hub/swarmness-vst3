@@ -65,7 +65,7 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     chainStrip.onBlockRightClick = [this] (int block)
     {
         if (auto* id = ChainStrip::powerParamFor (block))
-            showMidiMenu (id, &chainStrip);
+            showMidiMenu (id, &chainStrip, -1, block);
     };
     chainStrip.isBlockActive = [this] (int block)
     {
@@ -958,7 +958,7 @@ juce::Component* MainPanel::findLearnable (const juce::String& paramID)
     return search (*this);
 }
 
-void MainPanel::showMidiMenu (const juce::String& paramID, juce::Component* target, int value)
+void MainPanel::showMidiMenu (const juce::String& paramID, juce::Component* target, int value, int block)
 {
     auto* param = state.getParameter (paramID);
     if (param == nullptr)
@@ -976,6 +976,17 @@ void MainPanel::showMidiMenu (const juce::String& paramID, juce::Component* targ
                       [&proc, paramID, value] { proc.startMidiLearn (paramID, value); });
     menu.addItem ("Clear MIDI", bound.isNotEmpty(), false, [&proc, paramID, value] { proc.clearMidiBindings (paramID, value); });
     menu.addSeparator();
+    if (block >= 0)
+    {
+        // a block's settings travel through the clipboard: to another preset, scene or plug-in instance
+        const juce::String name (Chain::names[block]);
+        auto& pm = proc.getPresetManager();
+        menu.addItem ("Copy " + name + " settings", [&pm, block] { juce::SystemClipboard::copyTextToClipboard (pm.copyBlock (block)); });
+        const auto clip = juce::SystemClipboard::getTextFromClipboard();
+        menu.addItem ("Paste " + name + " settings", PresetManager::clipboardHoldsBlock (clip, block), false,
+                      [&pm, block, clip] { pm.pasteBlock (block, clip); });
+        menu.addSeparator();
+    }
     if (isScene)
     {
         auto& pm = proc.getPresetManager();

@@ -77,6 +77,13 @@ public:
     static void writeTrailFill (ValueMap& values, int fill);
     /** Writes a ready-made WINGS pattern (FlowGate::Fill) into values. */
     static void writeWingFill (ValueMap& values, int fill);
+    /** One block's parameters (its sound, not its place in the chain), as text for the clipboard:
+        "swarmness-block:NAME\nid=value\n..." - pasteBlock() applies it to the same kind of block. */
+    juce::String copyBlock (int block) const;
+    static bool clipboardHoldsBlock (const juce::String& text, int block);
+    bool pasteBlock (int block, const juce::String& text);
+    /** The parameter ids that belong to a block (the chain position and the stomps' wiring excluded). */
+    juce::StringArray parameterIdsOf (int block) const;
 
     /** Non-parameter data stored with user presets (the CRYPT impulse response path). */
     std::function<void (juce::DynamicObject&)> onSaveExtras;
@@ -87,6 +94,7 @@ private:
     void initialiseFactoryPresets();
     void applyValues (const ValueMap& values, bool resetOthersToDefault);
     ValueMap captureValues() const;
+
     void takeSnapshot();
     void setCurrentName (const juce::String&);
     void stepPreset (bool userBank, int delta);

@@ -972,6 +972,29 @@ namespace
         check (! p.isInputLearning() && std::abs (db - 8.0f) < 0.3f, juce::String::formatted ("peaks at -20 dBFS -> INPUT %+.1f dB (expected +8)", db));
     }
 
+    void testBlockCopy()
+    {
+        std::printf ("\nCopy / paste of a block's settings\n");
+        SwarmnessAudioProcessor a, b;
+        a.getPresetManager().loadPreset ("Smooth Lead");
+        resetToInit (b);
+        const auto ids = a.getPresetManager().parameterIdsOf (Chain::drive);
+        check (ids.contains (ParamIDs::drvDrive) && ids.contains (ParamIDs::drvCharacter) && ! ids.contains (Chain::slotIds[Chain::drive])
+               && ! ids.contains (ParamIDs::ampGain) && ! ids.contains (ParamIDs::venomBlock[Chain::drive]),
+               "WASP's ids: its knobs and character, not its chain slot, the AMP or the stomps' wiring (" + juce::String (ids.size()) + " ids)");
+        const auto text = a.getPresetManager().copyBlock (Chain::drive);
+        check (PresetManager::clipboardHoldsBlock (text, Chain::drive) && ! PresetManager::clipboardHoldsBlock (text, Chain::amp), "the clipboard text names the block");
+        check (! b.getPresetManager().pasteBlock (Chain::amp, text), "WASP settings do not paste into the AMP");
+        check (b.getPresetManager().pasteBlock (Chain::drive, text)
+               && b.getAPVTS().getRawParameterValue (ParamIDs::drvCharacter)->load() == a.getAPVTS().getRawParameterValue (ParamIDs::drvCharacter)->load()
+               && std::abs (b.getAPVTS().getRawParameterValue (ParamIDs::drvDrive)->load() - a.getAPVTS().getRawParameterValue (ParamIDs::drvDrive)->load()) < 0.01f
+               && b.getAPVTS().getRawParameterValue (ParamIDs::ampMid)->load() != a.getAPVTS().getRawParameterValue (ParamIDs::ampMid)->load(),
+               "pasted into another instance: WASP matches, the AMP is untouched");
+        check (a.getPresetManager().parameterIdsOf (Chain::smoke).contains (ParamIDs::fuzzCrush)
+               && a.getPresetManager().parameterIdsOf (Chain::swarm).contains (ParamIDs::swarmRing),
+               "the appended knobs (CRUSH, RING) belong to their blocks");
+    }
+
     void testLicence()
     {
         std::printf ("\nLicence: a 7-day trial, activation with a key, the dry signal after the trial\n");
@@ -4345,6 +4368,7 @@ int main (int argc, char** argv)
         if (which == "licence") testLicence();
         if (which == "program") testProgramChange();
         if (which == "learn")   testInputLearn();
+        if (which == "copy")    testBlockCopy();
         if (which == "gates")   testGates();
         if (which == "tuner")   testTuner();
         std::printf ("\n%s (%d failure%s)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures, failures == 1 ? "" : "s");
@@ -4377,6 +4401,7 @@ int main (int argc, char** argv)
     testLicence();
     testProgramChange();
     testInputLearn();
+    testBlockCopy();
     testFuzzSag();
     testMonoToStereo();
     testMidiLearn();

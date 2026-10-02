@@ -1112,7 +1112,7 @@ void InfoOverlay::paint (juce::Graphics& g)
         { "CAB",      "Speaker cabinet: four modelled cabinets (MIC = cap..edge, DISTANCE = grille..room) or your own IRs in two slots A / B "
                       "(LOAD IR, TONE3000 or drop a WAV on a slot; A / B MIX blends them, time-aligned; INV B flips B's phase)." },
         { "CHAIN",    "The strip under the header is the signal chain. Drag a block to reorder it (fuzz before or after the pitch, reverb into the fuzz...), "
-                      "click it to open its page, click its LED to switch it on / off, right-click for MIDI learn. Drag it UP / DOWN for parallel paths A / B (an empty path = dry), "
+                      "click it to open its page, click its LED to switch it on / off, right-click for MIDI learn and Copy / Paste of its settings. Drag it UP / DOWN for parallel paths A / B (an empty path = dry), "
                       "the knob at the merge balances A and B. Order and paths are saved with presets." },
         { "EQ",       "COMB = 10-band graphic EQ (+/-12 dB) with LEVEL. CARVE = parametric: 24 dB/oct LOW / HIGH CUT, shelves and 3 bells - drag the nodes, "
                       "wheel = Q, double-click = reset; the output spectrum runs behind the curve." },

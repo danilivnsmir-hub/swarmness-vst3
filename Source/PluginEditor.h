@@ -51,7 +51,7 @@ private:
 
     // MIDI learn: right-click any control (or a chain tile) for its menu
     void mouseDown (const juce::MouseEvent&) override;
-    void showMidiMenu (const juce::String& paramID, juce::Component* target, int value = -1);
+    void showMidiMenu (const juce::String& paramID, juce::Component* target, int value = -1, int block = -1);
     void addStompWiring (juce::PopupMenu&, bool venom);
     juce::Component* findLearnable (const juce::String& paramID);
     struct LearnMarker : juce::Component

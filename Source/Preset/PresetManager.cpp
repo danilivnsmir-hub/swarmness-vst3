@@ -414,6 +414,69 @@ void PresetManager::applyValues (const ValueMap& values, bool resetOthersToDefau
     }
 }
 
+juce::StringArray PresetManager::parameterIdsOf (int block) const
+{
+    // groups of the layout -> blocks (the appended groups go to their blocks too; "tricks" holds one knob of each)
+    static const std::map<juce::String, int> groups {
+        { "shift", Chain::shift }, { "hive", Chain::pitch }, { "hiveStop", Chain::pitch }, { "swarm", Chain::swarm }, { "fuzz", Chain::smoke },
+        { "flow", Chain::wings }, { "wingsSteps", Chain::wings }, { "comb", Chain::comb }, { "carve", Chain::carve }, { "crypt", Chain::crypt },
+        { "cryptFreeze", Chain::crypt }, { "amp", Chain::amp }, { "wasp", Chain::drive }, { "waspCharacter", Chain::drive }, { "cab", Chain::cab },
+        { "honey", Chain::honey } };
+    juce::StringArray ids;
+    std::function<void (const juce::AudioProcessorParameterGroup&, int)> walk = [&] (const juce::AudioProcessorParameterGroup& g, int owner)
+    {
+        for (auto* node : g)
+        {
+            if (auto* sub = node->getGroup())
+            {
+                auto it = groups.find (sub->getID());
+                walk (*sub, it != groups.end() ? it->second : -1);
+            }
+            else if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*> (node->getParameter()))
+            {
+                const auto id = ranged->getParameterID();
+                int mine = owner;
+                if (id == ParamIDs::fuzzCrush) mine = Chain::smoke;
+                if (id == ParamIDs::swarmRing) mine = Chain::swarm;
+                if (mine == block && isPresetParameter (id) && ! id.startsWith ("chain") && ! id.startsWith ("lane"))
+                    ids.add (id);
+            }
+        }
+    };
+    walk (apvts.processor.getParameterTree(), -1);
+    return ids;
+}
+
+juce::String PresetManager::copyBlock (int block) const
+{
+    juce::String text = "swarmness-block:" + juce::String (Chain::names[block]) + "\n";
+    for (const auto& id : parameterIdsOf (block))
+        if (auto* p = apvts.getParameter (id))
+            text << id << "=" << juce::String (p->convertFrom0to1 (p->getValue()), 4) << "\n";
+    return text;
+}
+
+bool PresetManager::clipboardHoldsBlock (const juce::String& text, int block)
+{
+    return text.startsWith ("swarmness-block:" + juce::String (Chain::names[block]) + "\n");
+}
+
+bool PresetManager::pasteBlock (int block, const juce::String& text)
+{
+    if (! clipboardHoldsBlock (text, block))
+        return false;
+    const auto allowed = parameterIdsOf (block);
+    ValueMap values;
+    for (const auto& line : juce::StringArray::fromLines (text))
+    {
+        const auto id = line.upToFirstOccurrenceOf ("=", false, false).trim();
+        if (line.contains ("=") && allowed.contains (id))
+            values[id] = line.fromFirstOccurrenceOf ("=", false, false).getFloatValue();
+    }
+    applyValues (values, false);
+    return ! values.empty();
+}
+
 void PresetManager::takeSnapshot()
 {
     std::map<juce::String, float> values;
