@@ -223,6 +223,10 @@ VST3 / AU / Standalone · Windows, macOS (Universal: Apple Silicon + Intel), Lin
 
 Движок педали SWARMNESS (SHIFT + HIVE + SWARM) собирается без JUCE и звучит бит в бит как плагин: замеры, выбор железа (Daisy Seed / Raspberry Pi) и прошивка-бенчмарк — в [`Pedal/README.md`](Pedal/README.md).
 
+## Лицензия
+
+Swarmness работает **7 дней** с первого запуска целиком, без ограничений. Потом плагин пропускает сигнал насквозь без обработки, пока не введён ключ: кнопка **TRIAL / ACTIVATE** в левом нижнем углу открывает окно, куда вставляется ключ из магазина; один ключ активирует до трёх ваших компьютеров, **DEACTIVATE** освобождает активацию. Активация проверяется в магазине раз в месяц, без сети плагин продолжает работать до 45 дней. Переустановка триал не сбрасывает; перевод часов назад его не продлевает. Файл лицензии: `~/Library/Application Support/Swarmness/Swarmness.licence` (macOS), `%APPDATA%\Swarmness\Swarmness.licence` (Windows), `~/.config/Swarmness/Swarmness.licence` (Linux).
+
 ## Установка
 
 Готовые сборки создаются GitHub Actions для каждого коммита (вкладка **Actions** → последний запуск → **Artifacts**), а для тегов `v*` публикуются в **Releases**.
@@ -247,6 +251,8 @@ xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/Components/Swarmness.com
 
 
 ## Сборка из исходников
+
+Для собственных сборок без триала и ключа: `cmake -DSWARMNESS_NO_LICENCE=ON ...` (релизные сборки в CI собираются с лицензией).
 
 Требуется CMake ≥ 3.22 и компилятор C++17 (Visual Studio 2022 / Xcode 15+ / GCC 11+). JUCE скачивается автоматически (или укажите `-DJUCE_PATH=/путь/к/JUCE`).
 

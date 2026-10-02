@@ -930,6 +930,93 @@ namespace
         }
     }
 
+    void testLicence()
+    {
+        std::printf ("\nLicence: a 7-day trial, activation with a key, the dry signal after the trial\n");
+        const auto dir = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("swarmness-licence-test");
+        dir.deleteRecursively();
+        dir.createDirectory();
+        const auto previous = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("swarmness-tests-licence");
+        Licence::setSettingsDirectory (dir);
+        const auto t0 = juce::Time::getCurrentTime();
+        auto at = [t0] (double days) { return [t0, days] { return t0 + juce::RelativeTime::days (days); }; };
+        auto okJson = [] (const juce::String& endpoint, const juce::StringPairArray& form)
+        {
+            Licence::Response r;
+            r.ok = true; r.status = 200;
+            if (endpoint == "activate")
+                r.body = "{\"activated\":true,\"instance\":{\"id\":\"inst-1\"},\"license_key\":{\"key\":\"" + form["license_key"] + "\"}}";
+            else if (endpoint == "validate")
+                r.body = "{\"valid\":true}";
+            else
+                r.body = "{\"deactivated\":true}";
+            return r;
+        };
+        {
+            Licence l;
+            l.setClock (at (0.0));
+            check (l.getState() == Licence::State::trial && l.trialDaysLeft() == 7, "first run: a 7-day trial");
+            l.setClock (at (6.5));
+            check (l.getState() == Licence::State::trial && l.trialDaysLeft() == 1, "day 6.5: one day left");
+            l.setClock (at (7.1));
+            check (l.getState() == Licence::State::expired, "day 7.1: the trial is over");
+            l.setClock (at (2.0));
+            check (l.getState() == Licence::State::expired, "the clock moved back: still over (the last date seen counts)");
+        }
+        {
+            // the processor passes the dry signal once the trial is over
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            setParam (p, ParamIDs::fuzzOn, 1.0f);
+            p.getLicence().setClock (at (8.0));
+            const double sr = 48000.0;
+            auto in = makeGuitar (sr, 48000);
+            auto out = render (p, in, sr, 256);
+            check (nullDb (out, in, p.getLatencySamples(), 9600, 48000) < -100.0, "trial over: SMOKE on, but the output is the dry guitar");
+        }
+        {
+            Licence l;
+            l.setTransport (okJson);
+            l.setClock (at (8.0));
+            l.activate ("ABCD-EFGH-1234");
+            l.finishForTesting();
+            check (l.getState() == Licence::State::activated && l.getKey() == "ABCD-EFGH-1234", "a key accepted by the store: activated (" + l.getMessage() + ")");
+            Licence again;
+            again.setClock (at (20.0));
+            check (again.getState() == Licence::State::activated, "another instance / a restart reads the activation");
+            // a store that says the key is no longer valid revokes it at the monthly check
+            again.setTransport ([] (const juce::String& endpoint, const juce::StringPairArray&)
+            {
+                Licence::Response r; r.ok = true; r.status = 200;
+                r.body = endpoint == "validate" ? "{\"valid\":false,\"error\":\"license_key not found\"}" : "{}";
+                return r;
+            });
+            again.setClock (at (40.0));
+            again.validateIfDue();
+            again.finishForTesting();
+            check (again.getState() == Licence::State::expired, "the store revokes the key: back to the (over) trial");
+            // a quiet network keeps it, up to the grace period
+            Licence l2;
+            l2.setTransport (okJson);
+            l2.setClock (at (41.0));
+            l2.activate ("ABCD-EFGH-1234");
+            l2.finishForTesting();
+            l2.setTransport ([] (const juce::String&, const juce::StringPairArray&) { return Licence::Response {}; });
+            l2.setClock (at (80.0));
+            l2.validateIfDue();
+            l2.finishForTesting();
+            check (l2.getState() == Licence::State::activated, "no network for 39 days: still activated");
+            l2.setClock (at (41.0 + 46.0));
+            check (l2.getState() == Licence::State::expired, "no network for 46 days: the grace period is over");
+            l2.setTransport (okJson);
+            l2.deactivate();
+            l2.finishForTesting();
+            check (l2.getKey().isEmpty(), "deactivated: the key is gone from this machine");
+        }
+        Licence::setSettingsDirectory (previous);
+        dir.deleteRecursively();
+    }
+
     void testFuzzIdleNoise()
     {
         std::printf ("\nSMOKE with nothing played: no self-oscillation, interface hiss not blown up\n");
@@ -3537,6 +3624,11 @@ namespace
 int main (int argc, char** argv)
 {
     juce::ScopedJuceInitialiser_GUI juceInit;
+    // the licence settings of the tests live in a temporary folder (never the user's, never a started trial)
+    const auto licenceDir = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("swarmness-tests-licence");
+    licenceDir.deleteRecursively();
+    licenceDir.createDirectory();
+    Licence::setSettingsDirectory (licenceDir);
 
     if (argc >= 2 && juce::String (argv[1]) == "--fuzz-dyn")
     {
@@ -3912,6 +4004,8 @@ int main (int argc, char** argv)
         p.setUiMini (mini);
         if (argc >= 7 && juce::String (argv[6]) == "more")   // every block's MORE open
             p.setUiMore (0xffff);
+        if (argc >= 7 && juce::String (argv[6]) == "licence")   // the trial over, the activation panel open
+            p.getLicence().setClock ([] { return juce::Time::getCurrentTime() + juce::RelativeTime::days (8.0); });
         std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
         const bool tunerShot = argc >= 7 && juce::String (argv[6]) == "tuner";
         const bool infoShot = argc >= 7 && juce::String (argv[6]) == "info";
@@ -4206,6 +4300,7 @@ int main (int argc, char** argv)
         if (which == "stop")    testHiveStop();
         if (which == "tricks")  testCrushAndRing();
         if (which == "stutter") testStutter();
+        if (which == "licence") testLicence();
         if (which == "gates")   testGates();
         if (which == "tuner")   testTuner();
         std::printf ("\n%s (%d failure%s)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures, failures == 1 ? "" : "s");
@@ -4235,6 +4330,7 @@ int main (int argc, char** argv)
     testHiveStop();
     testCrushAndRing();
     testStutter();
+    testLicence();
     testFuzzSag();
     testMonoToStereo();
     testMidiLearn();

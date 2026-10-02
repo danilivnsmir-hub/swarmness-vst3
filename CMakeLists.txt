@@ -18,6 +18,7 @@ if(WIN32)
 endif()
 
 option(SWARMNESS_BUILD_TESTS "Build the offline DSP test runner" ON)
+option(SWARMNESS_NO_LICENCE "Developer build: no trial, no licence key (never for a release)" OFF)
 
 # ============================================================================
 # JUCE: use -DJUCE_PATH=/path/to/JUCE (or the JUCE_PATH env var), otherwise
@@ -143,6 +144,7 @@ juce_add_binary_data(SwarmnessBinaryData
 
 set(SWARMNESS_DSP_SOURCES
     Source/Amp/Tone3000.cpp
+    Source/Licence.cpp
     Source/Parameters.cpp
     Source/PluginProcessor.cpp
     Source/Preset/PresetManager.cpp)
@@ -181,6 +183,7 @@ else()
 endif()
 
 target_compile_definitions(Swarmness PUBLIC
+    SWARMNESS_NO_LICENCE=$<BOOL:${SWARMNESS_NO_LICENCE}>
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=${SWARMNESS_USE_CURL}
     SWARMNESS_TONE3000_KEY="${SWARMNESS_TONE3000_KEY}"

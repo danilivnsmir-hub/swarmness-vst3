@@ -1120,6 +1120,8 @@ void InfoOverlay::paint (juce::Graphics& g)
                       "LOW CUT keeps it out of the low end. Switching it off lets the tail ring out." },
         { "STOMPS",   "VENOM and STING are footswitches you wire yourself: right-click one and pick, per block, On / Off while held (or -), plus SHIFT A / B "
                       "CRYPT FREEZE and HIVE STOP. The wiring is a scene setting, so every scene can use them differently. VENOM out of the box = HIVE + self-oscillation." },
+        { "LICENCE",  "A 7-day trial from the first run, then a licence key from the store (the TRIAL / ACTIVATE button, bottom left). "
+                      "One key = three of your computers; DEACTIVATE frees one. Checked online once a month, works offline for 45 days." },
         { "MORE",     "The busier blocks (SMOKE, HIVE, SHIFT, CRYPT) show their main knobs; MORE opens the rest (a dot = something in there is set). "
                       "Knob values appear when you hover; \"...\" > Always show knob values brings them back for good." },
         { "MIDI",     "Right-click ANY control for MIDI learn: switches toggle on each press, selectors step, knobs follow the CC. "

@@ -7,6 +7,7 @@
 #include "DSP/FuzzStage.h"
 #include "DSP/SwarmChorus.h"
 #include "DSP/FlowGate.h"
+#include "Licence.h"
 #include "DSP/HoneyBlock.h"
 #include "DSP/Equalisers.h"
 #include "DSP/ReverbStage.h"
@@ -136,6 +137,7 @@ public:
     /** Editor scale factor, persisted with the plug-in state. */
     float getUiScale() const noexcept     { return uiScale.load(); }
     void setUiScale (float scale) noexcept { uiScale = scale; }
+    Licence& getLicence() noexcept { return licence; }
     bool getUiMini() const noexcept       { return uiMini.load(); }
     void setUiMini (bool m) noexcept      { uiMini = m; }
     /** Which blocks have their MORE controls open (a bit per block) and whether knob values are always shown. */
@@ -211,6 +213,8 @@ private:
         cab.setUserMix (p.cabIrMix->load() * 0.01f, p.cabIrInvB->load() > 0.5f);
     }
     Tone3000 tone3000;
+    Licence licence;
+    juce::SmoothedValue<float> licenceGate;   // 1 = the trial is over and no key: the dry signal passes
     TunerTap tunerTap;
     juce::SmoothedValue<float> tunerGain;
     std::atomic<int> pendingScene { 0 };

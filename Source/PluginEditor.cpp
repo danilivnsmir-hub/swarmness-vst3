@@ -26,6 +26,7 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
       switchModeSelector (param (state, ParamIDs::switchMode), { "MOMENTARY", "LATCH" }),
       stepGrid (p.getAPVTS(), StepGrid::trails()),
       wingsGrid (p.getAPVTS(), StepGrid::wings()),
+      licencePanel (p),
       fuzzVoiceSelector (param (state, ParamIDs::fuzzVoice), { "DOWN", "MID", "UP" }),
       oct1Switch   (param (state, ParamIDs::oct1),      "SHIFT A", Colours::accent,  false, [this] { return footswitchesMomentary(); }),
       oct2Switch   (param (state, ParamIDs::oct2),      "SHIFT B", Colours::accent,  false, [this] { return footswitchesMomentary(); }),
@@ -238,6 +239,18 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     addMouseListener (this, true);   // right-clicks anywhere -> MIDI menu of the control under the mouse
 
     addChildComponent (infoOverlay);
+    addChildComponent (licencePanel);
+    addAndMakeVisible (licenceButton);
+    licenceButton.setTooltip ("The licence: a 7-day trial, then a key from the store. Click to activate");
+    licenceButton.onClick = [this] { licencePanel.refresh(); licencePanel.setVisible (true); licencePanel.toFront (false); };
+    processor.getLicence().onChange = [this] { refreshLicence(); };
+    refreshLicence();
+    if (! processor.getLicence().isAuthorised())
+    {
+        licencePanel.refresh();
+        licencePanel.setVisible (true);
+        licencePanel.toFront (false);
+    }
     addChildComponent (tunerOverlay);
     addAndMakeVisible (tunerButton);
     tunerButton.setTooltip ("TUNE: open the tuner (MUTE silences the output while it is open)");
@@ -617,6 +630,8 @@ void MainPanel::resized()
     }
 
     infoOverlay.setBounds (getLocalBounds());
+    licencePanel.setBounds (getLocalBounds());
+    licenceButton.setBounds (76, getBaseHeight() - 25, 170, 20);
     tunerOverlay.setBounds (getLocalBounds());
     backdrop.setBounds (getLocalBounds());
 }
@@ -1007,6 +1022,118 @@ void MainPanel::addStompWiring (juce::PopupMenu& menu, bool venom)
     choiceItem (venom ? venomFreeze : stingFreeze, "CRYPT FREEZE");
     choiceItem (venom ? venomStop : stingStop, "HIVE STOP (tape stop)");
     menu.addSeparator();
+}
+
+void MainPanel::refreshLicence()
+{
+    auto& l = processor.getLicence();
+    switch (l.getState())
+    {
+        case Licence::State::activated: licenceButton.setVisible (false); break;
+        case Licence::State::trial:
+            licenceButton.setVisible (true);
+            licenceButton.setButtonText ("TRIAL  -  " + juce::String (l.trialDaysLeft()) + (l.trialDaysLeft() == 1 ? " DAY LEFT" : " DAYS LEFT"));
+            break;
+        case Licence::State::expired:
+            licenceButton.setVisible (true);
+            licenceButton.setButtonText ("TRIAL OVER  -  ACTIVATE");
+            break;
+    }
+    licencePanel.refresh();
+}
+
+MainPanel::LicencePanel::LicencePanel (SwarmnessAudioProcessor& p) : processor (p)
+{
+    setInterceptsMouseClicks (true, true);
+    keyEditor.setTextToShowWhenEmpty ("paste your licence key here", Colours::textFaint);
+    keyEditor.setFont (font (16.0f));
+    keyEditor.setJustification (juce::Justification::centredLeft);
+    addAndMakeVisible (keyEditor);
+    for (auto* b : { &activateButton, &deactivateButton, &buyButton, &closeButton })
+        addAndMakeVisible (b);
+    activateButton.onClick = [this]
+    {
+        status = "Contacting the store...";
+        repaint();
+        processor.getLicence().activate (keyEditor.getText(), [this] { refresh(); });
+    };
+    deactivateButton.onClick = [this]
+    {
+        status = "Contacting the store...";
+        repaint();
+        processor.getLicence().deactivate ([this] { refresh(); });
+    };
+    buyButton.onClick = [] { juce::URL (Licence::kStoreUrl).launchInDefaultBrowser(); };
+    closeButton.onClick = [this] { setVisible (false); };
+}
+
+void MainPanel::LicencePanel::refresh()
+{
+    auto& l = processor.getLicence();
+    const bool activated = l.getState() == Licence::State::activated;
+    keyEditor.setVisible (! activated);
+    activateButton.setVisible (! activated);
+    activateButton.setEnabled (! l.isBusy());
+    deactivateButton.setVisible (activated);
+    deactivateButton.setEnabled (! l.isBusy());
+    buyButton.setVisible (! activated);
+    if (! l.isBusy())
+        status = l.getMessage();
+    repaint();
+}
+
+void MainPanel::LicencePanel::resized()
+{
+    card = getLocalBounds().toFloat().withSizeKeepingCentre (560.0f, 300.0f);
+    auto r = card.reduced (28.0f, 24.0f).toNearestInt();
+    r.removeFromTop (110);
+    keyEditor.setBounds (r.removeFromTop (34));
+    r.removeFromTop (14);
+    auto buttons = r.removeFromTop (34);
+    activateButton.setBounds (buttons.removeFromLeft (150));
+    deactivateButton.setBounds (activateButton.getBounds());
+    buttons.removeFromLeft (10);
+    buyButton.setBounds (buttons.removeFromLeft (170));
+    closeButton.setBounds (buttons.removeFromRight (100));
+}
+
+void MainPanel::LicencePanel::paint (juce::Graphics& g)
+{
+    g.fillAll (juce::Colours::black.withAlpha (0.82f));
+    Theme::drawPanel (g, card, 12.0f);
+    auto r = card.reduced (28.0f, 24.0f);
+    auto& l = processor.getLicence();
+
+    g.setFont (displayFont (30.0f));
+    const auto titleArea = r.removeFromTop (34.0f);
+    g.setGradientFill (honeyGradient (titleArea));
+    const juce::String title = l.getState() == Licence::State::activated ? "Licensed" : l.getState() == Licence::State::trial ? "Trial" : "Trial over";
+    g.drawText (title, titleArea, juce::Justification::centredLeft, false);
+    r.removeFromTop (8.0f);
+
+    g.setFont (font (14.5f));
+    g.setColour (Colours::text);
+    juce::String body;
+    switch (l.getState())
+    {
+        case Licence::State::activated:
+            body = "Swarmness is activated on this machine (key " + l.getKey().substring (0, 8) + "...). "
+                   "DEACTIVATE frees the activation for another computer.";
+            break;
+        case Licence::State::trial:
+            body = "Everything works for " + juce::String (Licence::kTrialDays) + " days from the first run - " + juce::String (l.trialDaysLeft())
+                 + (l.trialDaysLeft() == 1 ? " day" : " days") + " left. A licence key from the store keeps it going; "
+                   "one key activates up to three of your computers.";
+            break;
+        case Licence::State::expired:
+            body = "The " + juce::String (Licence::kTrialDays) + "-day trial is over: the plug-in now passes your signal through untouched. "
+                   "Paste a licence key to carry on - one key activates up to three of your computers.";
+            break;
+    }
+    g.drawFittedText (body, r.removeFromTop (60.0f).toNearestInt(), juce::Justification::topLeft, 3, 0.9f);
+    g.setFont (font (13.0f));
+    g.setColour (status.startsWith ("Activated") || status.startsWith ("Deactivated") ? Colours::accentBright : Colours::textDim);
+    g.drawFittedText (status, card.reduced (28.0f, 24.0f).removeFromBottom (24.0f).toNearestInt(), juce::Justification::centredLeft, 1, 0.9f);
 }
 
 void MainPanel::LearnMarker::paint (juce::Graphics& g)

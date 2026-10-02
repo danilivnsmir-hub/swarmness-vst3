@@ -145,6 +145,24 @@ private:
     LevelMeter inMeter { "IN" }, outMeter { "OUT" };
 
     InfoOverlay infoOverlay;
+
+    /** The licence: ACTIVATE / DEACTIVATE with a key, the trial countdown, the store link. */
+    struct LicencePanel : public juce::Component
+    {
+        explicit LicencePanel (SwarmnessAudioProcessor&);
+        void paint (juce::Graphics&) override;
+        void resized() override;
+        void mouseDown (const juce::MouseEvent& e) override { if (! card.contains (e.position)) setVisible (false); }
+        void refresh();
+        SwarmnessAudioProcessor& processor;
+        juce::Rectangle<float> card;
+        juce::TextEditor keyEditor;
+        juce::TextButton activateButton { "ACTIVATE" }, deactivateButton { "DEACTIVATE" }, buyButton { "BUY A LICENCE" }, closeButton { "CLOSE" };
+        juce::String status;
+    };
+    LicencePanel licencePanel;
+    juce::TextButton licenceButton;   // bottom-left: TRIAL - n DAYS / TRIAL OVER - ACTIVATE
+    void refreshLicence();
     TunerOverlay tunerOverlay;
 
     std::vector<std::unique_ptr<APVTS::ButtonAttachment>> buttonAttachments;

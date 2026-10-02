@@ -21,6 +21,7 @@ SwarmnessAudioProcessor::SwarmnessAudioProcessor()
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       apvts (*this, nullptr, "PARAMETERS", createParameterLayout())
 {
+    licence.validateIfDue();   // the stored licence is checked online once a month (background)
     auto get = [this] (const char* id)
     {
         auto* v = apvts.getRawParameterValue (id);
@@ -229,6 +230,7 @@ void SwarmnessAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBl
     init (tunerGain, 0.02, 1.0f);
     init (inputGainSmoothed,  0.03, juce::Decibels::decibelsToGain (p.input->load()));
     init (bypassSmoothed,     0.02, on (p.bypass) ? 1.0f : 0.0f);
+    init (licenceGate,        0.05, licence.isAuthorised() ? 0.0f : 1.0f);
     init (chainFade,          0.008, 1.0f);
     for (int sp = 0; sp < Chain::maxSplits; ++sp)
         init (parMixSmoothed[(size_t) sp], 0.03, pct (p.parMix[(size_t) sp]));
@@ -451,11 +453,12 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     outputGainSmoothed.setTargetValue (juce::Decibels::decibelsToGain (p.output->load()));
     // (the NOISE return glide after releasing a footswitch is allowed to finish, too)
     bypassSmoothed.setTargetValue (on (p.bypass) && ! anySwitchHeld && ! (shift.isEngaged() && ! on (p.shOn)) ? 1.0f : 0.0f);
+    licenceGate.setTargetValue (licence.isAuthorised() ? 0.0f : 1.0f);   // the trial over: the dry signal passes
 
     for (int i = 0; i < numSamples; ++i)
     {
         const float g = outputGainSmoothed.getNextValue();
-        const float b = bypassSmoothed.getNextValue();
+        const float b = juce::jmax (bypassSmoothed.getNextValue(), licenceGate.getNextValue());
         for (int ch = 0; ch < numChannels; ++ch)
         {
             const float wet = audio[ch][i] * g;
