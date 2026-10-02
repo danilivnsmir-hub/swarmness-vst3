@@ -18,7 +18,8 @@ if(WIN32)
 endif()
 
 option(SWARMNESS_BUILD_TESTS "Build the offline DSP test runner" ON)
-option(SWARMNESS_NO_LICENCE "Developer build: no trial, no licence key (never for a release)" OFF)
+# The trial / licence code is built in, but stays off until the store exists (then flip this to OFF)
+option(SWARMNESS_NO_LICENCE "No trial, no licence key" ON)
 
 # ============================================================================
 # JUCE: use -DJUCE_PATH=/path/to/JUCE (or the JUCE_PATH env var), otherwise
