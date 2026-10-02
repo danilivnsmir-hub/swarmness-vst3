@@ -41,7 +41,7 @@ VST3 / AU / Standalone · Windows, macOS (Universal: Apple Silicon + Intel), Lin
 
 Порядок и ветки сохраняются в пресетах и в сессии; при перестановке звук на ~8 мс приглушается, щелчков нет. По умолчанию: SMOKE → SHIFT → HIVE → WASP → AMP → CAB → SWARM → WINGS → COMB → CARVE → CRYPT (как на педалборде: педали перед усилителем, модуляция и реверб после кабинета). В старых сессиях и пресетах AMP и CAB встают сразу после HIVE, а WASP — прямо перед AMP. Старые сессии и пресеты с SMOKE **POST** открываются с SMOKE после SWARM.
 
-Задержка 157 сэмплов при 48 кГц (≈3,3 мс; 61 от оверсэмплинга фузза плюс по 1 мс опережения у нойзгейтов AMP и WASP — чтобы гейт успевал открыться до атаки), не зависит от порядка блоков и сообщается DAW. Моно-гитару можно ставить на стерео-трек: плагин разведёт SWARM и HIVE в стерео. Когда ничего не включено, плагин прозрачен бит в бит.
+Задержка 205 сэмплов при 48 кГц (≈4,3 мс; 61 от оверсэмплинга фузза плюс по 1 мс опережения у общего GATE и у гейтов AMP и WASP — чтобы гейт успевал открыться до атаки), не зависит от порядка блоков и сообщается DAW. Моно-гитару можно ставить на стерео-трек: плагин разведёт SWARM и HIVE в стерео. Когда ничего не включено, плагин прозрачен бит в бит.
 
 ## Футсвичи
 
@@ -112,7 +112,7 @@ VST3 / AU / Standalone · Windows, macOS (Universal: Apple Silicon + Intel), Lin
   - значок под столбиком — что повтор делает с высотой: **=** держит, **▲ / ▼** — на PITCH вверх / вниз, **?** — случайная ступень аккорда или октава, **◀** — задом наперёд, **|||** — статтер: первая шестая часть повтора перезапускается снова и снова, с паузами между кусками (клик — следующий, правый клик — меню);
   - **STEPS − / +** — длина паттерна (1…16), **FILL** — готовые: Ladder, Bounce, Scatter, Reverse, Swell, Echo, Stutter, Gallop, Offbeat, Glitch.
 - Футсвич **VENOM** раскачивает петлю до самовозбуждения.
-- **STOP** (кнопка в заголовке TRAILS, ручка **STOP** — время) — тейп‑стоп повторов: плёнка останавливается за заданное время, высота падает вместе со скоростью, запись в петлю на это время замирает; отпустили — разгоняется обратно. Повесьте на VENOM или STING (проводка стомпа), чтобы делать это педалью.
+- **STOP** (кнопка в заголовке TRAILS, ручки **FALL** и **RISE** — время остановки и разгона) — тейп‑стоп повторов: плёнка останавливается за FALL, высота падает вместе со скоростью, запись в петлю на это время замирает; отпустили — разгоняется за RISE, и живые повторы плавно вплывают обратно. Повесьте на VENOM или STING (проводка стомпа), чтобы делать это педалью.
 
 *MANGLE* — действует на голоса и повторы HIVE:
 - **MANGLE** — одна ручка хаоса: сначала «кислые» расстроенные голоса (биения, диссонанс), дальше добавляются случайные скачки высоты (со SNAP — по квартам, квинтам, октавам), к максимуму — жужжание и металлический визг all-pass + AM. Три отдельные ручки ANGER / FRENZY / BUZZ остались у SHIFT;
@@ -191,9 +191,11 @@ VST3 / AU / Standalone · Windows, macOS (Universal: Apple Silicon + Intel), Lin
 
 Если выключить CRYPT, хвост доиграет сам (spill-over).
 
-**FREEZE / STOP на выходе** (кнопки под индикатором OUT, учатся на MIDI, есть в проводке стомпов) — для всего сигнала, не только реверба: **FREEZE** ловит последние 400 мс выхода и держит их как пэд (две гранулярные дорожки, без слышимой петли), пока вы играете поверх; **STOP** — тейп‑стоп всего: выход замедляется до остановки (высота падает) и разгоняется обратно, когда отпускаете (параметр Output Stop Time, по умолчанию 1 с).
+**FREEZE / STOP на выходе** (кнопки под индикатором OUT, учатся на MIDI, есть в проводке стомпов) — для всего сигнала, не только реверба: **FREEZE** ловит последние 400 мс выхода и держит их как пэд (две гранулярные дорожки, без слышимой петли), пока вы играете поверх; **STOP** — тейп‑стоп всего: выход замедляется до остановки (высота падает) и разгоняется обратно, когда отпускаете; живой сигнал вплывает во второй половине разгона. Времена — правый клик по кнопке STOP: **Fall** (до остановки, 1 с) и **Rise** (разгон, 0,6 с); это же параметры Output Stop Time / Output Stop Rise для автоматизации.
 
 **Standalone и каналы интерфейса.** Если гитара сидит на одном канале многоканальной карты: «…» → **Audio settings (single channels)…** открывает настройки, где входы выбираются по одному (не парами), а «…» → **Input source** задаёт, какой канал — гитара: **Auto** (по умолчанию: канал, который молчит, пока другой играет, игнорируется, живой идёт в обе стороны), Left, Right или Stereo.
+
+**GATE** (внизу, рядом с INPUT) — один нойзгейт на всю цепь, сразу после INPUT, слушает гитару: 0 — выключен, дальше порог −75…−20 dBFS. Открывается на пик за миллисекунду до атаки, держит 12 мс, после глухой заглушки закрывается за 12 мс, а хвост ноты не рубит — ниже порога это экспандер (−6 дБ у порога, дальше 3 дБ на дБ), затухание 150 мс. Гейты на AMP и WASP остались для тех, кому нужен гейт именно там; заводские пресеты используют общий.
 
 **INPUT / VOLUME** (внизу, у индикаторов). **INPUT** — усиление входа: насколько сильно сигнал бьёт в эффекты и усилители (фузз, AMP, трекинг), громче — значит и сильнее перегруз. Выставьте так, чтобы пики на индикаторе IN попадали в зелёную зону (−18…−6 дБ) — или нажмите **LEARN** под индикатором и сыграйте погромче 5 секунд: INPUT выставится так, чтобы самый громкий пик пришёлся на −12 дБ. **VOLUME** — выход.
 
@@ -205,15 +207,14 @@ VST3 / AU / Standalone · Windows, macOS (Universal: Apple Silicon + Intel), Lin
 
 Пресеты разделены на два банка — вкладки **FACTORY / USER** слева от имени пресета. Выбранный банк определяет, что показывает список и по чему листают стрелки **< >**; при загрузке или сохранении пресета вкладка переключается сама.
 
-**FACTORY** — 54 звуковых пресета в восьми категориях (подменю) плюс раздел **Effects only – no amp** (10 пресетов без усилителя и кабинета, с пометкой «(FX)», для тех, кто играет через свой усилитель). У каждого звукового пресета свой тракт: гармонии, сдвиги и дилеи — чистый CHROME в открытый 2x12 у края диффузора; фуззы — CHROME с запасом по чистоте в 4x12 BRIT; тяжёлые фуззы (Doom Cathedral, Crypt Doom, Power Stack, Wing Beat Breakdown) — BRIT CRUNCH в 4x12; слэм‑диссонансы — STEEL LEAD в 4x12 MOD; Broken Radio — 1x12 издалека. Уровни выровнены (подстройка хранится в VOLUME пресета, все около −16 dBFS RMS на одном сигнале), лимитер на выходе не даёт ничему вылезти за −0,5 dBFS — лампа **LIM** у индикатора OUT.
-- **Basics:** Init, Clean Shift, Slow Rise, Sticky Clean (HONEY в чистый канал)
-- **Recipes — panic, slam, glitch** (с чего начинать): Panic - Octave Panic / Siren Sweep (фузз → октавы на футсвичах), Slam - Semitone Clash / Sub Layer (диссонанс и суб‑октавы в STEEL), Glitch Steps, Gallop Octaves (паттерны TRAILS)
-- **Shift — hold SHIFT A / B:** Killer Bee, Stacked Octaves, Power Stack (STACK: A и B вместе), Dive Bomb
-- **Hive Voices & Trails:** Harmony Fifth, Atonal Detune, Honey Ladder, Descending Spiral, Drowning Hive, Bounce Trill, Reverse Hive, Pitch Delay, Dotted Echo (HIVE как дилей), Venom Overload
-- **Smoke, Swarm & Wings:** Swarm Cloud, Jumbo Smoke, Doom Cathedral, Glare Scream, Smoked Out, Wing Beat Breakdown, Gallop Gate (паттерн WINGS), Glitch Wings, Bitten Smoke (CRUSH), Bell Swarm (RING), Ghost Swarm
-- **Swarm Attack:** Broken Radio, Hive Collapse (HIVE перед SHIFT)
-- **Chain, EQ & Crypt:** Crypt Doom, Smoke in the Crypt (реверб *в* фузз), Tight Before Smoke (CARVE перед фуззом), Comb Smile, Hive Cathedral, Parallel Smoke, Split Swarm (параллельные ветки), Chug Room
-- **Amps & Cabs:** Glass Clean, Brit Crunch, Brit Doom, Steel Lead, Hornet Lead, Wasp Boost, Clean Push (BOOST в CHROME), Smooth Lead (SMOOTH в BRIT), Rasp Rhythm (RASP как самостоятельный дисторшн), Sludge Wall
+**FACTORY** — 66 звуковых пресетов в восьми категориях (подменю) плюс раздел **Effects only – no amp** (10 пресетов без усилителя и кабинета, с пометкой «(FX)», для тех, кто играет через свой усилитель). Первая категория — готовые тракты под задачу, остальные — приёмы и текстуры, тоже с полным трактом. Уровни выровнены (подстройка хранится в VOLUME пресета, все около −16 dBFS RMS на одном сигнале), лимитер на выходе не даёт ничему вылезти за −0,5 dBFS — лампа **LIM** у индикатора OUT.
+- **Rigs — clean, crunch, metal:** Chorus Clean, Clean Clouds, Shimmer Clean, Glass Clean, Sticky Clean (чистые: CHROME + HONEY), Blues Drive (SMOOTH в CHROME на грани), Rock Rhythm, Brit Crunch, Classic Fuzz Rock, Smooth Lead, Wasp Boost, Clean Push (BRIT / буст), Modern Rhythm, Djent Tight, Lead Singing, Slam Chug (семитон вверх в STEEL с гейтом), Sub Octave Metal (октава вниз в STEEL), Steel Lead, Hornet Lead, Sludge Wall, Brit Doom, Stoner Fuzz, Rasp Rhythm
+- **Start here:** Init, Clean Shift, Slow Rise
+- **Pitch tricks — footswitches:** Panic - Octave Panic / Siren Sweep, Killer Bee, Stacked Octaves, Power Stack, Dive Bomb, Glitch Steps, Gallop Octaves
+- **Harmonies & pitch delays:** Harmony Fifth, Atonal Detune, Honey Ladder, Descending Spiral, Drowning Hive, Bounce Trill, Reverse Hive, Pitch Delay, Dotted Echo, Venom Overload
+- **Fuzz & textures:** Swarm Cloud, Jumbo Smoke, Doom Cathedral, Glare Scream, Smoked Out, Wing Beat Breakdown, Gallop Gate, Glitch Wings, Bitten Smoke, Bell Swarm, Ghost Swarm
+- **Rhythm & glitch:** Broken Radio, Hive Collapse
+- **Chain tricks:** Crypt Doom, Smoke in the Crypt, Tight Before Smoke, Comb Smile, Hive Cathedral, Parallel Smoke, Split Swarm, Chug Room
 - **Effects only – no amp:** Clean Shift, Harmony Fifth, Pitch Delay, Dotted Echo, Killer Bee, Jumbo Smoke, Swarm Cloud, Crypt Doom, Wing Beat Breakdown, Sticky Clean — все с пометкой (FX)
 
 **Пресеты блоков.** Правый клик по плитке в цепи: «… from a factory preset» ставит в этот блок его настройки из любого заводского пресета, где он включён (например, усилитель из Steel Lead в ваш пресет), «… presets of yours» — ваши сохранённые настройки блока (**Save … settings as…**; файлы в `Presets/Blocks/<БЛОК>/*.swarmblock`, тот же текст, что и в буфере обмена при Copy).

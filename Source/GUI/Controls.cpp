@@ -105,7 +105,7 @@ void Knob::paint (juce::Graphics& g)
     g.drawText (caption, r.removeFromTop (18.0f), juce::Justification::centred, false);
 
     // the value: on hover / while dragging (or always, if the user wants it)
-    const bool showValue = alwaysShowValues || isMouseOver (true) || slider.isMouseButtonDown() || valueEditor != nullptr;
+    const bool showValue = alwaysShowValues || alwaysShowValue || isMouseOver (true) || slider.isMouseButtonDown() || valueEditor != nullptr;
     if (! showValue)
         return;
     g.setFont (font (small ? 12.5f : 15.0f, true));
@@ -1130,7 +1130,7 @@ void InfoOverlay::paint (juce::Graphics& g)
         { "VALUES",   "Knob values appear when you hover or turn a knob; \"...\" > Always show knob values brings them back for good." },
         { "MIDI",     "Right-click ANY control for MIDI learn: switches toggle on each press, selectors step, knobs follow the CC. "
                       "One pedal can drive several controls (e.g. ON and WINGS). Program Change n = preset n of the list." },
-        { "LIVE",     "LEARN under the IN meter: play loud for 5 s and INPUT sets itself (peaks at -12 dBFS). FREEZE / STOP under the OUT meter hold or tape-stop the whole output. "
+        { "LIVE",     "GATE by INPUT = one noise gate for the whole chain (keyed from the guitar, lets a note's tail fade). LEARN under the IN meter: play loud for 5 s and INPUT sets itself (peaks at -12 dBFS). FREEZE / STOP under the OUT meter hold or tape-stop the whole output. "
                       "SCENES A..D = four versions of the sound inside one preset (click to switch; right-click = MIDI learn or copy the current scene there). "
                       "TUNE = the tuner (MUTE silences the output while it is open). MINI = a small window with the chain, scenes and footswitches for playing live." },
         { "LEVELS",   "INPUT = input gain: how hard the effects and amps are hit (aim for the green zone of the IN meter). "

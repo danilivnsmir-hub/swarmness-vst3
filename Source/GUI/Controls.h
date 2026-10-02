@@ -52,6 +52,8 @@ public:
 
     /** The value readout is shown while the mouse is over the knob (or always, a user setting). */
     static inline bool alwaysShowValues = false;
+    /** This knob always shows its value (an EQ frequency you need to read while you turn it). */
+    void setAlwaysShowValue (bool b) { alwaysShowValue = b; repaint(); }
 
 private:
     struct SnappingSlider : public RightClickSafeSlider
@@ -64,6 +66,7 @@ private:
     void closeValueEditor();
 
     juce::String caption;
+    bool alwaysShowValue = false;
     SnappingSlider slider;
     std::unique_ptr<juce::TextEditor> valueEditor;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;

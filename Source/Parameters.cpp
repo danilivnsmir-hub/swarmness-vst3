@@ -424,6 +424,16 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     tricks->addChild (percent (swarmRing, "Swarm Ring", 0.0f));
 
     // ------------------------------------------------------------------ OUTPUT FREEZE / STOP (1.2, appended)
+    auto inGateGroup = std::make_unique<Group> ("inputGate", "Gate", "|");
+    inGateGroup->addChild (percent (inGate, "Gate", 0.0f));
+    // the tape stops' RISE (1.2)
+    inGateGroup->addChild (std::make_unique<juce::AudioParameterFloat> (
+        pid (hvStopRise), "Hive Stop Rise", skewedRange (0.1f, 3.0f, 0.6f, 0.01f), 0.6f,
+        Attr().withLabel ("s").withStringFromValueFunction ([] (float v, int) { return juce::String (v, 2) + " s"; })));
+    inGateGroup->addChild (std::make_unique<juce::AudioParameterFloat> (
+        pid (outStopRise), "Output Stop Rise", skewedRange (0.1f, 3.0f, 0.6f, 0.01f), 0.6f,
+        Attr().withLabel ("s").withStringFromValueFunction ([] (float v, int) { return juce::String (v, 2) + " s"; })));
+
     auto outHold = std::make_unique<Group> ("outputHold", "Output Freeze / Stop", "|");
     outHold->addChild (toggle (outFreeze, "Output Freeze", false));
     outHold->addChild (toggle (outStop, "Output Stop", false));
@@ -437,6 +447,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     layout.add (std::move (shift), std::move (hive), std::move (swarm), std::move (fz), std::move (flow),
                 std::move (comb), std::move (carve), std::move (crypt), std::move (amp), std::move (cab), std::move (drv), std::move (chain), std::move (out),
                 std::move (honey), std::move (drvCh), std::move (wings), std::move (cryptFz), std::move (stomps), std::move (hvSt),
-                std::move (tricks), std::move (outHold));
+                std::move (tricks), std::move (inGateGroup), std::move (outHold));
     return layout;
 }

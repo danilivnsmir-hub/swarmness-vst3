@@ -148,8 +148,10 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
                                                  "(HOLD steps = plain echoes, UP / DOWN = a pitch-shifting delay). DRONE / QUEEN still sound on top if turned up");
     attachButton (pitchPage, hvStopToggle, hvStop, "STOP: the repeats slow to a halt like a tape (pitch falls with them) and start again when released - "
                                                    "the STOP knob sets how long; wire VENOM or STING to it for a pedal. Right-click: MIDI learn");
-    hvStopTimeKnob.attach (state, hvStopTime, "STOP: how long the tape takes to halt (and to come back up to speed)");
+    hvStopTimeKnob.attach (state, hvStopTime, "FALL: how long the tape takes to halt after STOP goes down");
+    hvStopRiseKnob.attach (state, hvStopRise, "RISE: how long the tape takes to come back up to speed when STOP is released (the live repeats blend back in on the way)");
     pitchPage.addAndMakeVisible (hvStopTimeKnob);
+    pitchPage.addAndMakeVisible (hvStopRiseKnob);
     attachButton (pitchPage, rbSyncToggle, rbSync, "SYNC: lock the repeats to the host tempo - while the song plays, the STEPS follow the bar grid");
     // MANGLE
     hvMangleKnob.attach (state, hvMangle, "MANGLE: chaos for the voices and trails in one knob - first sour detuned voices (ANGER), "
@@ -230,6 +232,9 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
                                                  "(Output Stop Time, 1 s by default, is an automatable parameter). Right-click: MIDI learn");
     volumeKnob.attach (state, output, "Output level");
     addAndMakeVisible (volumeKnob);
+    inGateKnob.attach (state, inGate, "GATE: one noise gate for the whole chain, right after INPUT, keyed from your guitar (0 = off, then -75 .. -20 dBFS). "
+                                      "Opens on the pick a moment early, holds 30 ms, lets a note's tail fade instead of chopping it; shuts fast after a mute");
+    addAndMakeVisible (inGateKnob);
 
     // Footswitches
     oct1Switch  .setTooltip ("SHIFT A: transposes by the SHIFT A interval (hold, or click in LATCH mode) - works even while the plug-in is bypassed. Right-click: MIDI learn");
@@ -470,6 +475,7 @@ void MainPanel::resized()
             hvStopTimeKnob.setBounds (kx + 2 * sw, ky,      sw, sh);
             toneKnob      .setBounds (kx,          ky + sh, sw, sh);
             gateKnob      .setBounds (kx + sw,     ky + sh, sw, sh);
+            hvStopRiseKnob.setBounds (kx + 2 * sw, ky + sh, sw, sh);
             rbDivKnob.setBounds (rbTimeKnob.getBounds());
             const int gx = kx + 3 * sw + 12;
             stepGrid.setBounds (gx, (int) hiveArea.getY() + 64, (int) trailSec.getRight() - 14 - gx, (int) hiveArea.getBottom() - 12 - ((int) hiveArea.getY() + 64));
@@ -590,9 +596,10 @@ void MainPanel::resized()
         link2Switch.setBounds (oct2Switch.getRight() + 2, fy + 34, 38, 50);
         footswitchArea = juce::Rectangle<float> ((float) oct1Switch.getX() - 14.0f, (float) fy - 4.0f,
                                                  (float) (bypassSwitch.getRight() - oct1Switch.getX()) + 28.0f, (float) fh + 6.0f);
-        inputKnob .setBounds (16, fy - 8, 72, 104);
-        inMeter   .setBounds (96, fy + 48, 140, 26);
-        learnButton.setBounds (96, fy + 80, 64, 18);
+        inputKnob .setBounds (14, fy - 6, 62, 100);
+        inGateKnob.setBounds (80, fy - 6, 62, 100);
+        inMeter   .setBounds (150, fy + 48, 90, 26);
+        learnButton.setBounds (150, fy + 80, 64, 18);
         volumeKnob.setBounds (baseWidth - 16 - 72, fy - 8, 72, 104);
         outMeter  .setBounds (baseWidth - 16 - 72 - 8 - 140, fy + 48, 140, 26);
         outFreezeToggle.setBounds (outMeter.getX(), fy + 80, 66, 18);
@@ -837,7 +844,7 @@ void MainPanel::tick()
                         &hvMangleKnob, &rbDetuneKnob, &rbMixKnob, &rbRawToggle }, ! states[1]);
     // STEPS / TIME / TONE / GATE only matter once there are repeats: TRAILS up (or VENOM held)
     const bool trailsAudible = states[1] && (state.getRawParameterValue (ParamIDs::rbMagic)->load() > 0.5f || venom || sting);
-    setSectionDimmed ({ &rbSyncToggle, &trDryToggle, &hvStopToggle, &hvStopTimeKnob, &rbTimeKnob, &rbDivKnob, &toneKnob, &gateKnob, &stepGrid }, ! trailsAudible);
+    setSectionDimmed ({ &rbSyncToggle, &trDryToggle, &hvStopToggle, &hvStopTimeKnob, &hvStopRiseKnob, &rbTimeKnob, &rbDivKnob, &toneKnob, &gateKnob, &stepGrid }, ! trailsAudible);
     stepGrid.refresh (trailsAudible ? meters.trailStep.load() : -1);
     setSectionDimmed ({ &deepToggle, &swarmDepthKnob, &swarmRateKnob, &swarmMixKnob, &swarmRingKnob }, ! states[2]);
     setSectionDimmed ({ &fuzzVoiceSelector, &fuzzKnob, &fuzzToneKnob, &fuzzScoopKnob,
@@ -992,6 +999,21 @@ void MainPanel::showMidiMenu (const juce::String& paramID, juce::Component* targ
         const bool isFootswitch = isFootswitchParameter (paramID);
         if (paramID == ParamIDs::magicHold || paramID == ParamIDs::stingHold)
             addStompWiring (menu, paramID == ParamIDs::magicHold);
+        if (paramID == ParamIDs::outStop)
+        {
+            // the output tape stop's times (also automatable parameters)
+            for (auto [id, title] : { std::pair { ParamIDs::outStopTime, "Fall - time to a halt" }, std::pair { ParamIDs::outStopRise, "Rise - time back up" } })
+                if (auto* p = state.getParameter (id))
+                {
+                    juce::PopupMenu times;
+                    const float now = p->convertFrom0to1 (p->getValue());
+                    for (float t : { 0.2f, 0.4f, 0.7f, 1.0f, 1.5f, 2.5f })
+                        times.addItem (juce::String (t, 1) + " s", true, std::abs (now - t) < 0.05f,
+                                       [p, t] { p->beginChangeGesture(); p->setValueNotifyingHost (p->convertTo0to1 (t)); p->endChangeGesture(); });
+                    menu.addSubMenu (juce::String (title) + "  (" + juce::String (now, 1) + " s)", times);
+                }
+            menu.addSeparator();
+        }
         menu.addItem (isFootswitch ? "Footswitch: follows MOMENTARY (held = on) / LATCH (press = on / off)"
                       : isSwitch   ? "Switch: every press toggles it - one pedal can drive several switches"
                       : isChoice   ? "Selector: every press steps to the next option"

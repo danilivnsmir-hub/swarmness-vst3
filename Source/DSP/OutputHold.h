@@ -12,8 +12,9 @@
  *          the snapshot, so the pad does not loop audibly. The live signal keeps passing on top; the
  *          pad fades in over 30 ms and out over 150 ms.
  *  STOP    a tape stop of everything: the output is read from a 3 s buffer at a speed that falls to
- *          zero over `stopSeconds` (pitch falls with it) and comes back up when released, then the
- *          live signal is faded back in.
+ *          zero over FALL seconds (pitch falls with it) and comes back up over RISE seconds when
+ *          released; the live signal fades in over the second half of the rise, so the return is a
+ *          glide, not a cut.
  */
 class OutputHold
 {
@@ -55,11 +56,12 @@ public:
         readPos = 0.0;
     }
 
-    void setParams (bool freeze, bool stop, float stopSeconds) noexcept
+    void setParams (bool freeze, bool stop, float fallSeconds, float riseSeconds = -1.0f) noexcept
     {
         wantFreeze = freeze;
         wantStop = stop;
-        stopTime = juce::jmax (0.05f, stopSeconds);
+        stopTime = juce::jmax (0.05f, fallSeconds);
+        riseTime = riseSeconds > 0.0f ? juce::jmax (0.05f, riseSeconds) : stopTime;
     }
 
     bool isIdle() const noexcept { return ! wantFreeze && ! wantStop && freezeGain < 1.0e-4f && ! stopActive && liveMix >= 0.999f; }
@@ -87,7 +89,7 @@ public:
             stopSpeed = 1.0f;
             readPos = (double) write;
         }
-        const float stopStep = 1.0f / (stopTime * (float) sampleRate);
+        const float fallStep = 1.0f / (stopTime * (float) sampleRate), riseStep = 1.0f / (riseTime * (float) sampleRate);
 
         for (int i = 0; i < numSamples; ++i)
         {
@@ -100,24 +102,16 @@ public:
             // ---- STOP
             if (stopActive)
             {
-                stopSpeed = juce::jlimit (0.0f, 1.0f, stopSpeed + (wantStop ? -stopStep : stopStep));
+                stopSpeed = juce::jlimit (0.0f, 1.0f, stopSpeed + (wantStop ? -fallStep : riseStep));
                 readPos += stopSpeed;
                 const float tape = std::sqrt (stopSpeed);
+                // on the way back up the live signal fades in over the second half of the rise (equal power)
+                const float back = wantStop ? 0.0f : juce::jlimit (0.0f, 1.0f, (stopSpeed - 0.5f) * 2.0f);
+                const float wLive = std::sin (back * swarm::kPi * 0.5f), wTape = std::cos (back * swarm::kPi * 0.5f);
                 for (int c = 0; c < numChannels; ++c)
-                    out[c] = tape * readRing (c, readPos);
+                    out[c] = wTape * tape * readRing (c, readPos) + wLive * live[c];
                 if (! wantStop && stopSpeed >= 0.999f)
-                {
-                    // back up to speed: fade the live signal back in, then the tape is off
-                    liveMix = 0.0f;
-                    stopActive = false;
-                }
-            }
-            else if (liveMix < 0.999f)
-            {
-                liveMix += liveFade * (1.0f - liveMix);
-                for (int c = 0; c < numChannels; ++c)
-                    out[c] = live[c] * liveMix + (1.0f - liveMix) * readRing (c, readPos + (double) stopSpeed);
-                readPos += 1.0;
+                    stopActive = false;   // all live again
             }
 
             // ---- FREEZE: two grain streams over the snapshot, on top of the live signal
@@ -165,7 +159,7 @@ private:
     std::array<int, 2> grainPos {}, grainStart {};
     bool wantFreeze = false, wantStop = false, frozen = false, stopActive = false;
     float freezeGain = 0.0f, freezeIn = 0.01f, freezeOut = 0.001f, liveFade = 0.01f, liveMix = 1.0f;
-    float stopSpeed = 1.0f, stopTime = 1.0f;
+    float stopSpeed = 1.0f, stopTime = 1.0f, riseTime = 1.0f;
     double readPos = 0.0;
     swarm::FastRandom rng { 0x0F0F0F0Fu };
 };

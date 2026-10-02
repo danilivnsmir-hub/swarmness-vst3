@@ -95,7 +95,7 @@ private:
     PillToggle snapToggle { "SNAP" };
     Knob pitchKnob { "PITCH", true }, primaryKnob { "DRONE" }, secondaryKnob { "QUEEN" }, trackingKnob { "TRACKING" };
     PillToggle rbSyncToggle { "SYNC" }, trDryToggle { "DRY" }, hvStopToggle { "STOP" };
-    Knob magicKnob { "TRAILS" }, rbTimeKnob { "TIME" }, rbDivKnob { "DIV" }, toneKnob { "TONE" }, gateKnob { "GATE" }, hvStopTimeKnob { "STOP" };
+    Knob magicKnob { "TRAILS" }, rbTimeKnob { "TIME" }, rbDivKnob { "DIV" }, toneKnob { "TONE" }, gateKnob { "GATE" }, hvStopTimeKnob { "FALL" }, hvStopRiseKnob { "RISE" };
     StepGrid stepGrid;
     PillToggle rbRawToggle { "RAW" };
     Knob hvMangleKnob { "MANGLE" }, rbDetuneKnob { "DETUNE", true }, rbMixKnob { "MIX" };
@@ -124,7 +124,7 @@ private:
     StepGrid wingsGrid;
 
     // Levels (footer, next to the meters)
-    Knob inputKnob { "INPUT", true }, volumeKnob { "VOLUME", true };
+    Knob inputKnob { "INPUT", true }, volumeKnob { "VOLUME", true }, inGateKnob { "GATE" };
 
     // Footswitches
     Footswitch oct1Switch, oct2Switch, magicSwitch, stingSwitch, bypassSwitch;

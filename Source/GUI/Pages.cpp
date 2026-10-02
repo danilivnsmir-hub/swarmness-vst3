@@ -413,6 +413,12 @@ EqPage::EqPage (SwarmnessAudioProcessor& p)
     : processor (p), state (p.getAPVTS()),
       combGraph (p.getAPVTS(), 13.0f), carveGraph (p.getAPVTS(), 19.0f)
 {
+    // an EQ is read by its numbers: these knobs always show their values
+    for (auto* k : { &lowCutKnob, &highCutKnob, &lowFreqKnob, &lowGainKnob, &highFreqKnob, &highGainKnob })
+        k->setAlwaysShowValue (true);
+    for (auto* arr : { &bellFreqKnobs, &bellGainKnobs, &bellQKnobs })
+        for (auto& k : *arr)
+            k.setAlwaysShowValue (true);
     using namespace ParamIDs;
     setBufferedToImage (true);
 

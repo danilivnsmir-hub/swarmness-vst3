@@ -82,6 +82,7 @@ SwarmnessAudioProcessor::SwarmnessAudioProcessor()
     p.venomFreeze = get (id::venomFreeze); p.stingFreeze = get (id::stingFreeze);
     p.hvStop = get (id::hvStop); p.hvStopTime = get (id::hvStopTime); p.venomStop = get (id::venomStop); p.stingStop = get (id::stingStop);
     p.fuzzCrush = get (id::fuzzCrush); p.swarmRing = get (id::swarmRing);
+    p.inGate = get (id::inGate); p.hvStopRise = get (id::hvStopRise); p.outStopRise = get (id::outStopRise);
     p.outFreeze = get (id::outFreeze); p.outStop = get (id::outStop); p.outStopTime = get (id::outStopTime);
     p.venomOutFreeze = get (id::venomOutFreeze); p.stingOutFreeze = get (id::stingOutFreeze);
     p.venomOutStop = get (id::venomOutStop); p.stingOutStop = get (id::stingOutStop);
@@ -218,6 +219,8 @@ void SwarmnessAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBl
     int latency = 0;
     for (int b = 0; b < Chain::numBlocks; ++b)
         latency += blockLatency (b);
+    inputGate.prepare (sampleRate, maxBlockSize, 0.001);
+    latency += inputGate.lookaheadSamples();   // the GATE after INPUT looks ahead too
     dryDelay.setMaximumDelayInSamples (latency + 8);
     dryDelay.prepare ({ sampleRate, (juce::uint32) maxBlockSize, 2 });
     dryDelay.setDelay ((float) latency);
@@ -270,6 +273,7 @@ void SwarmnessAudioProcessor::releaseResources()
     cab.reset();
     wasp.reset();
     dryDelay.reset();
+    inputGate.reset();
 }
 
 //==============================================================================
@@ -377,6 +381,15 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
         inputGainTrack[(size_t) i] = g;
         for (int ch = 0; ch < numChannels; ++ch)
             audio[ch][i] = std::isfinite (audio[ch][i]) ? audio[ch][i] * g : 0.0f;
+    }
+
+    // ---- GATE: one gate for the whole chain, keyed from the guitar right here (1 ms lookahead, always delayed)
+    {
+        const float* curve = inputGate.compute (audio, numChannels, numSamples, pct (p.inGate));
+        inputGate.delayInPlace (audio, numChannels, numSamples);
+        if (curve != nullptr)
+            for (int ch = 0; ch < numChannels; ++ch)
+                juce::FloatVectorOperations::multiply (audio[ch], curve, numSamples);
     }
 
     for (int ch = 0; ch < numChannels; ++ch)
@@ -512,7 +525,7 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     {
         const bool fz = ctx.outFreezeForce > 0 || (ctx.outFreezeForce == 0 && on (p.outFreeze));
         const bool st = ctx.outStopForce > 0 || (ctx.outStopForce == 0 && on (p.outStop));
-        outputHold.setParams (fz, st, p.outStopTime->load());
+        outputHold.setParams (fz, st, p.outStopTime->load(), p.outStopRise->load());
         if (! outputHold.isIdle())
             outputHold.process (audio, numChannels, numSamples);
         else
@@ -795,6 +808,7 @@ void SwarmnessAudioProcessor::processHive (const BlockContext& ctx, float* const
     s.voicesOn = ctx.engaged (Chain::pitch, on (p.rbOn));
     s.stop = ctx.stopForce > 0 || (ctx.stopForce == 0 && on (p.hvStop));
     s.stopSeconds = p.hvStopTime->load();
+    s.riseSeconds = p.hvStopRise->load();
     s.snap = on (p.rbSnap);
     s.pitchSemis = p.rbPitch->load();
     s.drone = pct (p.rbPrimary);

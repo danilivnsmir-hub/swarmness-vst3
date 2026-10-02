@@ -13,19 +13,20 @@
  *  Key       high-passed at 70 Hz (mains hum doesn't hold it open), linked across channels
  *  Opening   on the peak (15 ms decay - a period of the lowest string, so a low note doesn't ripple
  *            the decision): the first sample over the threshold opens it
- *  Closing   on a 6 ms RMS, 6 dB of hysteresis, 8 ms hold - short enough to separate 16th-note chugs
- *  Below     an expander, not a wall: -10 dB right under the threshold, 6 dB more per dB further down,
- *            closed (-70 dB) 10 dB under - quiet playing is turned down, not chopped
+ *  Closing   on a 6 ms RMS, 8 dB of hysteresis, 12 ms hold - short enough to separate 16th-note chugs
+ *  Below     an expander with a knee, not a wall: -6 dB right under the threshold, then 3 dB per dB (2 for
+ *            SMOKE's automatic gate) over the first 6 dB - a note's tail is turned down, not chopped - and
+ *            6 dB per dB beyond that, so a floor well under the threshold is gone
  *  Attack    0.3 ms on a transient (the level jumped), 15 ms on a swell (it crept up) - no click when a
  *            note that fades in opens the gate under a loud amp output
- *  Release   12 ms after a mute (the level fell 12 dB under its 40 ms average), 80 ms on a decay
+ *  Release   12 ms after a mute (the level fell 12 dB under its 40 ms average), 150 ms on a decay
  *  Lookahead the block delays its audio by `lookahead` so the ramp finishes before the transient
  *            reaches the output (the block reports it as latency; 0 = none)
  *  Threshold GATE knob: 0 = off, then -75 .. -20 dBFS (peak); or automatic (SMOKE's always-on input
  *            gate): the noise floor (the peak level's minimum - down at once, up at 1 dB / s) + 16 dB
  *            (the noise's peaks sit some 10 dB over that minimum),
- *            never below -58 dBFS (a clean rig keeps the old fixed threshold) nor above -40 (playing is
- *            never cut)
+ *            never below -58 dBFS (a clean rig keeps the old fixed threshold) nor above -46 (a fuzz's
+ *            sustain is not cut)
  */
 class NoiseGate
 {
@@ -50,10 +51,10 @@ public:
         attackFast = (float) (1.0 - std::exp (-1.0 / (0.0003 * fs)));
         attackSlow = (float) (1.0 - std::exp (-1.0 / (0.015 * fs)));
         relFast    = (float) (1.0 - std::exp (-1.0 / (0.012 * fs)));
-        relSlow    = (float) (1.0 - std::exp (-1.0 / (0.080 * fs)));
+        relSlow    = (float) (1.0 - std::exp (-1.0 / (0.150 * fs)));
         floorDown  = (float) (1.0 - std::exp (-1.0 / (0.050 * fs)));
         floorUp    = (float) (1.0 / fs);   // dB per sample: 1 dB / s
-        holdSamples = (int) (0.008 * fs);
+        holdSamples = (int) (0.012 * fs);
         reset();
     }
 
@@ -88,7 +89,7 @@ public:
     float rmsDbNow() const noexcept { return db (std::sqrt (rmsFast2)); }
     float slowDbNow() const noexcept { return db (std::sqrt (rmsSlow2)); }
     bool isOpen() const noexcept { return open; }
-    float thresholdNowDb() const noexcept { return autoThreshold ? juce::jlimit (-58.0f, -40.0f, floorDb + 16.0f) : thresholdDb (lastKnob); }
+    float thresholdNowDb() const noexcept { return autoThreshold ? juce::jlimit (-58.0f, -46.0f, floorDb + 16.0f) : thresholdDb (lastKnob); }
 
     /**
      * Computes the gain curve for this block from the key (the block's input, before the lookahead
@@ -115,7 +116,7 @@ public:
             const float sc = feed (key, numCh, i);
             juce::ignoreUnused (sc);
             const float pkDb = db (peak), rmsDb = db (std::sqrt (rmsFast2)), slowDb = db (std::sqrt (rmsSlow2));
-            const float thOpen = off ? -200.0f : thresholdNowDb(), thClose = thOpen - 6.0f;
+            const float thOpen = off ? -200.0f : thresholdNowDb(), thClose = thOpen - 8.0f;
 
             if (pkDb > thOpen || (open && rmsDb > thClose))
             {
@@ -129,7 +130,11 @@ public:
 
             float target = 0.0f;
             if (! open)
-                target = juce::jlimit (-70.0f, 0.0f, -10.0f - 6.0f * (thClose - rmsDb));
+            {
+                const float under = thClose - rmsDb, knee = 6.0f, slope = autoThreshold ? 2.0f : 3.0f;
+                target = -6.0f - slope * juce::jmin (knee, under) - 6.0f * juce::jmax (0.0f, under - knee);
+                target = juce::jlimit (-70.0f, 0.0f, target);
+            }
             lastTarget = target;
 
             if (target > gainDb)

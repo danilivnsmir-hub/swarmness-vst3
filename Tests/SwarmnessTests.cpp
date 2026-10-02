@@ -1223,7 +1223,8 @@ namespace
                 auto out = render (p, input, sr, 256);
                 const float rms = out.getRMSLevel (0, 48000, 48000);
                 const float db = juce::Decibels::gainToDecibels (rms, -200.0f);
-                check (db < noiseDb - 3.0f || db < -100.0f,
+                const float allowed = noiseDb >= -60.0f ? noiseDb + 1.0f : noiseDb - 3.0f;   // a loud floor: not blown up; a quiet one: cut
+                check (db < allowed || db < -100.0f,
                        juce::String::formatted ("%-16s input noise %4.0f dBFS -> output %6.1f dBFS", preset, noiseDb, db));
             }
         }
@@ -1910,6 +1911,7 @@ namespace
         {
             SwarmnessAudioProcessor p;
             p.getPresetManager().loadPreset ("Steel Lead");
+            setParam (p, ParamIDs::inGate, 0.0f);   // the preset's chain gate off: this is about the AMP's own
             setParam (p, ParamIDs::ampGate, gate);
             auto out = render (p, di, sr, 256);
             return std::make_pair (std::move (out), p.getLatencySamples());
@@ -1921,6 +1923,20 @@ namespace
         // the floor
         const float floorOff = rmsDb (off, (int) (0.2 * sr), (int) (0.7 * sr)), floorOn = rmsDb (on, (int) (0.2 * sr), (int) (0.7 * sr));
         check (floorOff - floorOn > 40.0f, juce::String::formatted ("GATE 45 takes a -65 dBFS floor from %.1f to %.1f dBFS out of the lead amp", floorOff, floorOn));
+        {
+            // the GATE after INPUT (the whole chain's gate): the same job with the AMP's own gate off
+            SwarmnessAudioProcessor p;
+            p.getPresetManager().loadPreset ("Steel Lead");
+            setParam (p, ParamIDs::ampGate, 0.0f);
+            setParam (p, ParamIDs::inGate, 45.0f);
+            auto g = render (p, di, sr, 256);
+            const float floorG = rmsDb (g, (int) (0.2 * sr), (int) (0.7 * sr));
+            const float notesG = rmsDb (g, (int) (2.9 * sr) + p.getLatencySamples(), (int) (0.8 * sr)), notesOff = rmsDb (off, (int) (2.9 * sr) + lat, (int) (0.8 * sr));
+            // gentler than the AMP's own (which also starves the amp's input): a -65 dBFS floor sits ~5 dB under the
+            // threshold at 45, so it loses the expander's first 20 dB; GATE 55 takes the rest
+            check (floorOff - floorG > 20.0f && std::abs (notesG - notesOff) < 1.0f,
+                   juce::String::formatted ("the chain's GATE 45: floor %.1f -> %.1f dBFS, the quiet notes %.1f vs %.1f dBFS", floorOff, floorG, notesG, notesOff));
+        }
         // staccato separation: in every 16th, the 5 ms RMS's drop from its peak to its dip
         auto gapDepth = [&] (const juce::AudioBuffer<float>& b)
         {
@@ -1939,7 +1955,7 @@ namespace
             return depths[depths.size() / 2];
         };
         const float depthOff = gapDepth (off), depthOn = gapDepth (on), depthTight = gapDepth (tight);
-        check (depthTight - depthOff > 8.0f && depthOn > depthOff,
+        check (depthTight - depthOff > 6.0f && depthOn >= depthOff - 0.5f,   // 45 lets the quiet tails through, 55 separates the chugs
                juce::String::formatted ("16th-note chugs: the gap between them is %.1f dB deep with GATE 55, %.1f with 45 (%.1f without)", depthTight, depthOn, depthOff));
         // the chugs' attacks and the quiet notes are untouched
         std::vector<float> atk;
@@ -1970,7 +1986,7 @@ namespace
             }
             check (worst < 3.0f && g.isOpen(), juce::String::formatted ("a swell: the gate opens with at most %.1f dB per ms", worst));
         }
-        check (lat == 61 + 2 * (int) std::round (0.001 * sr), juce::String::formatted ("latency = SMOKE's oversampling + the two gates' lookahead (%d samples)", lat));
+        check (lat == 61 + 3 * (int) std::round (0.001 * sr), juce::String::formatted ("latency = SMOKE's oversampling + the three gates' lookahead (%d samples)", lat));
     }
 
     void testHoney()

@@ -70,16 +70,20 @@ namespace ParamIDs
     inline constexpr const char* stingFreeze = "stingFreeze";
     // 1.1: HIVE STOP (tape stop of the repeats) - a switch, a time, and the stomps can drive it
     inline constexpr const char* hvStop      = "hvStop";
-    inline constexpr const char* hvStopTime  = "hvStopTime";
+    inline constexpr const char* hvStopTime  = "hvStopTime";    // FALL
+    inline constexpr const char* hvStopRise  = "hvStopRise";    // 1.2: RISE
     inline constexpr const char* venomStop   = "venomStop";
     inline constexpr const char* stingStop   = "stingStop";
     // 1.1: SMOKE CRUSH (bit / rate reduction of the fuzz) and SWARM RING (ring modulation of the voices)
     inline constexpr const char* fuzzCrush   = "fuzzCrush";
     inline constexpr const char* swarmRing   = "swarmRing";
     // 1.2: FREEZE and STOP of the whole output (after VOLUME), and the stomps can drive them
+    // 1.2: one GATE for the whole chain, right after INPUT (the AMP / WASP gates stay for those who want them)
+    inline constexpr const char* inGate        = "inGate";
     inline constexpr const char* outFreeze     = "outFreeze";
     inline constexpr const char* outStop       = "outStop";
-    inline constexpr const char* outStopTime   = "outStopTime";
+    inline constexpr const char* outStopTime   = "outStopTime";   // FALL
+    inline constexpr const char* outStopRise   = "outStopRise";   // RISE
     inline constexpr const char* venomOutFreeze = "venomOutFreeze";
     inline constexpr const char* stingOutFreeze = "stingOutFreeze";
     inline constexpr const char* venomOutStop   = "venomOutStop";

@@ -228,6 +228,7 @@ private:
     Tone3000 tone3000;
     Licence licence;
     OutputHold outputHold;
+    NoiseGate inputGate;   // the GATE of the whole chain, right after INPUT (1 ms lookahead)
     juce::SmoothedValue<float> licenceGate;   // 1 = the trial is over and no key: the dry signal passes
     float limiterGain = 1.0f, limiterRelease = 0.001f;   // the output limiter (ceiling -0.5 dBFS, instant attack)
     TunerTap tunerTap;
@@ -288,6 +289,7 @@ private:
         std::atomic<float>* venomFreeze {}; std::atomic<float>* stingFreeze {};
         std::atomic<float>* hvStop {}; std::atomic<float>* hvStopTime {}; std::atomic<float>* venomStop {}; std::atomic<float>* stingStop {};
         std::atomic<float>* fuzzCrush {}; std::atomic<float>* swarmRing {};
+        std::atomic<float>* inGate {}; std::atomic<float>* hvStopRise {}; std::atomic<float>* outStopRise {};
         std::atomic<float>* outFreeze {}; std::atomic<float>* outStop {}; std::atomic<float>* outStopTime {};
         std::atomic<float>* venomOutFreeze {}; std::atomic<float>* stingOutFreeze {}; std::atomic<float>* venomOutStop {}; std::atomic<float>* stingOutStop {};
         std::atomic<float>* ampOn {};      std::atomic<float>* ampChannel {};  std::atomic<float>* ampGain {};
