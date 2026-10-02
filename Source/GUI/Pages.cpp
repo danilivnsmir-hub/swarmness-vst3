@@ -949,7 +949,7 @@ AmpCabSection::AmpCabSection (SwarmnessAudioProcessor& p)
     attachButton (ampPower, ParamIDs::ampOn, "AMP on / off");
     attachButton (cabPower, ParamIDs::cabOn, "CAB on / off");
 
-    channelSelector.setTooltip ("CLEAN = CHROME (crystal clean), CRUNCH = BRIT (barking crunch), LEAD = STEEL (tight high gain). "
+    channelSelector.setTooltip ("CLEAN = CHROME (a tube-style clean: warm, a little sag, breaks up when pushed), CRUNCH = BRIT (barking crunch), LEAD = STEEL (tight high gain). "
                                 "NAM: a Neural Amp Modeler capture (.nam) - load one below, or browse captures on TONE3000");
     cabSelector.setTooltip ("Modelled cabinets: 1x12 / 2x12 open-back combos, 4x12 BRIT (warm, mid-forward) and 4x12 MOD (tight, aggressive upper mids). "
                             "IR = your cabinet impulse response");
