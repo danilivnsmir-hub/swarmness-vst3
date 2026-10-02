@@ -930,6 +930,48 @@ namespace
         }
     }
 
+    void testProgramChange()
+    {
+        std::printf ("\nMIDI Program Change -> presets\n");
+        SwarmnessAudioProcessor p;
+        p.prepareToPlay (48000.0, 256);
+        const auto names = p.getPresetManager().getAllPresetNames();
+        juce::AudioBuffer<float> audio (2, 256);
+        audio.clear();
+        juce::MidiBuffer midi;
+        midi.addEvent (juce::MidiMessage::programChange (1, 5), 0);
+        p.processBlock (audio, midi);
+        p.flushPendingChanges();
+        check (p.getPresetManager().getCurrentPresetName() == names[5], "Program Change 5 loads preset #5 (" + names[5] + ")");
+        juce::MidiBuffer out;
+        out.addEvent (juce::MidiMessage::programChange (1, 127), 0);
+        p.processBlock (audio, out);
+        p.flushPendingChanges();
+        check (p.getPresetManager().getCurrentPresetName() == names[5], "a number past the list is ignored");
+    }
+
+    void testInputLearn()
+    {
+        std::printf ("\nINPUT LEARN: five seconds of playing set the input gain\n");
+        const double sr = 48000.0;
+        SwarmnessAudioProcessor p;
+        resetToInit (p);
+        p.prepareToPlay (sr, 256);
+        auto in = makeSine (sr, (int) (6.0 * sr), 220.0, 0.1f);   // peaks at -20 dBFS
+        p.startInputLearn();
+        juce::MidiBuffer midi;
+        for (int i = 0; i + 256 <= in.getNumSamples(); i += 256)
+        {
+            juce::AudioBuffer<float> block (2, 256);
+            for (int ch = 0; ch < 2; ++ch)
+                block.copyFrom (ch, 0, in, ch, i, 256);
+            p.processBlock (block, midi);
+        }
+        p.flushPendingChanges();
+        const float db = p.getAPVTS().getRawParameterValue (ParamIDs::input)->load();
+        check (! p.isInputLearning() && std::abs (db - 8.0f) < 0.3f, juce::String::formatted ("peaks at -20 dBFS -> INPUT %+.1f dB (expected +8)", db));
+    }
+
     void testLicence()
     {
         std::printf ("\nLicence: a 7-day trial, activation with a key, the dry signal after the trial\n");
@@ -4301,6 +4343,8 @@ int main (int argc, char** argv)
         if (which == "tricks")  testCrushAndRing();
         if (which == "stutter") testStutter();
         if (which == "licence") testLicence();
+        if (which == "program") testProgramChange();
+        if (which == "learn")   testInputLearn();
         if (which == "gates")   testGates();
         if (which == "tuner")   testTuner();
         std::printf ("\n%s (%d failure%s)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures, failures == 1 ? "" : "s");
@@ -4331,6 +4375,8 @@ int main (int argc, char** argv)
     testCrushAndRing();
     testStutter();
     testLicence();
+    testProgramChange();
+    testInputLearn();
     testFuzzSag();
     testMonoToStereo();
     testMidiLearn();

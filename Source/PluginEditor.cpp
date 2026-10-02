@@ -218,6 +218,9 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     addAndMakeVisible (inputKnob);
     inMeter.setTargetZone (-18.0f, -6.0f);
     inMeter.setTooltip ("Input level after INPUT - aim for peaks in the green zone");
+    learnButton.setTooltip ("LEARN: play your loudest for 5 seconds - INPUT is set so the peaks land at -12 dBFS");
+    learnButton.onClick = [this] { processor.startInputLearn(); };
+    addAndMakeVisible (learnButton);
     volumeKnob.attach (state, output, "Output level");
     addAndMakeVisible (volumeKnob);
 
@@ -625,6 +628,7 @@ void MainPanel::resized()
                                                  (float) (bypassSwitch.getRight() - oct1Switch.getX()) + 28.0f, (float) fh + 6.0f);
         inputKnob .setBounds (16, fy - 8, 72, 104);
         inMeter   .setBounds (96, fy + 48, 140, 26);
+        learnButton.setBounds (96, fy + 80, 64, 18);
         volumeKnob.setBounds (baseWidth - 16 - 72, fy - 8, 72, 104);
         outMeter  .setBounds (baseWidth - 16 - 72 - 8 - 140, fy + 48, 140, 26);
     }
@@ -850,6 +854,7 @@ void MainPanel::tick()
 
     for (auto* d : { &moreSmoke, &moreHive, &moreShift })
         d->button.repaint();
+    learnButton.setButtonText (processor.isInputLearning() ? "PLAY..." : "LEARN");
     const bool synced = paramOn (ParamIDs::flowSync);
     flowSpeedKnob.setVisible (! synced);
     flowDivKnob.setVisible (synced);

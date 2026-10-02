@@ -331,6 +331,22 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     // ---- INPUT gain (how hard everything after it is hit). A NaN / Inf from the host never gets in:
     // once inside a feedback loop (CRYPT, the HIVE trails, the AMP) it would silence the plug-in.
     inputGainSmoothed.setTargetValue (juce::Decibels::decibelsToGain (p.input->load()));
+    if (int left = learnSamplesLeft.load(); left > 0)
+    {
+        // INPUT LEARN: the loudest raw peak over the listening time
+        float pk = learnPeak.load();
+        for (int ch = 0; ch < numChannels; ++ch)
+            pk = juce::jmax (pk, buffer.getMagnitude (ch, 0, numSamples));
+        learnPeak.store (std::isfinite (pk) ? pk : 0.0f);
+        left -= numSamples;
+        learnSamplesLeft.store (juce::jmax (0, left));
+        if (left <= 0)
+        {
+            const float wanted = -12.0f - juce::Decibels::gainToDecibels (juce::jmax (1.0e-5f, learnPeak.load()));
+            pendingInputDb.store (juce::jlimit (ParamRanges::inputMinDb, ParamRanges::inputMaxDb, wanted));
+            triggerAsyncUpdate();
+        }
+    }
     for (int i = 0; i < numSamples; ++i)
     {
         const float g = inputGainSmoothed.getNextValue();
@@ -1152,10 +1168,33 @@ void SwarmnessAudioProcessor::parameterChanged (const juce::String& parameterID,
         triggerAsyncUpdate();   // from the audio thread (automation / MIDI): switch on the message thread
 }
 
+void SwarmnessAudioProcessor::startInputLearn() noexcept
+{
+    learnPeak.store (0.0f);
+    learnSamplesLeft.store ((int) (5.0 * currentSampleRate));
+}
+
 void SwarmnessAudioProcessor::handleAsyncUpdate()
 {
-    if (presetManager != nullptr)
-        presetManager->selectScene (pendingScene.load());
+    if (presetManager == nullptr)
+        return;
+    if (const float db = pendingInputDb.exchange (-1000.0f); db > -999.0f)
+        if (auto* param = apvts.getParameter (ParamIDs::input))
+        {
+            param->beginChangeGesture();
+            param->setValueNotifyingHost (param->convertTo0to1 (db));
+            param->endChangeGesture();
+        }
+    if (const int program = pendingProgram.exchange (-1); program >= 0)
+    {
+        const auto names = presetManager->getAllPresetNames();
+        if (program < names.size() && names[program] != presetManager->getCurrentPresetName())
+        {
+            presetManager->loadPreset (names[program]);
+            return;   // the preset lands on scene A; a scene change queued before it is void
+        }
+    }
+    presetManager->selectScene (pendingScene.load());
 }
 
 int SwarmnessAudioProcessor::indexOfParam (const juce::String& paramID) const noexcept
@@ -1215,6 +1254,13 @@ void SwarmnessAudioProcessor::handleMidi (const juce::MidiBuffer& midi)
         if (meta.numBytes > 3)
             continue;   // SysEx and the like: not ours (and a MidiMessage of it would allocate)
         const auto msg = meta.getMessage();
+        if (msg.isProgramChange())
+        {
+            // Program Change n = preset n of the list (factory presets first, then the user's), on the message thread
+            pendingProgram.store (msg.getProgramChangeNumber());
+            triggerAsyncUpdate();
+            continue;
+        }
         const bool isCC = msg.isController(), isNote = msg.isNoteOnOrOff();
         if (! isCC && ! isNote)
             continue;

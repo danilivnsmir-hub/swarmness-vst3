@@ -143,6 +143,7 @@ private:
     bool blockEngaged (int block) const;
     MiniSwitch link1Switch { "LINK" }, link2Switch { "LINK" };
     LevelMeter inMeter { "IN" }, outMeter { "OUT" };
+    juce::TextButton learnButton { "LEARN" };
 
     InfoOverlay infoOverlay;
 

@@ -138,6 +138,12 @@ public:
     float getUiScale() const noexcept     { return uiScale.load(); }
     void setUiScale (float scale) noexcept { uiScale = scale; }
     Licence& getLicence() noexcept { return licence; }
+    /** Tests (no message loop): applies a queued scene / program change now. */
+    void flushPendingChanges() { handleAsyncUpdate(); }
+
+    /** INPUT LEARN: listens for ~5 s and sets INPUT so the loudest peak lands at -12 dBFS. */
+    void startInputLearn() noexcept;
+    bool isInputLearning() const noexcept { return learnSamplesLeft.load() > 0; }
     bool getUiMini() const noexcept       { return uiMini.load(); }
     void setUiMini (bool m) noexcept      { uiMini = m; }
     /** Which blocks have their MORE controls open (a bit per block) and whether knob values are always shown. */
@@ -218,6 +224,9 @@ private:
     TunerTap tunerTap;
     juce::SmoothedValue<float> tunerGain;
     std::atomic<int> pendingScene { 0 };
+    std::atomic<int> pendingProgram { -1 };   // MIDI Program Change: a preset to load on the message thread (-1 = none)
+    std::atomic<int> learnSamplesLeft { 0 };
+    std::atomic<float> learnPeak { 0.0f }, pendingInputDb { -1000.0f };
     std::atomic<bool> restoringState { false };
     juce::Array<juce::RangedAudioParameter*> learnableParams;   // index = binding param
     int indexOfParam (const juce::String& paramID) const noexcept;

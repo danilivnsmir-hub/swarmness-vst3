@@ -1125,8 +1125,9 @@ void InfoOverlay::paint (juce::Graphics& g)
         { "MORE",     "The busier blocks (SMOKE, HIVE, SHIFT, CRYPT) show their main knobs; MORE opens the rest (a dot = something in there is set). "
                       "Knob values appear when you hover; \"...\" > Always show knob values brings them back for good." },
         { "MIDI",     "Right-click ANY control for MIDI learn: switches toggle on each press, selectors step, knobs follow the CC. "
-                      "One pedal can drive several controls (e.g. ON and WINGS)." },
-        { "LIVE",     "SCENES A..D = four versions of the sound inside one preset (click to switch; right-click = MIDI learn or copy the current scene there). "
+                      "One pedal can drive several controls (e.g. ON and WINGS). Program Change n = preset n of the list." },
+        { "LIVE",     "LEARN under the IN meter: play loud for 5 s and INPUT sets itself (peaks at -12 dBFS). "
+                      "SCENES A..D = four versions of the sound inside one preset (click to switch; right-click = MIDI learn or copy the current scene there). "
                       "TUNE = the tuner (MUTE silences the output while it is open). MINI = a small window with the chain, scenes and footswitches for playing live." },
         { "LEVELS",   "INPUT = input gain: how hard the effects and amps are hit (aim for the green zone of the IN meter). "
                       "VOLUME = output level. Footswitches: MOMENTARY = while held, LATCH = click on / off (they work even while bypassed)." },
