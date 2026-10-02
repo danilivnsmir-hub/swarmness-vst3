@@ -3910,6 +3910,8 @@ int main (int argc, char** argv)
                 p.loadCabIR (juce::File (argv[7 + k]), k);
         }
         p.setUiMini (mini);
+        if (argc >= 7 && juce::String (argv[6]) == "more")   // every block's MORE open
+            p.setUiMore (0xffff);
         std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
         const bool tunerShot = argc >= 7 && juce::String (argv[6]) == "tuner";
         const bool infoShot = argc >= 7 && juce::String (argv[6]) == "info";

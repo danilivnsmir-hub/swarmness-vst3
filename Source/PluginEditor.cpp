@@ -243,10 +243,65 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     tunerButton.setTooltip ("TUNE: open the tuner (MUTE silences the output while it is open)");
     tunerButton.onClick = [this] { tunerOverlay.open(); };
 
+    // MORE: the secondary controls of the busier blocks, hidden until asked for
+    setupDisclosure (moreSmoke, fxPage, Chain::smoke, { &fuzzScoopKnob, &fuzzGlareKnob, &fuzzGateKnob, &fuzzSagKnob, &fuzzCrushKnob },
+                     { fuzzScoop, fuzzGlare, fuzzGate, fuzzSag, fuzzCrush }, "MORE: SCOOP, GLARE, GATE, SAG and CRUSH");
+    setupDisclosure (moreHive, pitchPage, Chain::pitch, { &secondaryKnob, &trackingKnob, &hvStopTimeKnob, &toneKnob, &gateKnob, &rbDetuneKnob },
+                     { rbSecondary, rbTracking, hvStopTime, rbTone, trChop, rbDetune }, "MORE: QUEEN and TRACKING, the STOP time, TONE and GATE of the repeats, DETUNE");
+    setupDisclosure (moreShift, pitchPage, Chain::shift, { &panicKnob, &chaosKnob, &speedKnob, &shDetuneKnob },
+                     { panic, chaos, speed, shDetune }, "MORE: ANGER, FRENZY, BUZZ and DETUNE - the mangling of the shifter");
+    Knob::alwaysShowValues = processor.getUiValues();
+    presetBar.extraMenuItems = [this] (juce::PopupMenu& m)
+    {
+        m.addItem ("Always show knob values", true, Knob::alwaysShowValues, [this]
+        {
+            Knob::alwaysShowValues = ! Knob::alwaysShowValues;
+            processor.setUiValues (Knob::alwaysShowValues);
+            repaint();
+        });
+    };
+    // the LINK switches left the footer: VENOM's wiring menu has SHIFT A / B (the parameters are unchanged)
+    link1Switch.setVisible (false);
+    link2Switch.setVisible (false);
+
     mini = processor.getUiMini();
     setSize (baseWidth, getBaseHeight());
     showPage (processor.getUiPage());
     tick();
+}
+
+void MainPanel::setupDisclosure (Disclosure& d, juce::Component& parent, int block, std::initializer_list<juce::Component*> hidden,
+                                 std::initializer_list<const char*> paramIds, const juce::String& tooltip)
+{
+    d.bit = block;
+    d.hidden.assign (hidden);
+    d.paramIds.assign (paramIds);
+    d.button.setTooltip (tooltip + ". A dot = something in there is set away from its default");
+    d.button.setToggleState (moreOpen (d), juce::dontSendNotification);
+    d.button.hasHiddenChanges = [this, &d]
+    {
+        for (auto* id : d.paramIds)
+            if (auto* p = state.getParameter (id))
+                if (std::abs (p->getValue() - p->getDefaultValue()) > 1.0e-3f)
+                    return true;
+        return false;
+    };
+    d.button.onClick = [this, &d]
+    {
+        const int bits = processor.getUiMore();
+        processor.setUiMore (d.button.getToggleState() ? bits | (1 << d.bit) : bits & ~(1 << d.bit));
+        applyDisclosure (d);
+        resized();
+    };
+    parent.addAndMakeVisible (d.button);
+    applyDisclosure (d);
+}
+
+void MainPanel::applyDisclosure (Disclosure& d)
+{
+    const bool open = moreOpen (d);
+    for (auto* c : d.hidden)
+        c->setVisible (open);
 }
 
 void MainPanel::attachButton (juce::Component& parent, juce::Button& b, const juce::String& id, const juce::String& tooltip)
@@ -383,31 +438,59 @@ void MainPanel::resized()
         const auto& mangleSec = hiveSections[2];
 
         hivePower.setBounds (powerFor (hiveArea));
+        moreHive.button.setBounds (pillFor (hiveArea, 0));
 
-        row (voiceSec, y1, { &pitchKnob, &primaryKnob, &secondaryKnob });
-        row (voiceSec, y2, { &trackingKnob, nullptr, nullptr });
+        if (moreOpen (moreHive))
+        {
+            row (voiceSec, y1, { &pitchKnob, &primaryKnob, &secondaryKnob });
+            row (voiceSec, y2, { &trackingKnob, nullptr, nullptr });
+        }
+        else
+        {
+            // collapsed: PITCH and DRONE large, centred
+            kw = 88;
+            row (voiceSec, y1 + 8, { &pitchKnob, &primaryKnob }, 2);
+            kw = 72;
+        }
         // switches live in the section's heading row, right-aligned
         snapToggle.setBounds ((int) voiceSec.getRight() - 12 - 60, (int) voiceSec.getY() + 36, 60, 22);
 
         rbSyncToggle.setBounds ((int) trailSec.getRight() - 12 - 60, (int) trailSec.getY() + 36, 60, 22);
         trDryToggle .setBounds ((int) trailSec.getRight() - 12 - 126, (int) trailSec.getY() + 36, 60, 22);
         hvStopToggle.setBounds ((int) trailSec.getRight() - 12 - 192, (int) trailSec.getY() + 36, 60, 22);
-        // TRAILS: five small knobs (3 + 2) on the left, a tall step grid on the right (easy to draw)
+        // TRAILS: TRAILS and TIME large on the left (the small STOP / TONE / GATE under MORE), a tall step grid on the right
         {
             const int kx = (int) trailSec.getX() + 12, ky = (int) hiveArea.getY() + 62, sw = 60, sh = 96;
-            magicKnob     .setBounds (kx,          ky,      sw, sh);
-            rbTimeKnob    .setBounds (kx + sw,     ky,      sw, sh);
-            hvStopTimeKnob.setBounds (kx + 2 * sw, ky,      sw, sh);
-            toneKnob      .setBounds (kx,          ky + sh, sw, sh);
-            gateKnob      .setBounds (kx + sw,     ky + sh, sw, sh);
+            if (moreOpen (moreHive))
+            {
+                magicKnob     .setBounds (kx,          ky,      sw, sh);
+                rbTimeKnob    .setBounds (kx + sw,     ky,      sw, sh);
+                hvStopTimeKnob.setBounds (kx + 2 * sw, ky,      sw, sh);
+                toneKnob      .setBounds (kx,          ky + sh, sw, sh);
+                gateKnob      .setBounds (kx + sw,     ky + sh, sw, sh);
+            }
+            else
+            {
+                magicKnob .setBounds (kx + 2,  ky + 2, 88, 124);
+                rbTimeKnob.setBounds (kx + 92, ky + 2, 88, 124);
+            }
             rbDivKnob.setBounds (rbTimeKnob.getBounds());
             const int gx = kx + 3 * sw + 12;
             stepGrid.setBounds (gx, (int) hiveArea.getY() + 64, (int) trailSec.getRight() - 14 - gx, (int) hiveArea.getBottom() - 12 - ((int) hiveArea.getY() + 64));
         }
 
         rbRawToggle.setBounds ((int) mangleSec.getRight() - 12 - 60, (int) mangleSec.getY() + 36, 60, 22);
-        row (mangleSec, y1, { &hvMangleKnob }, 1);
-        row (mangleSec, y2, { &rbDetuneKnob, &rbMixKnob }, 2);
+        if (moreOpen (moreHive))
+        {
+            row (mangleSec, y1, { &hvMangleKnob }, 1);
+            row (mangleSec, y2, { &rbDetuneKnob, &rbMixKnob }, 2);
+        }
+        else
+        {
+            kw = 88;
+            row (mangleSec, y1 + 8, { &hvMangleKnob, &rbMixKnob }, 2);
+            kw = 72;
+        }
     }
 
     // SHIFT: live pitch display on the left, nine knobs, STACK / SNAP / RAW in the title row
@@ -417,13 +500,20 @@ void MainPanel::resized()
         stackToggle .setBounds (pillFor (shiftArea, 2));
         shSnapToggle.setBounds (pillFor (shiftArea, 1));
         shRawToggle .setBounds (pillFor (shiftArea, 0));
-        const int x0 = (int) shiftArea.getX() + 282, x1 = (int) shiftArea.getRight() - 10, kw = 72;
-        const std::initializer_list<Knob*> knobs { &shiftAKnob, &shiftBKnob, &riseKnob, &fallKnob, &blendKnob,
-                                                   &panicKnob, &chaosKnob, &speedKnob, &shDetuneKnob };
+        moreShift.button.setBounds (pillFor (shiftArea, 3));
+        const int x0 = (int) shiftArea.getX() + 282, x1 = (int) shiftArea.getRight() - 10;
+        const bool open = moreOpen (moreShift);
+        const std::vector<Knob*> knobs = open ? std::vector<Knob*> { &shiftAKnob, &shiftBKnob, &riseKnob, &fallKnob, &blendKnob, &panicKnob, &chaosKnob, &speedKnob, &shDetuneKnob }
+                                              : std::vector<Knob*> { &shiftAKnob, &shiftBKnob, &riseKnob, &fallKnob, &blendKnob };
         const float step = (float) (x1 - x0) / (float) knobs.size();
         int k = 0;
         for (auto* knob : knobs)
-            knob->setBounds (x0 + juce::roundToInt (step * ((float) k++ + 0.5f)) - kw / 2, (int) shiftArea.getY() + 52, kw, 104);
+        {
+            // SHIFT A / B and MIX large, the rest small
+            const bool primary = knob == &shiftAKnob || knob == &shiftBKnob || knob == &blendKnob;
+            const int kw = primary ? 88 : 64, kh = primary ? 124 : 96;
+            knob->setBounds (x0 + juce::roundToInt (step * ((float) k++ + 0.5f)) - kw / 2, (int) shiftArea.getY() + 44 + (124 - kh) / 2, kw, kh);
+        }
     }
 
     auto threeKnobs = [] (juce::Rectangle<float> a, std::initializer_list<Knob*> knobs)
@@ -468,7 +558,22 @@ void MainPanel::resized()
     // FUZZ
     fuzzPower.setBounds (powerFor (fuzzArea));
     fuzzVoiceSelector.setBounds ((int) fuzzArea.getRight() - 40 - 8 - 150, (int) fuzzArea.getY() + 10, 150, 22);
-    threeKnobs (fuzzArea, { &fuzzKnob, &fuzzToneKnob, &fuzzScoopKnob, &fuzzGlareKnob, &fuzzGateKnob, &fuzzSagKnob, &fuzzBlendKnob, &fuzzCrushKnob });
+    moreSmoke.button.setBounds (fuzzVoiceSelector.getX() - 12 - 60, (int) fuzzArea.getY() + 9, 60, 24);
+    if (moreOpen (moreSmoke))
+    {
+        // the primary three large, the rest small, all in one row
+        const int kw = 88, sw = 64, kh = 124, sh = 96, y = (int) fuzzArea.getY() + 40 + ((int) fuzzArea.getHeight() - 40 - kh) / 2;
+        const int total = 3 * kw + 5 * sw, gap = ((int) fuzzArea.getWidth() - total) / 9;
+        int x = (int) fuzzArea.getX() + gap;
+        for (auto* k : { &fuzzKnob, &fuzzToneKnob, &fuzzBlendKnob, &fuzzScoopKnob, &fuzzGlareKnob, &fuzzGateKnob, &fuzzSagKnob, &fuzzCrushKnob })
+        {
+            const bool primary = k == &fuzzKnob || k == &fuzzToneKnob || k == &fuzzBlendKnob;
+            k->setBounds (x, primary ? y : y + (kh - sh) / 2, primary ? kw : sw, primary ? kh : sh);
+            x += (primary ? kw : sw) + gap;
+        }
+    }
+    else
+        threeKnobs (fuzzArea.withTrimmedLeft (120.0f).withTrimmedRight (120.0f), { &fuzzKnob, &fuzzToneKnob, &fuzzBlendKnob });
 
     // FLOW
     flowPower.setBounds (powerFor (flowArea));
@@ -728,6 +833,8 @@ void MainPanel::tick()
         learnMarker.setVisible (false);
     }
 
+    for (auto* d : { &moreSmoke, &moreHive, &moreShift })
+        d->button.repaint();
     const bool synced = paramOn (ParamIDs::flowSync);
     flowSpeedKnob.setVisible (! synced);
     flowDivKnob.setVisible (synced);

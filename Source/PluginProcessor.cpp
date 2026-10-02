@@ -1307,6 +1307,8 @@ void SwarmnessAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
     state.setProperty ("pluginVersion", JucePlugin_VersionString, nullptr);
     state.setProperty ("uiScale", uiScale.load(), nullptr);
     state.setProperty ("uiMini", uiMini.load(), nullptr);
+    state.setProperty ("uiMore", uiMore.load(), nullptr);
+    state.setProperty ("uiValues", uiValues.load(), nullptr);
     state.setProperty ("reverbIR", fileReference ("reverbIR", getReverbIRFile()), nullptr);
     state.setProperty ("namModel", fileReference ("namModel", getNamModelFile()), nullptr);
     state.setProperty ("pedalNam", fileReference ("pedalNam", getNamModelFile (true)), nullptr);
@@ -1338,6 +1340,8 @@ void SwarmnessAudioProcessor::setStateInformation (const void* data, int sizeInB
             tree.removeProperty ("scenes", nullptr);
             uiScale = juce::jlimit (0.7f, 2.0f, (float) tree.getProperty ("uiScale", 1.0f));
             uiMini = (bool) tree.getProperty ("uiMini", false);
+            uiMore = (int) tree.getProperty ("uiMore", 0);
+            uiValues = (bool) tree.getProperty ("uiValues", false);
             // MIDI bindings ("paramID:kind:number;..."); up to beta.24 only the footswitches ("midi0".."midi3")
             for (auto& b : midiBindings)
             {

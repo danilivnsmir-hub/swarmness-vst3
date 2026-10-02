@@ -47,6 +47,11 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
     void mouseDown (const juce::MouseEvent&) override;     // click the value to type an exact number
+    void mouseEnter (const juce::MouseEvent&) override { repaint(); }
+    void mouseExit (const juce::MouseEvent&) override { repaint(); }
+
+    /** The value readout is shown while the mouse is over the knob (or always, a user setting). */
+    static inline bool alwaysShowValues = false;
 
 private:
     struct SnappingSlider : public RightClickSafeSlider
@@ -108,6 +113,15 @@ public:
     explicit PillToggle (const juce::String& label);
     void paintButton (juce::Graphics&, bool isMouseOver, bool isDown) override;
     SWARM_RIGHT_CLICK_SAFE_BUTTON
+};
+
+/** The MORE pill of a block: opens the secondary controls; a dot while any hidden parameter is off its default. */
+class MoreToggle : public PillToggle
+{
+public:
+    MoreToggle() : PillToggle ("MORE") {}
+    std::function<bool()> hasHiddenChanges;
+    void paintButton (juce::Graphics&, bool isMouseOver, bool isDown) override;
 };
 
 //==============================================================================
@@ -346,6 +360,9 @@ public:
     void refresh();
     void resized() override;
     void paint (juce::Graphics&) override;
+
+    /** Extra items for the "..." menu (view settings), added by the editor. */
+    std::function<void (juce::PopupMenu&)> extraMenuItems;
 
 private:
     void showActionsMenu();

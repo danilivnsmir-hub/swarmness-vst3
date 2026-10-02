@@ -138,6 +138,11 @@ public:
     void setUiScale (float scale) noexcept { uiScale = scale; }
     bool getUiMini() const noexcept       { return uiMini.load(); }
     void setUiMini (bool m) noexcept      { uiMini = m; }
+    /** Which blocks have their MORE controls open (a bit per block) and whether knob values are always shown. */
+    int getUiMore() const noexcept        { return uiMore.load(); }
+    void setUiMore (int bits) noexcept    { uiMore = bits; }
+    bool getUiValues() const noexcept     { return uiValues.load(); }
+    void setUiValues (bool v) noexcept    { uiValues = v; }
     /** Last page shown in the editor (FX / EQ / CRYPT), kept while the plug-in is loaded. */
     int getUiPage() const noexcept         { return uiPage.load(); }
     void setUiPage (int page) noexcept     { uiPage = page; }
@@ -351,6 +356,8 @@ private:
     Meters meters;
     std::atomic<float> uiScale { 1.0f };
     std::atomic<bool> uiMini { false };
+    std::atomic<int> uiMore { 0 };
+    std::atomic<bool> uiValues { false };
     std::atomic<int> uiPage { 0 };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SwarmnessAudioProcessor)

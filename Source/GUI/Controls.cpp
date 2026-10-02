@@ -35,6 +35,7 @@ Knob::Knob (const juce::String& c, bool bipolar) : caption (c)
     configureCommonSlider (slider);
     slider.getProperties().set ("bipolar", bipolar);
     slider.onValueChange = [this] { repaint(); };
+    slider.addMouseListener (this, false);   // hover over the knob itself shows the value
     addAndMakeVisible (slider);
 }
 
@@ -98,11 +99,16 @@ void Knob::resized()
 void Knob::paint (juce::Graphics& g)
 {
     auto r = getLocalBounds().toFloat();
-    g.setFont (font (15.0f, true));
-    g.setColour (isEnabled() ? Colours::text.withAlpha (0.78f) : Colours::textFaint);
+    const bool small = getHeight() < 100;   // secondary knobs: smaller lettering
+    g.setFont (font (small ? 12.5f : 15.0f, true));
+    g.setColour (isEnabled() ? Colours::text.withAlpha (small ? 0.62f : 0.78f) : Colours::textFaint);
     g.drawText (caption, r.removeFromTop (18.0f), juce::Justification::centred, false);
 
-    g.setFont (font (15.0f, true));
+    // the value: on hover / while dragging (or always, if the user wants it)
+    const bool showValue = alwaysShowValues || isMouseOver (true) || slider.isMouseButtonDown() || valueEditor != nullptr;
+    if (! showValue)
+        return;
+    g.setFont (font (small ? 12.5f : 15.0f, true));
     g.setColour (isEnabled() ? Colours::accentBright : Colours::textFaint);
     g.drawText (slider.getTextFromValue (slider.getValue()), r.removeFromBottom (18.0f), juce::Justification::centred, false);
 }
@@ -145,6 +151,18 @@ void Fader::paint (juce::Graphics& g)
     g.setFont (font (compact ? 13.0f : 15.0f, true));
     g.setColour (Colours::accentBright);
     g.drawText (value, r.removeFromBottom (18.0f), juce::Justification::centred, false);
+}
+
+void MoreToggle::paintButton (juce::Graphics& g, bool isMouseOver, bool isDown)
+{
+    PillToggle::paintButton (g, isMouseOver, isDown);
+    if (hasHiddenChanges != nullptr && hasHiddenChanges() && ! getToggleState())
+    {
+        // a dot: something under MORE is set away from its default
+        const auto r = getLocalBounds().toFloat();
+        g.setColour (Colours::accentBright);
+        g.fillEllipse (r.getRight() - 11.0f, r.getY() + 4.0f, 5.0f, 5.0f);
+    }
 }
 
 //==============================================================================
@@ -947,6 +965,11 @@ void PresetBar::showActionsMenu()
     menu.addItem ("Open Presets Folder", [] { PresetManager::getPresetsDirectory().startAsProcess(); });
     menu.addSeparator();
     menu.addItem ("Reset to Init", [this] { presets.loadPreset ("Init"); refresh(); });
+    if (extraMenuItems != nullptr)
+    {
+        menu.addSeparator();
+        extraMenuItems (menu);
+    }
 
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&menuButton));
 }
@@ -1072,7 +1095,7 @@ void InfoOverlay::paint (juce::Graphics& g)
                       "VENOM switches it on while held." },
         { "TRAILS",   "Repeats of the DRONE, shaped by STEPS like a pattern tremolo: each bar = one repeat (LEVEL, 0 = silent) and its MOVE "
                       "(= hold, up / down by PITCH, ? random, < backwards, ||| stutter). GATE chops every step (0 = full repeats). DRY = repeats of your note (a delay). FILL = ready-made patterns. TIME / SYNC = step length. "
-                      "A stomp wired to HIVE (VENOM out of the box) = self-oscillation; LINK drags SHIFT A / B in. STOP = a tape stop of the repeats (the knob = how long)." },
+                      "A stomp wired to HIVE (VENOM out of the box) = self-oscillation. STOP = a tape stop of the repeats (the knob = how long)." },
         { "MANGLE",   "HIVE's MANGLE is one knob: sour detuned voices first, then random pitch jumps, then buzz / AM on top. "
                       "RAW = cheap-pedal-DSP character, DETUNE = width, MIX = dry vs voices (100% = voices only)." },
         { "HONEY",    "Sustainer / compressor, pedal style: SUSTAIN = threshold down and ratio up together (sticky sustain), ATTACK = slower lets the pick through, "
@@ -1097,6 +1120,8 @@ void InfoOverlay::paint (juce::Graphics& g)
                       "LOW CUT keeps it out of the low end. Switching it off lets the tail ring out." },
         { "STOMPS",   "VENOM and STING are footswitches you wire yourself: right-click one and pick, per block, On / Off while held (or -), plus SHIFT A / B "
                       "CRYPT FREEZE and HIVE STOP. The wiring is a scene setting, so every scene can use them differently. VENOM out of the box = HIVE + self-oscillation." },
+        { "MORE",     "The busier blocks (SMOKE, HIVE, SHIFT, CRYPT) show their main knobs; MORE opens the rest (a dot = something in there is set). "
+                      "Knob values appear when you hover; \"...\" > Always show knob values brings them back for good." },
         { "MIDI",     "Right-click ANY control for MIDI learn: switches toggle on each press, selectors step, knobs follow the CC. "
                       "One pedal can drive several controls (e.g. ON and WINGS)." },
         { "LIVE",     "SCENES A..D = four versions of the sound inside one preset (click to switch; right-click = MIDI learn or copy the current scene there). "

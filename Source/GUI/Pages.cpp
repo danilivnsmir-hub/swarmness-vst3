@@ -769,6 +769,23 @@ ReverbPage::ReverbPage (SwarmnessAudioProcessor& p)
     duckKnob    .attach (state, revDuck,     "DUCK: the reverb dips while you play and blooms in the gaps - big space without the mud");
     for (auto* k : { &mixKnob, &decayKnob, &sizeKnob, &preDelayKnob, &toneKnob, &lowCutKnob, &modKnob, &duckKnob })
         addAndMakeVisible (k);
+    moreButton.setTooltip ("MORE: SIZE, PRE-DELAY, LOW CUT, MOD and DUCK. A dot = something in there is set away from its default");
+    moreButton.setToggleState (moreOpen(), juce::dontSendNotification);
+    moreButton.hasHiddenChanges = [this]
+    {
+        for (auto* id : { revSize, revPreDelay, revLowCut, revMod, revDuck })
+            if (auto* p = state.getParameter (id))
+                if (std::abs (p->getValue() - p->getDefaultValue()) > 1.0e-3f)
+                    return true;
+        return false;
+    };
+    moreButton.onClick = [this]
+    {
+        const int bits = processor.getUiMore();
+        processor.setUiMore (moreButton.getToggleState() ? bits | (1 << Chain::crypt) : bits & ~(1 << Chain::crypt));
+        resized();
+    };
+    addAndMakeVisible (moreButton);
 
     loadButton.setTooltip ("Load an impulse response (WAV / AIFF / FLAC, up to 12 s). Or drop a file on this page");
     loadButton.onClick = [this] { chooseFile(); };
@@ -784,21 +801,32 @@ void ReverbPage::resized()
     power.setBounds ((int) panelArea.getRight() - 40, 8, 26, 26);
     typeSelector.setBounds ((int) panelArea.getRight() - 52 - 400, 10, 400, 24);
     freezeToggle.setBounds (typeSelector.getX() - 12 - 76, 10, 76, 24);
+    moreButton.setBounds (freezeToggle.getX() - 12 - 60, 10, 60, 24);
 
     tail.setBounds (16, 46, 700, 244);
     irArea = { 728.0f, 46.0f, panelArea.getWidth() - 744.0f, 244.0f };
     loadButton .setBounds ((int) irArea.getX() + 16, (int) irArea.getBottom() - 46, 150, 30);
     clearButton.setBounds (loadButton.getRight() + 10, loadButton.getY(), 90, 30);
 
-    const int slots = 8, y = 312;
-    const float slotW = (panelArea.getWidth() - 32.0f) / (float) slots;
+    // MIX, DECAY and TONE large; SIZE, PRE-DELAY, LOW CUT, MOD, DUCK small and under MORE
+    const bool open = moreOpen();
+    const std::vector<Knob*> shown = open ? std::vector<Knob*> { &mixKnob, &decayKnob, &toneKnob, &sizeKnob, &preDelayKnob, &lowCutKnob, &modKnob, &duckKnob }
+                                          : std::vector<Knob*> { &mixKnob, &decayKnob, &toneKnob };
+    for (auto* k : { &sizeKnob, &preDelayKnob, &lowCutKnob, &modKnob, &duckKnob })
+        k->setVisible (open);
+    const float left = open ? 16.0f : 200.0f, width = panelArea.getWidth() - 2.0f * left;
+    const float slotW = width / (float) shown.size();
     int i = 0;
-    for (auto* k : { &mixKnob, &decayKnob, &sizeKnob, &preDelayKnob, &toneKnob, &lowCutKnob, &modKnob, &duckKnob })
+    for (auto* k : shown)
     {
-        const int cx = (int) (16.0f + slotW * ((float) i++ + 0.5f));
-        k->setBounds (cx - 50, y, 100, 110);
+        const bool primary = k == &mixKnob || k == &decayKnob || k == &toneKnob;
+        const int w = primary ? 100 : 70, h = primary ? 110 : 90;
+        const int cx = (int) (left + slotW * ((float) i++ + 0.5f));
+        k->setBounds (cx - w / 2, 312 + (110 - h) / 2, w, h);
     }
 }
+
+bool ReverbPage::moreOpen() const { return (processor.getUiMore() & (1 << Chain::crypt)) != 0; }
 
 void ReverbPage::paint (juce::Graphics& g)
 {
@@ -859,6 +887,7 @@ void ReverbPage::tick()
     for (auto* k : { &decayKnob, &sizeKnob, &modKnob })
         k->setAlpha (irMode ? 0.35f : 1.0f);
     freezeToggle.setAlpha (irMode ? 0.35f : (on ? 1.0f : 0.6f));
+    moreButton.repaint();
     for (auto* k : { &mixKnob, &preDelayKnob, &toneKnob, &lowCutKnob, &duckKnob })
         k->setAlpha (on ? 1.0f : 0.6f);
     clearButton.setEnabled (irDescription.isNotEmpty());

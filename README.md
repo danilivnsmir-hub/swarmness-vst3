@@ -57,7 +57,7 @@ VST3 / AU / Standalone · Windows, macOS (Universal: Apple Silicon + Intel), Lin
 
 **VENOM и STING — стомпы, которые вы собираете сами.** Правый клик по футсвичу → раздел «engages while held»: для каждого блока (HONEY, SMOKE, HIVE, WASP, AMP, CAB, SWARM, WINGS, COMB, CARVE, CRYPT) и для FREEZE реверба и STOP повторов HIVE выбираете **On** (включить, пока нажат), **Off** (выключить, пока нажат — например, убрать фузз на куплет) или «—» (блок живёт по своей кнопке питания); плюс SHIFT A / SHIFT B. HIVE с «On» — это ещё и самовозбуждение TRAILS (классический VENOM). Проводка хранится в пресете и **в каждой сцене своя**: в сцене A VENOM может включать WASP как соло-буст, в сцене B — замораживать CRYPT. Футсвич «нажат / отпущен» в пресеты не пишется.
 
-Мини-тумблеры **LINK** рядом с SHIFT A / B — то же самое для VENOM в один клик: если тумблер поднят, нажатие **VENOM** включает и этот сдвиг.
+(Тумблеры LINK прежних версий — это пункты SHIFT A / SHIFT B в проводке VENOM; параметры те же.)
 
 Переключатель **MOMENTARY / LATCH** в шапке: в режиме **MOMENTARY** эффект звучит, пока кнопка зажата; в режиме **LATCH** нажал — включилось, нажал ещё раз — выключилось.
 
@@ -84,6 +84,8 @@ VST3 / AU / Standalone · Windows, macOS (Universal: Apple Silicon + Intel), Lin
 **Как MIDI попадает в плагин.** Плагин слушает MIDI своей дорожки. В Reaper у дорожки с гитарой вход аудио, поэтому MIDI с контроллера туда само не приходит. Варианты: (1) создать отдельную дорожку с входом MIDI от контроллера (запись включена, мониторинг включён) и сделать с неё MIDI-посыл (send) на гитарную дорожку; (2) пользоваться Learn самого Reaper (он управляет параметрами плагина напрямую). В Standalone-версии контроллер включается в Options → Audio/MIDI Settings → MIDI Inputs. Педали работают и когда плагин выключен кнопкой ON.
 
 ## Секции
+
+У каждого блока на виду только главные ручки; у блоков побольше (SMOKE, HIVE, SHIFT, CRYPT) остальные спрятаны за кнопкой **MORE** в заголовке — точка на ней значит, что что‑то внутри отличается от значения по умолчанию. Значения ручек показываются при наведении и во время вращения; пункт **«…» → Always show knob values** возвращает их насовсем. Оба состояния запоминаются в сессии.
 
 Страница **PITCH** — два блока, каждый со своим местом в цепи:
 
@@ -208,7 +210,7 @@ VST3 / AU / Standalone · Windows, macOS (Universal: Apple Silicon + Intel), Lin
 - **Amps & Cabs:** Glass Clean, Thall Intro (кристальный клин для интро), Brit Crunch, Brit Doom, Steel Lead, Hornet Lead, Wasp Boost, Wasp Crunch, Clean Push (BOOST в CHROME), Smooth Lead (SMOOTH в BRIT), Rasp Rhythm (RASP как самостоятельный дисторшн), Sludge Wall, Octave Panic Rig (SHIFT в STEEL), Slam Rig (диссонанс HIVE в STEEL)
 - **Chain, EQ & Crypt:** Crypt Doom, Smoke in the Crypt (реверб *в* фузз), Tight Before Smoke (CARVE перед фуззом), Comb Smile, Hive Cathedral, Parallel Smoke (фузз ∥ чистый), Split Swarm (хорус ∥ реверб), Twin Splits (две развилки), Chug Room
 
-Пресет хранит звук (включая LINK и порядок цепи); положения футсвичей и режим MOMENTARY/LATCH в пресет не входят — ими играют вживую.
+Пресет хранит звук (включая проводку стомпов и порядок цепи); положения футсвичей и режим MOMENTARY/LATCH в пресет не входят — ими играют вживую.
 
 **USER** — ваши пресеты: **SAVE** / «Сохранить как», удаление, импорт/экспорт `.swpreset` (JSON). Заводской пресет после правки сохраняется как новый пользовательский. Папка:
 - macOS: `~/Library/Audio/Presets/Swarmness/`
