@@ -393,8 +393,39 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     auto cryptFz = std::make_unique<Group> ("cryptFreeze", "Crypt Freeze", "|");
     cryptFz->addChild (toggle (revFreeze, "Crypt Freeze", false));
 
+    // ------------------------------------------------------------------ STOMPS (1.1, appended): STING and what VENOM / STING engage
+    auto stomps = std::make_unique<Group> ("stomps", "Stomps", "|");
+    stomps->addChild (toggle (stingHold, "Sting (footswitch)", false));
+    stomps->addChild (toggle (stingShiftA, "Sting Links Shift A", false));
+    stomps->addChild (toggle (stingShiftB, "Sting Links Shift B", false));
+    for (int b = 0; b < Chain::numBlocks; ++b)
+        if (venomBlock[b] != nullptr)
+            stomps->addChild (std::make_unique<juce::AudioParameterChoice> (pid (venomBlock[b]), "Venom " + juce::String (Chain::names[b]),
+                                                                            ParamChoices::stompActions, b == Chain::pitch ? 1 : 0));
+    stomps->addChild (std::make_unique<juce::AudioParameterChoice> (pid (venomFreeze), "Venom Freeze", ParamChoices::stompActions, 0));
+    for (int b = 0; b < Chain::numBlocks; ++b)
+        if (stingBlock[b] != nullptr)
+            stomps->addChild (std::make_unique<juce::AudioParameterChoice> (pid (stingBlock[b]), "Sting " + juce::String (Chain::names[b]),
+                                                                            ParamChoices::stompActions, 0));
+    stomps->addChild (std::make_unique<juce::AudioParameterChoice> (pid (stingFreeze), "Sting Freeze", ParamChoices::stompActions, 0));
+
+    // ------------------------------------------------------------------ HIVE STOP (1.1, appended)
+    auto hvSt = std::make_unique<Group> ("hiveStop", "Hive Stop", "|");
+    hvSt->addChild (toggle (hvStop, "Hive Stop", false));
+    hvSt->addChild (std::make_unique<juce::AudioParameterFloat> (
+        pid (hvStopTime), "Hive Stop Time", skewedRange (0.1f, 3.0f, 0.8f, 0.01f), 0.8f,
+        Attr().withLabel ("s").withStringFromValueFunction ([] (float v, int) { return juce::String (v, 2) + " s"; })));
+    hvSt->addChild (std::make_unique<juce::AudioParameterChoice> (pid (venomStop), "Venom Hive Stop", ParamChoices::stompActions, 0));
+    hvSt->addChild (std::make_unique<juce::AudioParameterChoice> (pid (stingStop), "Sting Hive Stop", ParamChoices::stompActions, 0));
+
+    // ------------------------------------------------------------------ SMOKE CRUSH + SWARM RING (1.1, appended)
+    auto tricks = std::make_unique<Group> ("tricks", "Smoke Crush / Swarm Ring", "|");
+    tricks->addChild (percent (fuzzCrush, "Smoke Crush", 0.0f));
+    tricks->addChild (percent (swarmRing, "Swarm Ring", 0.0f));
+
     layout.add (std::move (shift), std::move (hive), std::move (swarm), std::move (fz), std::move (flow),
                 std::move (comb), std::move (carve), std::move (crypt), std::move (amp), std::move (cab), std::move (drv), std::move (chain), std::move (out),
-                std::move (honey), std::move (drvCh), std::move (wings), std::move (cryptFz));
+                std::move (honey), std::move (drvCh), std::move (wings), std::move (cryptFz), std::move (stomps), std::move (hvSt),
+                std::move (tricks));
     return layout;
 }

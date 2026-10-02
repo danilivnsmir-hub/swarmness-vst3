@@ -50,6 +50,7 @@ private:
     // MIDI learn: right-click any control (or a chain tile) for its menu
     void mouseDown (const juce::MouseEvent&) override;
     void showMidiMenu (const juce::String& paramID, juce::Component* target, int value = -1);
+    void addStompWiring (juce::PopupMenu&, bool venom);
     juce::Component* findLearnable (const juce::String& paramID);
     struct LearnMarker : juce::Component
     {
@@ -91,8 +92,8 @@ private:
     PowerButton hivePower;
     PillToggle snapToggle { "SNAP" };
     Knob pitchKnob { "PITCH", true }, primaryKnob { "DRONE" }, secondaryKnob { "QUEEN" }, trackingKnob { "TRACKING" };
-    PillToggle rbSyncToggle { "SYNC" }, trDryToggle { "DRY" };
-    Knob magicKnob { "TRAILS" }, rbTimeKnob { "TIME" }, rbDivKnob { "DIV" }, toneKnob { "TONE" }, gateKnob { "GATE" };
+    PillToggle rbSyncToggle { "SYNC" }, trDryToggle { "DRY" }, hvStopToggle { "STOP" };
+    Knob magicKnob { "TRAILS" }, rbTimeKnob { "TIME" }, rbDivKnob { "DIV" }, toneKnob { "TONE" }, gateKnob { "GATE" }, hvStopTimeKnob { "STOP" };
     StepGrid stepGrid;
     PillToggle rbRawToggle { "RAW" };
     Knob hvMangleKnob { "MANGLE" }, rbDetuneKnob { "DETUNE", true }, rbMixKnob { "MIX" };
@@ -100,13 +101,13 @@ private:
     // SWARM
     PowerButton swarmPower;
     PillToggle deepToggle { "DEEP" };
-    Knob swarmDepthKnob { "DEPTH" }, swarmRateKnob { "RATE" }, swarmMixKnob { "MIX" };
+    Knob swarmDepthKnob { "DEPTH" }, swarmRateKnob { "RATE" }, swarmMixKnob { "MIX" }, swarmRingKnob { "RING" };
 
     // SMOKE (fuzz)
     PowerButton fuzzPower;
     SegmentedChoice fuzzVoiceSelector;
     Knob fuzzKnob { "FUZZ" }, fuzzToneKnob { "TONE" }, fuzzScoopKnob { "SCOOP" };
-    Knob fuzzGlareKnob { "GLARE" }, fuzzGateKnob { "GATE" }, fuzzSagKnob { "SAG" }, fuzzBlendKnob { "CLEAN" };
+    Knob fuzzGlareKnob { "GLARE" }, fuzzGateKnob { "GATE" }, fuzzSagKnob { "SAG" }, fuzzBlendKnob { "CLEAN" }, fuzzCrushKnob { "CRUSH" };
 
     // HONEY (compressor)
     PowerButton honeyPower;
@@ -124,7 +125,8 @@ private:
     Knob inputKnob { "INPUT", true }, volumeKnob { "VOLUME", true };
 
     // Footswitches
-    Footswitch oct1Switch, oct2Switch, magicSwitch, bypassSwitch;
+    Footswitch oct1Switch, oct2Switch, magicSwitch, stingSwitch, bypassSwitch;
+    bool blockEngaged (int block) const;
     MiniSwitch link1Switch { "LINK" }, link2Switch { "LINK" };
     LevelMeter inMeter { "IN" }, outMeter { "OUT" };
 

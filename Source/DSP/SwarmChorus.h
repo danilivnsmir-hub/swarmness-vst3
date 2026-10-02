@@ -33,6 +33,9 @@ public:
         mixSmoothed  .reset (sr, 0.03);
         depthSmoothed.reset (sr, 0.05);
         modeBlend    .reset (sr, 0.08);
+        ringSmoothed .reset (sr, 0.05);
+        ringSmoothed .setCurrentAndTargetValue (0.0f);
+        ringPhase = 0.0f;
         mixSmoothed  .setCurrentAndTargetValue (targetMix);
         depthSmoothed.setCurrentAndTargetValue (targetDepth);
         modeBlend    .setCurrentAndTargetValue (deep ? 1.0f : 0.0f);
@@ -68,7 +71,9 @@ public:
         }
     }
 
-    void setParams (float rateHz, float depth01, float mix01, bool deepMode) noexcept
+    /** ring01: RING - the voices are ring-modulated by a sine; the knob sets its amount (fading in over
+        the first quarter) and its frequency, 40 Hz .. 1.3 kHz (a slow tremble to metallic bells). */
+    void setParams (float rateHz, float depth01, float mix01, bool deepMode, float ring01 = 0.0f) noexcept
     {
         rate = rateHz;
         targetDepth = depth01;
@@ -77,7 +82,10 @@ public:
         depthSmoothed.setTargetValue (depth01);
         mixSmoothed.setTargetValue (mix01);
         modeBlend.setTargetValue (deepMode ? 1.0f : 0.0f);
+        ringSmoothed.setTargetValue (sw::jlimit (0.0f, 1.0f, ring01));
     }
+
+    static float ringHz (float ring01) noexcept { return 40.0f * std::exp2 (5.0f * ring01); }
 
     bool isSilent() const noexcept { return mixSmoothed.getCurrentValue() < 1.0e-4f && ! mixSmoothed.isSmoothing(); }
 
@@ -184,9 +192,22 @@ public:
             const float dryG = sw::jmin (1.0f, 2.0f * (1.0f - mix));
             const float wetG = sw::jmin (1.0f, 2.0f * mix) * 1.15f;
 
-            audio[0][i] = dryG * inL + wetG * hpL;
+            // RING: the voices through a ring modulator (the feedback stays clean, so it cannot run away)
+            float outL = hpL, outR = hpR;
+            const float ring = ringSmoothed.getNextValue();
+            if (ring > 1.0e-4f)
+            {
+                ringPhase += ringHz (ring) / (float) sampleRate;
+                ringPhase -= std::floor (ringPhase);
+                const float carrier = std::sin (swarm::kTwoPi * ringPhase);
+                const float amount = sw::jmin (1.0f, 4.0f * ring);
+                outL += amount * (hpL * carrier - hpL);
+                outR += amount * (hpR * carrier - hpR);
+            }
+
+            audio[0][i] = dryG * inL + wetG * outL;
             if (numChannels > 1)
-                audio[1][i] = dryG * inR + wetG * hpR;
+                audio[1][i] = dryG * inR + wetG * outR;
 
             writePos = (writePos + 1) & mask;
         }
@@ -216,7 +237,7 @@ private:
     float lastBbdHz = -1.0f;
     float feedbackL = 0.0f, feedbackR = 0.0f;
 
-    float rate = 0.6f, targetDepth = 0.5f, targetMix = 0.0f;
+    float rate = 0.6f, targetDepth = 0.5f, targetMix = 0.0f, ringPhase = 0.0f;
     bool deep = false;
-    sw::SmoothedValue<float> mixSmoothed, depthSmoothed, modeBlend;
+    sw::SmoothedValue<float> mixSmoothed, depthSmoothed, modeBlend, ringSmoothed;
 };

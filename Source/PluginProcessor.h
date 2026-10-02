@@ -72,6 +72,7 @@ public:
         std::array<std::atomic<float>, 2> output {};
         std::atomic<float> pitchSemitones { 0.0f };   // current SHIFT transposition
         std::atomic<bool>  noiseEngaged { false };
+        std::atomic<unsigned> engagedBlocks { 0 };     // bit per Chain::Block: effectively on (power or a stomp)
         std::atomic<float> stackSemitones { 0.0f };   // SHIFT STACK voice
         std::atomic<bool>  stackOn { false };
         std::atomic<int>   trailStep { -1 };             // TRAILS step now playing (-1 = none)
@@ -251,6 +252,12 @@ private:
         std::atomic<float>* revDecay {};   std::atomic<float>* revSize {};     std::atomic<float>* revPreDelay {};
         std::atomic<float>* revTone {};    std::atomic<float>* revLowCut {};   std::atomic<float>* revMod {};     std::atomic<float>* revDuck {};
         std::atomic<float>* revFreeze {};
+        // stomps: STING and the targets of VENOM / STING
+        std::atomic<float>* stingHold {};  std::atomic<float>* stingShiftA {};  std::atomic<float>* stingShiftB {};
+        std::array<std::atomic<float>*, Chain::numBlocks> venomBlock {}, stingBlock {};
+        std::atomic<float>* venomFreeze {}; std::atomic<float>* stingFreeze {};
+        std::atomic<float>* hvStop {}; std::atomic<float>* hvStopTime {}; std::atomic<float>* venomStop {}; std::atomic<float>* stingStop {};
+        std::atomic<float>* fuzzCrush {}; std::atomic<float>* swarmRing {};
         std::atomic<float>* ampOn {};      std::atomic<float>* ampChannel {};  std::atomic<float>* ampGain {};
         std::atomic<float>* ampBass {};    std::atomic<float>* ampMid {};      std::atomic<float>* ampTreble {};   std::atomic<float>* ampPresence {};
         std::atomic<float>* ampDepth {};   std::atomic<float>* ampMaster {};   std::atomic<float>* ampGate {};     std::atomic<float>* ampLevel {};
@@ -273,13 +280,17 @@ private:
     {
         double bpm = 120.0;
         std::optional<double> ppq;
-        bool magicHeld = false, oct1Held = false, oct2Held = false;
+        bool magicHeld = false, stingHeld = false, oct1Held = false, oct2Held = false;
+        bool venom = false;                                 // HIVE's self-oscillation (a stomp with HIVE = On)
+        std::array<int, Chain::numBlocks> force {};         // per block: +1 engaged / -1 disengaged by a stomp, 0 = its own power
+        int freezeForce = 0, stopForce = 0;
+        bool engaged (int block, bool power) const noexcept { return force[(size_t) block] > 0 || (force[(size_t) block] == 0 && power); }
     };
 
     void processChainBlock (int block, const BlockContext&, float* const* audio, int numChannels, int numSamples) noexcept;
     void processShift (const BlockContext&, float* const* audio, int numChannels, int numSamples) noexcept;
     void processHive (const BlockContext&, float* const* audio, int numChannels, int numSamples) noexcept;
-    void processSmoke (float* const* audio, int numChannels, int numSamples) noexcept;
+    void processSmoke (const BlockContext&, float* const* audio, int numChannels, int numSamples) noexcept;
     void processWings (const BlockContext&, float* const* audio, int numChannels, int numSamples) noexcept;
 
     juce::AudioParameterBool* bypassParam = nullptr;

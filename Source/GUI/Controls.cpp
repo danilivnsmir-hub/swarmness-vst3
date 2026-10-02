@@ -1071,16 +1071,16 @@ void InfoOverlay::paint (juce::Graphics& g)
         { "HIVE",     "Harmonies of whatever reaches it (after SHIFT: of the shifted note). DRONE at PITCH and QUEEN (its octave), TRACKING tight..laggy. "
                       "VENOM switches it on while held." },
         { "TRAILS",   "Repeats of the DRONE, shaped by STEPS like a pattern tremolo: each bar = one repeat (LEVEL, 0 = silent) and its MOVE "
-                      "(= hold, up / down by PITCH, ? random, < backwards). GATE chops every step (0 = full repeats). DRY = repeats of your note (a delay). FILL = ready-made patterns. TIME / SYNC = step length. "
-                      "The VENOM footswitch = self-oscillation; LINK drags SHIFT A / B in." },
+                      "(= hold, up / down by PITCH, ? random, < backwards, ||| stutter). GATE chops every step (0 = full repeats). DRY = repeats of your note (a delay). FILL = ready-made patterns. TIME / SYNC = step length. "
+                      "A stomp wired to HIVE (VENOM out of the box) = self-oscillation; LINK drags SHIFT A / B in. STOP = a tape stop of the repeats (the knob = how long)." },
         { "MANGLE",   "HIVE's MANGLE is one knob: sour detuned voices first, then random pitch jumps, then buzz / AM on top. "
                       "RAW = cheap-pedal-DSP character, DETUNE = width, MIX = dry vs voices (100% = voices only)." },
         { "HONEY",    "Sustainer / compressor, pedal style: SUSTAIN = threshold down and ratio up together (sticky sustain), ATTACK = slower lets the pick through, "
                       "BLEND = parallel blend with the dry signal, LEVEL on top of the automatic make-up, LIMIT = a fast peak limiter after it (ceiling -6 dBFS). First in the chain by default - in front of the amp for clean parts." },
-        { "SWARM",    "Stereo chorus with bucket-brigade colour (DEEP = 8 voices with feedback). WINGS = pattern gate: one cycle (SPEED / DIV) cut into STEPS "
+        { "SWARM",    "Stereo chorus with bucket-brigade colour (DEEP = 8 voices with feedback; RING = the voices ring-modulated, tremble to bells). WINGS = pattern gate: one cycle (SPEED / DIV) cut into STEPS "
                       "with a level each (FILL = ready-made patterns); HARD = stutter, off = tremolo, SYNC = host tempo." },
         { "SMOKE",    "Jumbo fuzz. VOICE: DOWN doom / MID / UP scream. SCOOP = mid cut, GLARE = gated octave-up, GATE = starved sputter, SAG = breathing "
-                      "(the pick sags, the note blooms), CLEAN = clean signal under the fuzz." },
+                      "(the pick sags, the note blooms), CLEAN = clean signal under the fuzz, CRUSH = fewer bits and a lower sample rate on the fuzz." },
         { "WASP",     "Overdrive in front of the AMP in four characters: TIGHT (the precision metal drive, asymmetric hard clipping), BOOST (clean, flat), "
                       "SMOOTH (the classic soft-clipping overdrive), RASP (hard-clipping distortion). DRIVE, ATTACK = how tight the low end is before the "
                       "clipping, BRIGHT = voicing, VOLUME (5 = about unity), GATE = noise gate keyed from the guitar." },
@@ -1095,6 +1095,8 @@ void InfoOverlay::paint (juce::Graphics& g)
                       "wheel = Q, double-click = reset; the output spectrum runs behind the curve." },
         { "CRYPT",    "Reverb: ROOM / PLATE / HALL / ABYSS or your own IR (LOAD IR or drop a file). FREEZE holds the tail as a pad. DUCK dips the tail while you play, "
                       "LOW CUT keeps it out of the low end. Switching it off lets the tail ring out." },
+        { "STOMPS",   "VENOM and STING are footswitches you wire yourself: right-click one and pick, per block, On / Off while held (or -), plus SHIFT A / B "
+                      "CRYPT FREEZE and HIVE STOP. The wiring is a scene setting, so every scene can use them differently. VENOM out of the box = HIVE + self-oscillation." },
         { "MIDI",     "Right-click ANY control for MIDI learn: switches toggle on each press, selectors step, knobs follow the CC. "
                       "One pedal can drive several controls (e.g. ON and WINGS)." },
         { "LIVE",     "SCENES A..D = four versions of the sound inside one preset (click to switch; right-click = MIDI learn or copy the current scene there). "
@@ -1151,7 +1153,7 @@ StepGrid::Spec StepGrid::trails()
     s.tooltip = "STEPS - a pattern for the repeats (like a pattern tremolo): every bar is one repeat after the note "
                 "(the pattern restarts on each picked note, or follows the song with SYNC). "
                 "Drag the bars = LEVEL of each repeat (0 = silent, the tail keeps running), double-click = on / off. "
-                "Click the symbol below = MOVE: = hold, up / down by PITCH, ? random chord tone, < backwards. "
+                "Click the symbol below = MOVE: = hold, up / down by PITCH, ? random chord tone, < backwards, ||| stutter (a slice re-triggered). "
                 "STEPS -/+ = pattern length, FILL = ready-made patterns.";
     return s;
 }
@@ -1461,7 +1463,11 @@ void StepGrid::paint (juce::Graphics& g)
             case 1: p.addTriangle (cx - r, cy + r * 0.8f, cx + r, cy + r * 0.8f, cx, cy - r); g.fillPath (p); break;           // up
             case 2: p.addTriangle (cx - r, cy - r * 0.8f, cx + r, cy - r * 0.8f, cx, cy + r); g.fillPath (p); break;           // down
             case 3: g.setFont (font (13.0f, true)); g.drawText ("?", sym.expanded (3.0f), juce::Justification::centred, false); break;
-            default: p.addTriangle (cx + r * 0.8f, cy - r, cx + r * 0.8f, cy + r, cx - r, cy); g.fillPath (p); break;          // reverse
+            case 4: p.addTriangle (cx + r * 0.8f, cy - r, cx + r * 0.8f, cy + r, cx - r, cy); g.fillPath (p); break;           // reverse
+            default:                                                                                                          // stutter
+                for (int b = -1; b <= 1; ++b)
+                    g.fillRect (juce::Rectangle<float> (cx + (float) b * r * 0.7f - 1.0f, cy - r, 2.0f, 2.0f * r));
+                break;
         }
     }
 }

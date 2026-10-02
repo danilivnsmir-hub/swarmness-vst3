@@ -53,6 +53,7 @@ public:
     struct Settings
     {
         float fuzz = 0.7f, tone = 0.5f, scoop = 0.4f, glare = 0.0f, gate = 0.0f, blend = 0.0f, sag = 0.4f;
+        float crush = 0.0f;   // CRUSH: bit depth 16 -> 4 and sample rate 48 -> 4 kHz together (the aliasing is the point)
         int voice = 1;   // 0 = down, 1 = mid, 2 = up
     };
 
@@ -104,7 +105,7 @@ public:
 
         // Control smoothing, advanced once per control block
         const double controlRate = sr / kControlBlock;
-        for (auto* s : { &sFuzz, &sGate, &sGlare, &sTone, &sScoop, &sBlend, &sSag,
+        for (auto* s : { &sFuzz, &sGate, &sGlare, &sTone, &sScoop, &sBlend, &sSag, &sCrush,
                          &sHpFreq, &sBoostFreq, &sBoostDb, &sScoopFreq, &sThumpDb, &sTrimDb })
             s->setTime (controlRate, 0.03);
         snapControls();
@@ -123,6 +124,8 @@ public:
         if (oversampler != nullptr) oversampler->reset();
         cleanDelay.reset();
         for (auto& d : dc) d.reset();
+        crushCount = {};
+        crushHeld = {};
         for (auto& d : preDc) d.reset();
         for (auto* bank : { &preHp, &preBoost, &scoopBell, &thump, &fizzLp, &loadLp, &loadBell })
             for (auto& f : *bank) f.reset();
@@ -321,6 +324,10 @@ public:
             // Voice trim, plus make-up at low FUZZ where the clippers do not compress yet
             const float lowFuzz = 1.0f - sFuzz.get();
             const float level = 0.42f * juce::Decibels::decibelsToGain (sTrimDb.get() + 10.0f * lowFuzz * lowFuzz);
+            // CRUSH: fewer bits and a sample-and-hold on the fuzz (the clean signal underneath stays clean)
+            const float crush = sCrush.get();
+            const int holdN = 1 + (int) std::round (11.0f * crush * crush);
+            const float quantum = crush > 0.001f ? std::exp2 (1.0f - (16.0f - 12.0f * crush)) : 0.0f;
 
             for (int c = 0; c < numChannels; ++c)
             {
@@ -345,6 +352,16 @@ public:
                     x = scoopBell[(size_t) c].process (x);
                     x = thump[(size_t) c].process (x);
                     x = fizzLp[(size_t) c].process (x);
+
+                    if (quantum > 0.0f)
+                    {
+                        if (++crushCount[(size_t) c] >= holdN)
+                        {
+                            crushCount[(size_t) c] = 0;
+                            crushHeld[(size_t) c] = std::round (x / quantum) * quantum;
+                        }
+                        x = crushHeld[(size_t) c];
+                    }
 
                     const float fx = level * x + blend * clean;
                     audio[c][i] = clean + mixNow * (fx - clean);
@@ -404,7 +421,7 @@ private:
         auto set = [snap] (swarm::OnePole& s, float value) { if (snap) s.reset (value); else s.process (value); };
         set (sFuzz, target.fuzz);   set (sGate, target.gate);     set (sGlare, target.glare);
         set (sTone, target.tone);   set (sScoop, target.scoop);   set (sBlend, target.blend);
-        set (sSag, target.sag);
+        set (sSag, target.sag);     set (sCrush, target.crush);
         set (sHpFreq, v.hpHz);      set (sBoostFreq, v.boostHz);  set (sBoostDb, v.boostDb);
         set (sScoopFreq, v.scoopHz); set (sThumpDb, v.thumpDb); set (sTrimDb, v.trimDb);
     }
@@ -419,7 +436,7 @@ private:
     juce::AudioBuffer<float> cleanCopy;
     juce::SmoothedValue<float> onMix;
 
-    swarm::OnePole sFuzz, sGate, sGlare, sTone, sScoop, sBlend, sSag, sHpFreq, sBoostFreq, sBoostDb, sScoopFreq, sThumpDb, sTrimDb;
+    swarm::OnePole sFuzz, sGate, sGlare, sTone, sScoop, sBlend, sSag, sCrush, sHpFreq, sBoostFreq, sBoostDb, sScoopFreq, sThumpDb, sTrimDb;
 
     std::array<swarm::DCBlocker, kMaxChannels> dc, preDc;
     std::array<swarm::SVF, kMaxChannels> preHp, preBoost, scoopBell, thump, fizzLp, loadLp, loadBell;
@@ -435,5 +452,7 @@ private:
     float sagAttack = 0.001f, capCoeff = 0.0001f, slowAttack = 0.0001f, slowRelease = 0.00001f;
     float gateEnv = 0.0f, gateEnvRelease = 0.001f;
     NoiseGate inputGate;
+    std::array<int, kMaxChannels> crushCount {};
+    std::array<float, kMaxChannels> crushHeld {};
     float envAttack = 0.1f, envRelease = 0.001f, lp1Coeff = 0.9f, lp2Coeff = 0.9f, octHpCoeff = 0.99f, tiltCoeff = 0.9f;
 };

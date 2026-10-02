@@ -56,6 +56,26 @@ namespace ParamIDs
     inline constexpr const char* magicHold   = "magicHold";    // footswitch: VENOM (self-oscillation)
     inline constexpr const char* linkOct1    = "linkOct1";     // VENOM also engages SHIFT A
     inline constexpr const char* linkOct2    = "linkOct2";     // VENOM also engages SHIFT B
+    // 1.1: the stomps are configurable. STING is a second footswitch like VENOM; each stomp has, per
+    // block (in Chain::Block order, SHIFT excluded - its A / B links are above), an action: - / On / Off
+    // while held, plus CRYPT's FREEZE. Scene parameters, so every scene can wire them differently.
+    inline constexpr const char* stingHold   = "stingHold";    // footswitch: STING
+    inline constexpr const char* stingShiftA = "stingShiftA";  // STING also engages SHIFT A
+    inline constexpr const char* stingShiftB = "stingShiftB";  // STING also engages SHIFT B
+    inline constexpr const char* venomBlock[] { "venomPitch", "venomSmoke", "venomSwarm", "venomWings", "venomComb", "venomCarve",
+                                                "venomCrypt", nullptr, "venomAmp", "venomCab", "venomDrive", "venomHoney" };
+    inline constexpr const char* stingBlock[] { "stingPitch", "stingSmoke", "stingSwarm", "stingWings", "stingComb", "stingCarve",
+                                                "stingCrypt", nullptr, "stingAmp", "stingCab", "stingDrive", "stingHoney" };
+    inline constexpr const char* venomFreeze = "venomFreeze";
+    inline constexpr const char* stingFreeze = "stingFreeze";
+    // 1.1: HIVE STOP (tape stop of the repeats) - a switch, a time, and the stomps can drive it
+    inline constexpr const char* hvStop      = "hvStop";
+    inline constexpr const char* hvStopTime  = "hvStopTime";
+    inline constexpr const char* venomStop   = "venomStop";
+    inline constexpr const char* stingStop   = "stingStop";
+    // 1.1: SMOKE CRUSH (bit / rate reduction of the fuzz) and SWARM RING (ring modulation of the voices)
+    inline constexpr const char* fuzzCrush   = "fuzzCrush";
+    inline constexpr const char* swarmRing   = "swarmRing";
     // MANGLE (on the voices and trails)
     inline constexpr const char* hvMangle    = "hvMangle";     // one knob: ANGER -> FRENZY -> BUZZ
     inline constexpr const char* rbRaw       = "rbRaw";        // RAW engine character
@@ -227,7 +247,9 @@ namespace ParamChoices
     inline const juce::StringArray waspCharacters { "Tight", "Boost", "Smooth", "Rasp" };
     /** Ready-made WINGS step patterns, in FlowGate::Fill order. */
     inline const juce::StringArray wingFills { "Pulse", "Offbeat", "Gallop", "Triplet", "Ramp Up", "Ramp Down", "Stutter", "Glitch" };
-    inline const juce::StringArray stepMoves { "Hold", "Up", "Down", "Random", "Reverse" };
+    /** What a stomp (VENOM / STING) does to a block while held. */
+    inline const juce::StringArray stompActions { "-", "On", "Off" };
+    inline const juce::StringArray stepMoves { "Hold", "Up", "Down", "Random", "Reverse", "Stutter" };
     /** Ready-made TRAILS step patterns, in HiveBlock::Fill order. */
     inline const juce::StringArray trailFills { "Ladder", "Bounce", "Scatter", "Reverse", "Swell",
                                                 "Echo", "Stutter", "Gallop", "Offbeat", "Glitch" };
@@ -407,11 +429,16 @@ namespace Chain
     }
 }
 
+/** The footswitches: SHIFT A / B, VENOM, STING - they follow MOMENTARY / LATCH. */
+inline bool isFootswitchParameter (const juce::String& id)
+{
+    return id == ParamIDs::oct1 || id == ParamIDs::oct2 || id == ParamIDs::magicHold || id == ParamIDs::stingHold;
+}
+
 /** Performance switches: not stored in presets (like a pedal's footswitch position). */
 inline bool isPerformanceParameter (const juce::String& id)
 {
-    return id == ParamIDs::bypass || id == ParamIDs::oct1 || id == ParamIDs::oct2 || id == ParamIDs::magicHold
-        || id == ParamIDs::scene;
+    return id == ParamIDs::bypass || isFootswitchParameter (id) || id == ParamIDs::scene;
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();

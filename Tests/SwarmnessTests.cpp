@@ -724,6 +724,212 @@ namespace
         }
     }
 
+    void testStomps()
+    {
+        std::printf ("\nStomps: VENOM and STING engage / disengage what they are wired to\n");
+        const double sr = 48000.0;
+        auto guitar = makeGuitar (sr, 48000);
+        auto rendered = [&] (std::function<void (SwarmnessAudioProcessor&)> setup)
+        {
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            setup (p);
+            return render (p, guitar, sr, 256);
+        };
+        auto clean = rendered ([] (SwarmnessAudioProcessor&) {});
+        auto fuzzOn = rendered ([] (SwarmnessAudioProcessor& p) { setParam (p, ParamIDs::fuzzOn, 1.0f); });
+        {
+            // VENOM wired to SMOKE (On) and not to HIVE: holding it = the fuzz, nothing else
+            auto out = rendered ([] (SwarmnessAudioProcessor& p)
+            {
+                setParam (p, ParamIDs::venomBlock[Chain::pitch], 0.0f);
+                setParam (p, ParamIDs::venomBlock[Chain::smoke], 1.0f);
+                setParam (p, ParamIDs::magicHold, 1.0f);
+            });
+            const double vsFuzz = nullDb (out, fuzzOn, 0, 9600, 38400), vsClean = nullDb (out, clean, 0, 9600, 38400);
+            check (vsFuzz < -60.0 && vsClean > -20.0, juce::String::formatted ("VENOM -> SMOKE on: equals SMOKE on (%.1f dB), not the clean signal (%.1f dB)", vsFuzz, vsClean));
+        }
+        {
+            // STING wired to SMOKE (Off) while SMOKE's power is on: holding it drops the fuzz
+            auto out = rendered ([] (SwarmnessAudioProcessor& p)
+            {
+                setParam (p, ParamIDs::fuzzOn, 1.0f);
+                setParam (p, ParamIDs::stingBlock[Chain::smoke], 2.0f);
+                setParam (p, ParamIDs::stingHold, 1.0f);
+            });
+            const double vsClean = nullDb (out, clean, 0, 9600, 38400);
+            check (vsClean < -60.0, juce::String::formatted ("STING -> SMOKE off: the clean signal (%.1f dB)", vsClean));
+        }
+        {
+            // the default wiring is the old VENOM: HIVE on with self-oscillation
+            auto out = rendered ([] (SwarmnessAudioProcessor& p) { setParam (p, ParamIDs::magicHold, 1.0f); });
+            check (nullDb (out, clean, 0, 9600, 38400) > -20.0, "VENOM by default: HIVE engaged");
+            // STING drags SHIFT A in
+            auto shifted = rendered ([] (SwarmnessAudioProcessor& p) { setParam (p, ParamIDs::stingShiftA, 1.0f); setParam (p, ParamIDs::stingHold, 1.0f); });
+            auto octave = rendered ([] (SwarmnessAudioProcessor& p) { setParam (p, ParamIDs::oct1, 1.0f); });
+            check (nullDb (shifted, octave, 0, 9600, 38400) < -60.0, "STING -> SHIFT A: the same as the SHIFT A footswitch");
+        }
+        {
+            // the wiring is a scene / preset setting, the footswitch itself is not
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            setParam (p, ParamIDs::stingBlock[Chain::crypt], 1.0f);
+            setParam (p, ParamIDs::stingHold, 1.0f);
+            p.getPresetManager().saveUserPreset ("Stomp Test");
+            SwarmnessAudioProcessor q;
+            resetToInit (q);
+            q.getPresetManager().loadPreset ("Stomp Test");
+            check (q.getAPVTS().getRawParameterValue (ParamIDs::stingBlock[Chain::crypt])->load() == 1.0f
+                   && q.getAPVTS().getRawParameterValue (ParamIDs::stingHold)->load() == 0.0f, "the wiring is saved with the preset, the footswitch state is not");
+            p.getPresetManager().deleteUserPreset ("Stomp Test");
+        }
+    }
+
+    /** Dominant frequency by zero crossings (Hz) over a window. */
+    static double zeroCrossingHz (const juce::AudioBuffer<float>& b, double sr, int from, int len)
+    {
+        int crossings = 0;
+        for (int i = from + 1; i < from + len; ++i)
+            if ((b.getSample (0, i) >= 0.0f) != (b.getSample (0, i - 1) >= 0.0f))
+                ++crossings;
+        return 0.5 * crossings * sr / len;
+    }
+
+    void testHiveStop()
+    {
+        std::printf ("\nHIVE STOP: the repeats slow to a halt like a tape and come back\n");
+        const double sr = 48000.0;
+        // a 440 Hz burst, then silence: HIVE as a plain delay (DRY, HOLD steps) repeats it
+        juce::AudioBuffer<float> in (2, (int) (sr * 4.0));
+        in.clear();
+        for (int i = 0; i < (int) (0.25 * sr); ++i)
+        {
+            const float v = 0.3f * std::sin (2.0f * juce::MathConstants<float>::pi * 440.0f * (float) i / (float) sr) * juce::jmin (1.0f, (float) i / 480.0f);
+            in.setSample (0, i, v); in.setSample (1, i, v);
+        }
+        HiveBlock h;
+        h.prepare (sr, 256);
+        HiveBlock::Settings s;
+        s.voicesOn = true; s.drone = 0.0f; s.queen = 0.0f; s.trails = 1.0f; s.repeatSeconds = 0.3f; s.fromDry = true; s.mix = 1.0f; s.tone = 1.0f;
+        for (auto& m : s.steps.move) m = HiveBlock::hold;
+        s.stopSeconds = 1.0f;
+        h.setParams (s);
+        juce::AudioBuffer<float> out (in);
+        for (int i = 0; i < out.getNumSamples(); i += 256)
+        {
+            if (i == 256 * (int) (1.0 * sr / 256.0)) { s.stop = true;  h.setParams (s); }
+            if (i == 256 * (int) (2.5 * sr / 256.0)) { s.stop = false; h.setParams (s); }
+            float* ptr[2] { out.getWritePointer (0, i), out.getWritePointer (1, i) };
+            h.process (ptr, 2, 256);
+        }
+        const double before = zeroCrossingHz (out, sr, (int) (0.65 * sr), (int) (0.1 * sr));
+        const double halfway = zeroCrossingHz (out, sr, (int) (1.45 * sr), (int) (0.1 * sr));
+        const float stopped = out.getRMSLevel (0, (int) (2.2 * sr), (int) (0.2 * sr));
+        const float playing = out.getRMSLevel (0, (int) (0.65 * sr), (int) (0.1 * sr));
+        check (allFinite (out) && std::abs (before - 440.0) < 60.0 && halfway < before * 0.75 && halfway > before * 0.2,
+               juce::String::formatted ("repeats at %.0f Hz; half way into the stop %.0f Hz (slowing, pitch falling)", before, halfway));
+        check (stopped < 0.05f * playing, juce::String::formatted ("halted: %.1f dB under the repeats", juce::Decibels::gainToDecibels (stopped / (playing + 1.0e-9f))));
+        float worst = 0.0f;
+        for (int i = 2; i < out.getNumSamples(); ++i)
+            worst = juce::jmax (worst, std::abs (out.getSample (0, i) - 2.0f * out.getSample (0, i - 1) + out.getSample (0, i - 2)));
+        check (worst < 0.05f, juce::String::formatted ("no click on the way in or out (largest step %.4f)", worst));
+    }
+
+    void testStutter()
+    {
+        std::printf ("\nHIVE STUTTER move: the repeat is a re-triggered slice\n");
+        const double sr = 48000.0;
+        auto renderMove = [&] (int move)
+        {
+            juce::AudioBuffer<float> in (2, (int) (sr * 2.0));
+            in.clear();
+            for (int i = 0; i < (int) (0.25 * sr); ++i)
+            {
+                const float v = 0.3f * std::sin (2.0f * juce::MathConstants<float>::pi * 440.0f * (float) i / (float) sr) * juce::jmin (1.0f, (float) i / 480.0f);
+                in.setSample (0, i, v); in.setSample (1, i, v);
+            }
+            HiveBlock h;
+            h.prepare (sr, 256);
+            HiveBlock::Settings s;
+            s.voicesOn = true; s.drone = 0.0f; s.queen = 0.0f; s.trails = 1.0f; s.repeatSeconds = 0.3f; s.fromDry = true; s.mix = 1.0f; s.tone = 1.0f;
+            for (auto& m : s.steps.move) m = move;
+            h.setParams (s);
+            for (int i = 0; i < in.getNumSamples(); i += 256)
+            {
+                float* ptr[2] { in.getWritePointer (0, i), in.getWritePointer (1, i) };
+                h.process (ptr, 2, 256);
+            }
+            return in;
+        };
+        auto held = renderMove (HiveBlock::hold), stuttered = renderMove (HiveBlock::stutter);
+        // the second repeat (0.6 .. 0.9 s): HOLD plays the burst through, STUTTER re-triggers its first 50 ms slice with gaps
+        const int from = (int) (0.6 * sr), slice = (int) (0.3 * sr / 6.0);
+        float loud = 0.0f, quiet = 1.0f;
+        for (int k = 0; k < 5; ++k)
+        {
+            loud  = juce::jmax (loud,  stuttered.getRMSLevel (0, from + k * slice + slice / 4, slice / 4));
+            quiet = juce::jmin (quiet, stuttered.getRMSLevel (0, from + k * slice - 48, 96));   // the window's edge
+        }
+        const float heldLevel = held.getRMSLevel (0, from, 3 * slice);
+        check (allFinite (stuttered) && loud > 0.3f * heldLevel && quiet < 0.25f * loud && nullDb (stuttered, held, 0, from, from + 3 * slice) > -20.0,
+               juce::String::formatted ("slices %.3f, edges %.3f (HOLD %.3f)", loud, quiet, heldLevel));
+    }
+
+    void testCrushAndRing()
+    {
+        std::printf ("\nSMOKE CRUSH and SWARM RING\n");
+        const double sr = 48000.0;
+        {
+            auto renderFuzz = [&] (float crush)
+            {
+                FuzzStage f;
+                f.prepare (sr, 256);
+                FuzzStage::Settings s;
+                s.fuzz = 0.5f; s.crush = crush; s.sag = 0.0f;
+                f.setParams (true, s);
+                auto buf = makeSine (sr, 48000, 220.0, 0.1f);
+                for (int i = 0; i < 48000; i += 256)
+                {
+                    float* ptr[2] { buf.getWritePointer (0, i), buf.getWritePointer (1, i) };
+                    f.process (ptr, 2, juce::jmin (256, 48000 - i));
+                }
+                return buf;
+            };
+            auto plain = renderFuzz (0.0f), crushed = renderFuzz (1.0f);
+            int held = 0;
+            for (int i = 24001; i < 48000; ++i)
+                held += std::abs (crushed.getSample (0, i) - crushed.getSample (0, i - 1)) < 1.0e-4f ? 1 : 0;
+            const double heldRatio = held / 23999.0;
+            const double diff = nullDb (crushed, plain, 0, 24000, 48000);
+            check (allFinite (crushed) && diff > -20.0 && heldRatio > 0.8,
+                   juce::String::formatted ("CRUSH 100: the fuzz is sample-held (%.0f%% repeated samples), %.1f dB away from CRUSH 0", 100.0 * heldRatio, diff));
+            const double again = nullDb (plain, renderFuzz (0.0f), 0, 24000, 48000);
+            check (again < -200.0, juce::String::formatted ("CRUSH 0: untouched (%.1f dB)", again));
+        }
+        {
+            auto renderSwarm = [&] (float ring)
+            {
+                SwarmChorus c;
+                c.prepare (sr);
+                c.setParams (0.5f, 0.0f, 1.0f, false, ring);
+                auto buf = makeSine (sr, 48000, 1000.0, 0.25f);
+                for (int i = 0; i < 48000; i += 256)
+                {
+                    float* ptr[2] { buf.getWritePointer (0, i), buf.getWritePointer (1, i) };
+                    c.process (ptr, 2, juce::jmin (256, 48000 - i));
+                }
+                return buf;
+            };
+            auto ringed = renderSwarm (1.0f), plain = renderSwarm (0.0f);
+            const double hz = SwarmChorus::ringHz (1.0f);
+            const double tone = toneDb (ringed, sr, 1000.0, 24000, 24000);   // (from, length)
+            const double lo = toneDb (ringed, sr, 1000.0 - hz, 24000, 24000), hi = toneDb (ringed, sr, 1000.0 + hz, 24000, 24000);
+            const double plainHi = toneDb (plain, sr, 1000.0 + hz, 24000, 24000) - toneDb (plain, sr, 1000.0, 24000, 24000);
+            check (allFinite (ringed) && lo > tone - 3.0 && hi > tone - 3.0 && plainHi < -40.0,
+                   juce::String::formatted ("RING 100 (%.0f Hz): sidebands %.1f / %.1f dB vs the tone %.1f dB; RING 0: %.1f dB", hz, lo, hi, tone, plainHi));
+        }
+    }
+
     void testFuzzIdleNoise()
     {
         std::printf ("\nSMOKE with nothing played: no self-oscillation, interface hiss not blown up\n");
@@ -3898,7 +4104,7 @@ int main (int argc, char** argv)
                 m.addTokens (kv.fromFirstOccurrenceOf ("=", false, false), ",", "");
                 s.steps.numSteps = juce::jlimit (1, 8, m.size());
                 for (int k = 0; k < m.size() && k < 8; ++k)
-                    s.steps.move[(size_t) k] = (HiveBlock::StepMove) juce::jlimit (0, 4, m[k].getIntValue());
+                    s.steps.move[(size_t) k] = (HiveBlock::StepMove) juce::jlimit (0, HiveBlock::numStepMoves - 1, m[k].getIntValue());
             }
         }
         hive.setParams (s);
@@ -3994,6 +4200,10 @@ int main (int argc, char** argv)
         if (which == "splices") testSpliceContinuity();
         if (which == "honey")   testHoney();
         if (which == "wings")   testWings();
+        if (which == "stomps")  testStomps();
+        if (which == "stop")    testHiveStop();
+        if (which == "tricks")  testCrushAndRing();
+        if (which == "stutter") testStutter();
         if (which == "gates")   testGates();
         if (which == "tuner")   testTuner();
         std::printf ("\n%s (%d failure%s)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures, failures == 1 ? "" : "s");
@@ -4019,6 +4229,10 @@ int main (int argc, char** argv)
     reportLag();
     testFuzzIdleNoise();
     testWings();
+    testStomps();
+    testHiveStop();
+    testCrushAndRing();
+    testStutter();
     testFuzzSag();
     testMonoToStereo();
     testMidiLearn();
