@@ -1060,7 +1060,7 @@ namespace
         {
             h.setParams (i >= (int) (0.8 * sr) && i < (int) (2.2 * sr), false, 1.0f);
             float* ptr[2] { buf.getWritePointer (0, i), buf.getWritePointer (1, i) };
-            h.process (ptr, 2, 256);
+            h.process (ptr, 2, juce::jmin (256, buf.getNumSamples() - i));
         }
         const float pad = buf.getRMSLevel (0, (int) (1.5 * sr), (int) (0.5 * sr)), after = buf.getRMSLevel (0, (int) (2.7 * sr), (int) (0.3 * sr));
         const double hz = zeroCrossingHz (buf, sr, (int) (1.5 * sr), (int) (0.4 * sr));
@@ -1079,7 +1079,7 @@ namespace
         {
             s.setParams (false, i >= (int) (1.0 * sr) && i < (int) (2.5 * sr), 1.0f);
             float* ptr[2] { tone.getWritePointer (0, i), tone.getWritePointer (1, i) };
-            s.process (ptr, 2, 256);
+            s.process (ptr, 2, juce::jmin (256, tone.getNumSamples() - i));
         }
         const double before = zeroCrossingHz (tone, sr, (int) (0.5 * sr), (int) (0.2 * sr)), half = zeroCrossingHz (tone, sr, (int) (1.45 * sr), (int) (0.1 * sr));
         const float halted = tone.getRMSLevel (0, (int) (2.2 * sr), (int) (0.2 * sr)), back = tone.getRMSLevel (0, (int) (3.7 * sr), (int) (0.2 * sr));
@@ -1559,11 +1559,11 @@ namespace
         std::printf ("\nPreset dirty tracking\n");
         SwarmnessAudioProcessor p;
         auto& pm = p.getPresetManager();
-        pm.loadPreset ("Frenzy");
+        pm.loadPreset ("Killer Bee");
         check (! pm.isDirty(), "clean after load");
         setParam (p, ParamIDs::fuzzBlend, 12.0f);
         check (pm.isDirty(), "dirty after edit");
-        pm.loadPreset ("Frenzy");
+        pm.loadPreset ("Killer Bee");
         setParam (p, ParamIDs::oct2, 1.0f);
         setParam (p, ParamIDs::bypass, 1.0f);
         check (! pm.isDirty(), "footswitches / bypass do not affect preset state");
