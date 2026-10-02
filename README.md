@@ -3,7 +3,7 @@
 **Рой разъярённых пчёл в виде плагина: октавы, диссонанс, гармонии с «ядом» регенерации, фузз, овердрайв, модели усилителей (и NAM-захваты), кабинеты и IR, хорус, тремоло-гейт, тюнер, два эквалайзера и реверб в переставляемой цепи — для дэткора, металкора и хардкора.**
 VST3 / AU / Standalone · Windows, macOS (Universal: Apple Silicon + Intel), Linux.
 
-![Version](https://img.shields.io/badge/version-1.1.0-orange)
+![Version](https://img.shields.io/badge/version-1.2.0-orange)
 ![JUCE](https://img.shields.io/badge/JUCE-8.0.15-blue)
 ![Formats](https://img.shields.io/badge/formats-VST3%20%7C%20AU%20%7C%20Standalone-lightgrey)
 
