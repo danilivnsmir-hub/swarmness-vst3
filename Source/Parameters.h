@@ -76,6 +76,14 @@ namespace ParamIDs
     // 1.1: SMOKE CRUSH (bit / rate reduction of the fuzz) and SWARM RING (ring modulation of the voices)
     inline constexpr const char* fuzzCrush   = "fuzzCrush";
     inline constexpr const char* swarmRing   = "swarmRing";
+    // 1.2: FREEZE and STOP of the whole output (after VOLUME), and the stomps can drive them
+    inline constexpr const char* outFreeze     = "outFreeze";
+    inline constexpr const char* outStop       = "outStop";
+    inline constexpr const char* outStopTime   = "outStopTime";
+    inline constexpr const char* venomOutFreeze = "venomOutFreeze";
+    inline constexpr const char* stingOutFreeze = "stingOutFreeze";
+    inline constexpr const char* venomOutStop   = "venomOutStop";
+    inline constexpr const char* stingOutStop   = "stingOutStop";
     // MANGLE (on the voices and trails)
     inline constexpr const char* hvMangle    = "hvMangle";     // one knob: ANGER -> FRENZY -> BUZZ
     inline constexpr const char* rbRaw       = "rbRaw";        // RAW engine character

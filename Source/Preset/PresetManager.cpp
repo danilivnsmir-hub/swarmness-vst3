@@ -302,6 +302,146 @@ void PresetManager::initialiseFactoryPresets()
     // expand the step-pattern shortcuts
     for (auto& fp : factoryPresets)
         migrateLegacyValues (fp.values);
+
+    // Every sound preset plays through a rig: the effect presets get a clean amp (CHROME at 5) and a
+    // cabinet - the fuzz ones a 4x12, the rest a 2x12 miked off the cap. "Init" stays empty.
+    const juce::String fxOnly ("Effects only - no amp");
+    std::vector<FactoryPreset> fxCopies;
+    for (auto& fp : factoryPresets)
+    {
+        if (fp.name == "Init" || fp.values.count (ampOn) > 0)
+            continue;
+        // the effect alone, for players with their own amp
+        auto copy = fp;
+        copy.category = fxOnly;
+        copy.name = fp.name + " (FX)";
+        fxCopies.push_back (copy);
+
+        const bool fuzzy = fp.values.count (fuzzOn) > 0 && fp.values[fuzzOn] > 0.5f;
+        fp.values[ampOn] = 1;
+        fp.values[ampChannel] = 0;
+        fp.values[ampGain] = 5;
+        fp.values[cabOn] = 1;
+        fp.values[cabType] = fuzzy ? 2.0f : 1.0f;
+        fp.values[cabMic] = 15;
+        fp.values[cabDist] = 20;
+    }
+    factoryPresets.insert (factoryPresets.end(), fxCopies.begin(), fxCopies.end());
+
+    // Preset levels: trims measured offline (SwarmnessTests --render, the test guitar) so every
+    // preset lands near -16 dBFS RMS; VOLUME shows the trim
+    for (auto& fp : factoryPresets)
+        if (auto it = presetLevelTrims().find (fp.name); it != presetLevelTrims().end())
+            fp.values[output] = it->second;
+}
+
+const std::map<juce::String, float>& PresetManager::presetLevelTrims()
+{
+    static const std::map<juce::String, float> trims {
+        { "Angry Hive", 1.5f },
+        { "Angry Voices", 1.0f },
+        { "Angry Voices (FX)", -2.0f },
+        { "Atonal Detune (FX)", -3.5f },
+        { "Bell Swarm", -2.5f },
+        { "Bell Swarm (FX)", -4.0f },
+        { "Bitten Smoke", 4.0f },
+        { "Bounce Trill", 1.0f },
+        { "Bounce Trill (FX)", -1.0f },
+        { "Broken Radio", -6.5f },
+        { "Broken Radio (FX)", -6.0f },
+        { "Chug Room", -6.0f },
+        { "Chug Room (FX)", -6.5f },
+        { "Clean Shift", 1.5f },
+        { "Comb Smile", -9.0f },
+        { "Comb Smile (FX)", -9.0f },
+        { "Crypt Doom", -6.5f },
+        { "Crypt Doom (FX)", -6.5f },
+        { "Descending Spiral (FX)", -1.5f },
+        { "Dive Bomb", -8.0f },
+        { "Dive Bomb (FX)", -7.0f },
+        { "Doom Cathedral", -8.5f },
+        { "Doom Cathedral (FX)", -8.0f },
+        { "Dotted Echo", -1.0f },
+        { "Dotted Echo (FX)", -3.0f },
+        { "Drowning Hive", -1.5f },
+        { "Drowning Hive (FX)", -3.5f },
+        { "Frenzy", 2.0f },
+        { "Gallop Gate", 1.5f },
+        { "Gallop Octaves", 2.0f },
+        { "Ghost Swarm", 3.0f },
+        { "Ghost Swarm (FX)", 2.5f },
+        { "Glare Scream", -5.5f },
+        { "Glare Scream (FX)", -6.5f },
+        { "Glass Clean", 4.5f },
+        { "Glitch Steps", 1.5f },
+        { "Glitch Wings", -5.0f },
+        { "Glitch Wings (FX)", -5.0f },
+        { "Harmony Fifth", 1.0f },
+        { "Harmony Fifth (FX)", -1.5f },
+        { "Hive Cathedral (FX)", -2.5f },
+        { "Hive Collapse", -3.0f },
+        { "Hive Collapse (FX)", -1.5f },
+        { "Honey Ladder", 2.0f },
+        { "Hornet Buzz", 3.5f },
+        { "Hornet Buzz (FX)", 1.5f },
+        { "Hornet Lead", -1.0f },
+        { "Jumbo Smoke", -7.0f },
+        { "Jumbo Smoke (FX)", -6.5f },
+        { "Killer Bee", -6.0f },
+        { "Killer Bee (FX)", -5.0f },
+        { "Octave Panic Rig", 1.5f },
+        { "Offbeat Fifths", 1.5f },
+        { "Panic - In-Key Chaos", -5.5f },
+        { "Panic - In-Key Chaos (FX)", -5.5f },
+        { "Panic - Octave Panic", -5.0f },
+        { "Panic - Octave Panic (FX)", -5.0f },
+        { "Panic - Siren Sweep", -6.5f },
+        { "Panic - Siren Sweep (FX)", -5.0f },
+        { "Parallel Smoke", -4.5f },
+        { "Parallel Smoke (FX)", -4.5f },
+        { "Pitch Delay (FX)", -3.5f },
+        { "Power Stack", -6.5f },
+        { "Power Stack (FX)", -6.0f },
+        { "Rasp Rhythm", 2.5f },
+        { "Reverse Hive", 2.0f },
+        { "Reverse Hive (FX)", 1.0f },
+        { "Scatter Swarm", 1.0f },
+        { "Scatter Swarm (FX)", -1.0f },
+        { "Shift Doubler (FX)", -1.5f },
+        { "Slam - Minor Second Down", -7.0f },
+        { "Slam - Minor Second Down (FX)", -7.0f },
+        { "Slam - Semitone Clash", -7.0f },
+        { "Slam - Semitone Clash (FX)", -7.0f },
+        { "Slam - Sub Layer", -6.5f },
+        { "Slam - Sub Layer (FX)", -6.5f },
+        { "Slam - Tritone Dread", -5.5f },
+        { "Slam - Tritone Dread (FX)", -4.5f },
+        { "Slow Rise", 1.5f },
+        { "Slow Rise (FX)", -1.0f },
+        { "Smoke in the Crypt", -4.5f },
+        { "Smoke in the Crypt (FX)", -6.0f },
+        { "Smoked Out", -6.5f },
+        { "Smoked Out (FX)", -6.5f },
+        { "Smooth Lead", -3.0f },
+        { "Split Swarm", 2.0f },
+        { "Stacked Octaves", 1.0f },
+        { "Stacked Octaves (FX)", -1.5f },
+        { "Sticky Clean", 7.5f },
+        { "Stutter Echo", 1.5f },
+        { "Swarm Cloud", -3.0f },
+        { "Swarm Cloud (FX)", -3.5f },
+        { "Swell Ladder", 2.0f },
+        { "Tight Before Smoke", -6.5f },
+        { "Tight Before Smoke (FX)", -7.0f },
+        { "Tone Clusters (FX)", -2.0f },
+        { "Twin Splits", -3.5f },
+        { "Twin Splits (FX)", -4.0f },
+        { "Venom Overload", 1.5f },
+        { "Wasp Boost", -2.0f },
+        { "Wing Beat Breakdown", -4.5f },
+        { "Wing Beat Breakdown (FX)", -4.0f },
+    };
+    return trims;
 }
 
 juce::StringArray PresetManager::getFactoryPresetNames() const
@@ -458,7 +598,8 @@ juce::String PresetManager::copyBlock (int block) const
 
 bool PresetManager::clipboardHoldsBlock (const juce::String& text, int block)
 {
-    return text.startsWith ("swarmness-block:" + juce::String (Chain::names[block]) + "\n");
+    const auto header = text.upToFirstOccurrenceOf ("\n", false, false).trimEnd();   // CR / LF either way
+    return header == "swarmness-block:" + juce::String (Chain::names[block]);
 }
 
 bool PresetManager::pasteBlock (int block, const juce::String& text)
@@ -475,6 +616,81 @@ bool PresetManager::pasteBlock (int block, const juce::String& text)
     }
     applyValues (values, false);
     return ! values.empty();
+}
+
+juce::StringArray PresetManager::blockPresetSources (int block) const
+{
+    const char* powerId = nullptr;
+    switch (block)
+    {
+        case Chain::pitch: powerId = ParamIDs::rbOn; break;   case Chain::smoke: powerId = ParamIDs::fuzzOn; break;
+        case Chain::swarm: powerId = ParamIDs::swarmOn; break; case Chain::wings: powerId = ParamIDs::flowOn; break;
+        case Chain::comb:  powerId = ParamIDs::geqOn; break;   case Chain::carve: powerId = ParamIDs::peqOn; break;
+        case Chain::crypt: powerId = ParamIDs::revOn; break;   case Chain::shift: powerId = ParamIDs::shOn; break;
+        case Chain::amp:   powerId = ParamIDs::ampOn; break;   case Chain::cab:   powerId = ParamIDs::cabOn; break;
+        case Chain::drive: powerId = ParamIDs::drvOn; break;   case Chain::honey: powerId = ParamIDs::hnOn; break;
+        default: return {};
+    }
+    juce::StringArray names;
+    for (const auto& fp : factoryPresets)
+        if (! fp.name.endsWith (" (FX)"))
+            if (auto it = fp.values.find (powerId); it != fp.values.end() && it->second > 0.5f)
+                names.add (fp.name);
+    return names;
+}
+
+bool PresetManager::applyBlockFromPreset (int block, const juce::String& presetName)
+{
+    for (const auto& fp : factoryPresets)
+        if (fp.name == presetName)
+        {
+            // the preset's values for this block, defaults for what it does not set
+            ValueMap values;
+            for (const auto& id : parameterIdsOf (block))
+                if (auto* p = apvts.getParameter (id))
+                {
+                    auto it = fp.values.find (id);
+                    values[id] = it != fp.values.end() ? it->second : p->convertFrom0to1 (p->getDefaultValue());
+                }
+            applyValues (values, false);
+            return true;
+        }
+    return false;
+}
+
+juce::File PresetManager::blockPresetsDirectory (int block)
+{
+    return getPresetsDirectory().getChildFile ("Blocks").getChildFile (Chain::names[juce::jlimit (0, Chain::numBlocks - 1, block)]);
+}
+
+juce::StringArray PresetManager::getUserBlockPresets (int block) const
+{
+    juce::StringArray names;
+    for (const auto& f : blockPresetsDirectory (block).findChildFiles (juce::File::findFiles, false, "*.swarmblock"))
+        names.add (f.getFileNameWithoutExtension());
+    names.sort (true);
+    return names;
+}
+
+bool PresetManager::saveUserBlockPreset (int block, const juce::String& name)
+{
+    const auto clean = sanitiseName (name);
+    if (clean.isEmpty())
+        return false;
+    auto dir = blockPresetsDirectory (block);
+    dir.createDirectory();
+    return dir.getChildFile (clean + ".swarmblock").replaceWithText (copyBlock (block), false, false, "\n");
+}
+
+bool PresetManager::loadUserBlockPreset (int block, const juce::String& name)
+{
+    const auto f = blockPresetsDirectory (block).getChildFile (name + ".swarmblock");
+    return f.existsAsFile() && pasteBlock (block, f.loadFileAsString());
+}
+
+bool PresetManager::deleteUserBlockPreset (int block, const juce::String& name)
+{
+    return blockPresetsDirectory (block).getChildFile (name + ".swarmblock").deleteFile();
 }
 
 void PresetManager::takeSnapshot()

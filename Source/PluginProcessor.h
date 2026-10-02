@@ -8,6 +8,7 @@
 #include "DSP/SwarmChorus.h"
 #include "DSP/FlowGate.h"
 #include "Licence.h"
+#include "DSP/OutputHold.h"
 #include "DSP/HoneyBlock.h"
 #include "DSP/Equalisers.h"
 #include "DSP/ReverbStage.h"
@@ -74,6 +75,7 @@ public:
         std::atomic<float> pitchSemitones { 0.0f };   // current SHIFT transposition
         std::atomic<bool>  noiseEngaged { false };
         std::atomic<unsigned> engagedBlocks { 0 };     // bit per Chain::Block: effectively on (power or a stomp)
+        std::atomic<float> limiterGr { 0.0f };         // the output limiter's gain reduction, dB (0 = idle)
         std::atomic<float> stackSemitones { 0.0f };   // SHIFT STACK voice
         std::atomic<bool>  stackOn { false };
         std::atomic<int>   trailStep { -1 };             // TRAILS step now playing (-1 = none)
@@ -146,9 +148,7 @@ public:
     bool isInputLearning() const noexcept { return learnSamplesLeft.load() > 0; }
     bool getUiMini() const noexcept       { return uiMini.load(); }
     void setUiMini (bool m) noexcept      { uiMini = m; }
-    /** Which blocks have their MORE controls open (a bit per block) and whether knob values are always shown. */
-    int getUiMore() const noexcept        { return uiMore.load(); }
-    void setUiMore (int bits) noexcept    { uiMore = bits; }
+    /** Whether knob values are always shown (otherwise on hover). */
     bool getUiValues() const noexcept     { return uiValues.load(); }
     void setUiValues (bool v) noexcept    { uiValues = v; }
     /** Last page shown in the editor (FX / EQ / CRYPT), kept while the plug-in is loaded. */
@@ -220,7 +220,9 @@ private:
     }
     Tone3000 tone3000;
     Licence licence;
+    OutputHold outputHold;
     juce::SmoothedValue<float> licenceGate;   // 1 = the trial is over and no key: the dry signal passes
+    float limiterGain = 1.0f, limiterRelease = 0.001f;   // the output limiter (ceiling -0.5 dBFS, instant attack)
     TunerTap tunerTap;
     juce::SmoothedValue<float> tunerGain;
     std::atomic<int> pendingScene { 0 };
@@ -276,6 +278,8 @@ private:
         std::atomic<float>* venomFreeze {}; std::atomic<float>* stingFreeze {};
         std::atomic<float>* hvStop {}; std::atomic<float>* hvStopTime {}; std::atomic<float>* venomStop {}; std::atomic<float>* stingStop {};
         std::atomic<float>* fuzzCrush {}; std::atomic<float>* swarmRing {};
+        std::atomic<float>* outFreeze {}; std::atomic<float>* outStop {}; std::atomic<float>* outStopTime {};
+        std::atomic<float>* venomOutFreeze {}; std::atomic<float>* stingOutFreeze {}; std::atomic<float>* venomOutStop {}; std::atomic<float>* stingOutStop {};
         std::atomic<float>* ampOn {};      std::atomic<float>* ampChannel {};  std::atomic<float>* ampGain {};
         std::atomic<float>* ampBass {};    std::atomic<float>* ampMid {};      std::atomic<float>* ampTreble {};   std::atomic<float>* ampPresence {};
         std::atomic<float>* ampDepth {};   std::atomic<float>* ampMaster {};   std::atomic<float>* ampGate {};     std::atomic<float>* ampLevel {};
@@ -301,7 +305,7 @@ private:
         bool magicHeld = false, stingHeld = false, oct1Held = false, oct2Held = false;
         bool venom = false;                                 // HIVE's self-oscillation (a stomp with HIVE = On)
         std::array<int, Chain::numBlocks> force {};         // per block: +1 engaged / -1 disengaged by a stomp, 0 = its own power
-        int freezeForce = 0, stopForce = 0;
+        int freezeForce = 0, stopForce = 0, outFreezeForce = 0, outStopForce = 0;
         bool engaged (int block, bool power) const noexcept { return force[(size_t) block] > 0 || (force[(size_t) block] == 0 && power); }
     };
 
@@ -369,7 +373,6 @@ private:
     Meters meters;
     std::atomic<float> uiScale { 1.0f };
     std::atomic<bool> uiMini { false };
-    std::atomic<int> uiMore { 0 };
     std::atomic<bool> uiValues { false };
     std::atomic<int> uiPage { 0 };
 

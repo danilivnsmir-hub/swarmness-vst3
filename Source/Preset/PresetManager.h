@@ -75,6 +75,8 @@ public:
 
     /** Writes one of the ready-made TRAILS step patterns (HiveBlock::Fill) into a value map. */
     static void writeTrailFill (ValueMap& values, int fill);
+    /** VOLUME per factory preset (dB), measured offline so the presets sit at a similar loudness. */
+    static const std::map<juce::String, float>& presetLevelTrims();
     /** Writes a ready-made WINGS pattern (FlowGate::Fill) into values. */
     static void writeWingFill (ValueMap& values, int fill);
     /** One block's parameters (its sound, not its place in the chain), as text for the clipboard:
@@ -84,6 +86,15 @@ public:
     bool pasteBlock (int block, const juce::String& text);
     /** The parameter ids that belong to a block (the chain position and the stomps' wiring excluded). */
     juce::StringArray parameterIdsOf (int block) const;
+
+    /** Block presets: a block's settings taken from any factory preset where it is on, or saved by the user. */
+    juce::StringArray blockPresetSources (int block) const;            // factory presets with this block on
+    bool applyBlockFromPreset (int block, const juce::String& presetName);
+    juce::StringArray getUserBlockPresets (int block) const;
+    bool saveUserBlockPreset (int block, const juce::String& name);
+    bool loadUserBlockPreset (int block, const juce::String& name);
+    bool deleteUserBlockPreset (int block, const juce::String& name);
+    static juce::File blockPresetsDirectory (int block);
 
     /** Non-parameter data stored with user presets (the CRYPT impulse response path). */
     std::function<void (juce::DynamicObject&)> onSaveExtras;

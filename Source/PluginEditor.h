@@ -64,20 +64,6 @@ private:
     SwarmnessAudioProcessor& processor;
     APVTS& state;
 
-    /** A block's MORE pill and the secondary controls it reveals (bit = Chain::Block, saved with the session). */
-    struct Disclosure
-    {
-        MoreToggle button;
-        std::vector<juce::Component*> hidden;
-        std::vector<const char*> paramIds;
-        int bit = 0;
-    };
-    Disclosure moreSmoke, moreHive, moreShift;
-    void setupDisclosure (Disclosure&, juce::Component& parent, int block, std::initializer_list<juce::Component*> hidden,
-                          std::initializer_list<const char*> paramIds, const juce::String& tooltip);
-    void applyDisclosure (Disclosure&);
-    bool moreOpen (const Disclosure& d) const { return (processor.getUiMore() & (1 << d.bit)) != 0; }
-
     juce::Image logo, emblem;
     Backdrop backdrop;
 
@@ -146,6 +132,7 @@ private:
     MiniSwitch link1Switch { "LINK" }, link2Switch { "LINK" };
     LevelMeter inMeter { "IN" }, outMeter { "OUT" };
     juce::TextButton learnButton { "LEARN" };
+    PillToggle outFreezeToggle { "FREEZE" }, outStopToggle { "STOP" };
 
     InfoOverlay infoOverlay;
 

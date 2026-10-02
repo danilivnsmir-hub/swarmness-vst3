@@ -255,6 +255,9 @@ namespace
         SwarmnessAudioProcessor p;
         p.getPresetManager().loadPreset ("Killer Bee");
         setParam (p, ParamIDs::fuzzOn, 0.0f);
+        setParam (p, ParamIDs::ampOn, 0.0f);   // (the presets play through a rig now - this test wants the bare path)
+        setParam (p, ParamIDs::cabOn, 0.0f);
+        setParam (p, ParamIDs::output, 0.0f);
         setParam (p, ParamIDs::stingMix, 0.0f);
         setParam (p, ParamIDs::oct1, 1.0f);
         const double sr = 44100.0;
@@ -466,6 +469,9 @@ namespace
         SwarmnessAudioProcessor p;
         p.getPresetManager().loadPreset ("Hive Collapse");
         setParam (p, ParamIDs::fuzzOn, 0.0f);
+        setParam (p, ParamIDs::ampOn, 0.0f);
+        setParam (p, ParamIDs::cabOn, 0.0f);
+        setParam (p, ParamIDs::output, 0.0f);
         const double sr = 48000.0;
         auto input = makeGuitar (sr, 48000 * 6);
         for (int ch = 0; ch < 2; ++ch)
@@ -615,12 +621,12 @@ namespace
         {
             SwarmnessAudioProcessor p;
             resetToInit (p);
-            setParam (p, ParamIDs::input, 12.0f);
+            setParam (p, ParamIDs::input, -6.0f);   // (the test guitar peaks near 0 dBFS: a boost would meet the output limiter)
             auto out = render (p, input, sr, 256);
             juce::AudioBuffer<float> ref (input);
-            ref.applyGain (juce::Decibels::decibelsToGain (12.0f));
+            ref.applyGain (juce::Decibels::decibelsToGain (-6.0f));
             const double db = nullDb (out, ref, p.getLatencySamples(), 4096, input.getNumSamples());
-            check (db < -100.0, juce::String::formatted ("INPUT +12 dB, nothing engaged: plain +12 dB gain (residual %.1f dB)", db));
+            check (db < -100.0, juce::String::formatted ("INPUT -6 dB, nothing engaged: a plain -6 dB gain (residual %.1f dB)", db));
         }
         double rms[2] {};
         for (int k = 0; k < 2; ++k)
@@ -944,10 +950,11 @@ namespace
         p.flushPendingChanges();
         check (p.getPresetManager().getCurrentPresetName() == names[5], "Program Change 5 loads preset #5 (" + names[5] + ")");
         juce::MidiBuffer out;
-        out.addEvent (juce::MidiMessage::programChange (1, 127), 0);
+        const int last = juce::jmin (127, names.size() - 1);
+        out.addEvent (juce::MidiMessage::programChange (1, last), 0);
         p.processBlock (audio, out);
         p.flushPendingChanges();
-        check (p.getPresetManager().getCurrentPresetName() == names[5], "a number past the list is ignored");
+        check (p.getPresetManager().getCurrentPresetName() == names[last], "the last number of the list loads its preset (" + names[last] + ")");
     }
 
     void testInputLearn()
@@ -993,6 +1000,93 @@ namespace
         check (a.getPresetManager().parameterIdsOf (Chain::smoke).contains (ParamIDs::fuzzCrush)
                && a.getPresetManager().parameterIdsOf (Chain::swarm).contains (ParamIDs::swarmRing),
                "the appended knobs (CRUSH, RING) belong to their blocks");
+    }
+
+    void testBlockPresets()
+    {
+        std::printf ("\nBlock presets: a block from a factory preset, and the user's own\n");
+        SwarmnessAudioProcessor p;
+        resetToInit (p);
+        auto& pm = p.getPresetManager();
+        const auto amps = pm.blockPresetSources (Chain::amp);
+        check (amps.contains ("Steel Lead") && ! amps.contains ("Init") && ! amps.contains ("Jumbo Smoke (FX)"), "AMP sources: presets with the AMP on, no FX copies (" + juce::String (amps.size()) + ")");
+        check (pm.applyBlockFromPreset (Chain::amp, "Steel Lead") && p.getAPVTS().getRawParameterValue (ParamIDs::ampChannel)->load() == 2.0f
+               && p.getAPVTS().getRawParameterValue (ParamIDs::ampOn)->load() == 1.0f && p.getAPVTS().getRawParameterValue (ParamIDs::cabOn)->load() == 0.0f,
+               "the AMP of Steel Lead: LEAD, on - the CAB untouched");
+        setParam (p, ParamIDs::ampGain, 8.5f);
+        const auto dir = PresetManager::blockPresetsDirectory (Chain::amp);
+        pm.deleteUserBlockPreset (Chain::amp, "Test Amp");
+        check (pm.saveUserBlockPreset (Chain::amp, "Test Amp") && pm.getUserBlockPresets (Chain::amp).contains ("Test Amp"), "saved as a user block preset");
+        setParam (p, ParamIDs::ampGain, 2.0f);
+        check (pm.loadUserBlockPreset (Chain::amp, "Test Amp") && std::abs (p.getAPVTS().getRawParameterValue (ParamIDs::ampGain)->load() - 8.5f) < 0.01f, "loaded back: GAIN 8.5");
+        check (pm.deleteUserBlockPreset (Chain::amp, "Test Amp") && ! pm.getUserBlockPresets (Chain::amp).contains ("Test Amp"), "deleted");
+    }
+
+    void testOutputLimiter()
+    {
+        std::printf ("\nOutput limiter: a brickwall at -0.5 dBFS, transparent below it\n");
+        const double sr = 48000.0;
+        auto renderLevel = [&] (float amp)
+        {
+            SwarmnessAudioProcessor p;
+            resetToInit (p);
+            setParam (p, ParamIDs::output, 0.0f);
+            return render (p, makeSine (sr, 48000, 220.0, amp), sr, 256);
+        };
+        auto hot = renderLevel (2.0f);   // +6 dBFS in
+        const float peak = hot.getMagnitude (0, 4800, 43200);
+        check (peak <= 0.945f && peak > 0.9f, juce::String::formatted ("+6 dBFS sine: output peaks at %.2f dBFS", juce::Decibels::gainToDecibels (peak)));
+        auto quiet = renderLevel (0.5f);
+        const double thd = toneDb (quiet, sr, 660.0, 4800, 43200) - toneDb (quiet, sr, 220.0, 4800, 43200);
+        check (std::abs (quiet.getMagnitude (0, 4800, 43200) - 0.5f) < 0.005f && thd < -90.0,
+               juce::String::formatted ("-6 dBFS sine: untouched (peak %.3f, 3rd harmonic %.0f dB)", quiet.getMagnitude (0, 4800, 43200), thd));
+    }
+
+    void testOutputHold()
+    {
+        std::printf ("\nOutput FREEZE and STOP\n");
+        const double sr = 48000.0;
+        OutputHold h;
+        h.prepare (sr, 256);
+        // a 330 Hz tone for 1 s, then silence: FREEZE at 0.8 s keeps a pad going through the silence
+        juce::AudioBuffer<float> buf (2, (int) (3.0 * sr));
+        buf.clear();
+        for (int i = 0; i < (int) sr; ++i)
+        {
+            const float v = 0.3f * std::sin (2.0f * juce::MathConstants<float>::pi * 330.0f * (float) i / (float) sr);
+            buf.setSample (0, i, v); buf.setSample (1, i, v);
+        }
+        for (int i = 0; i < buf.getNumSamples(); i += 256)
+        {
+            h.setParams (i >= (int) (0.8 * sr) && i < (int) (2.2 * sr), false, 1.0f);
+            float* ptr[2] { buf.getWritePointer (0, i), buf.getWritePointer (1, i) };
+            h.process (ptr, 2, 256);
+        }
+        const float pad = buf.getRMSLevel (0, (int) (1.5 * sr), (int) (0.5 * sr)), after = buf.getRMSLevel (0, (int) (2.7 * sr), (int) (0.3 * sr));
+        const double hz = zeroCrossingHz (buf, sr, (int) (1.5 * sr), (int) (0.4 * sr));
+        check (allFinite (buf) && pad > 0.1f && std::abs (hz - 330.0) < 20.0 && after < 0.02f,
+               juce::String::formatted ("FREEZE: a pad of %.2f RMS at %.0f Hz through the silence, gone %.4f after release", pad, hz, after));
+        // STOP: the tone's frequency falls, the output halts, then comes back
+        OutputHold s;
+        s.prepare (sr, 256);
+        juce::AudioBuffer<float> tone (2, (int) (4.0 * sr));
+        for (int i = 0; i < tone.getNumSamples(); ++i)
+        {
+            const float v = 0.3f * std::sin (2.0f * juce::MathConstants<float>::pi * 330.0f * (float) i / (float) sr);
+            tone.setSample (0, i, v); tone.setSample (1, i, v);
+        }
+        for (int i = 0; i < tone.getNumSamples(); i += 256)
+        {
+            s.setParams (false, i >= (int) (1.0 * sr) && i < (int) (2.5 * sr), 1.0f);
+            float* ptr[2] { tone.getWritePointer (0, i), tone.getWritePointer (1, i) };
+            s.process (ptr, 2, 256);
+        }
+        const double before = zeroCrossingHz (tone, sr, (int) (0.5 * sr), (int) (0.2 * sr)), half = zeroCrossingHz (tone, sr, (int) (1.45 * sr), (int) (0.1 * sr));
+        const float halted = tone.getRMSLevel (0, (int) (2.2 * sr), (int) (0.2 * sr)), back = tone.getRMSLevel (0, (int) (3.7 * sr), (int) (0.2 * sr));
+        const double backHz = zeroCrossingHz (tone, sr, (int) (3.7 * sr), (int) (0.2 * sr));
+        check (allFinite (tone) && std::abs (before - 330.0) < 10.0 && half < 0.8 * before && half > 0.3 * before && halted < 0.02f
+               && back > 0.15f && std::abs (backHz - 330.0) < 10.0,
+               juce::String::formatted ("STOP: %.0f Hz -> %.0f Hz half way, halted %.3f, back at %.0f Hz (%.2f)", before, half, halted, backHz, back));
     }
 
     void testLicence()
@@ -4067,8 +4161,6 @@ int main (int argc, char** argv)
                 p.loadCabIR (juce::File (argv[7 + k]), k);
         }
         p.setUiMini (mini);
-        if (argc >= 7 && juce::String (argv[6]) == "more")   // every block's MORE open
-            p.setUiMore (0xffff);
         if (argc >= 7 && juce::String (argv[6]) == "licence")   // the trial over, the activation panel open
             p.getLicence().setClock ([] { return juce::Time::getCurrentTime() + juce::RelativeTime::days (8.0); });
         std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
@@ -4369,6 +4461,9 @@ int main (int argc, char** argv)
         if (which == "program") testProgramChange();
         if (which == "learn")   testInputLearn();
         if (which == "copy")    testBlockCopy();
+        if (which == "limiter") testOutputLimiter();
+        if (which == "hold")    testOutputHold();
+        if (which == "blockpresets") testBlockPresets();
         if (which == "gates")   testGates();
         if (which == "tuner")   testTuner();
         std::printf ("\n%s (%d failure%s)\n", failures == 0 ? "ALL PASSED" : "FAILED", failures, failures == 1 ? "" : "s");
@@ -4402,6 +4497,9 @@ int main (int argc, char** argv)
     testProgramChange();
     testInputLearn();
     testBlockCopy();
+    testOutputLimiter();
+    testOutputHold();
+    testBlockPresets();
     testFuzzSag();
     testMonoToStereo();
     testMidiLearn();

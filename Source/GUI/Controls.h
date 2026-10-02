@@ -115,15 +115,6 @@ public:
     SWARM_RIGHT_CLICK_SAFE_BUTTON
 };
 
-/** The MORE pill of a block: opens the secondary controls; a dot while any hidden parameter is off its default. */
-class MoreToggle : public PillToggle
-{
-public:
-    MoreToggle() : PillToggle ("MORE") {}
-    std::function<bool()> hasHiddenChanges;
-    void paintButton (juce::Graphics&, bool isMouseOver, bool isDown) override;
-};
-
 //==============================================================================
 /** Segmented selector bound to a choice parameter (octave, quality...). */
 class SegmentedChoice : public juce::Component,
@@ -319,10 +310,12 @@ public:
 
     /** Highlights a recommended level range (e.g. where the input should peak). */
     void setTargetZone (float minDb, float maxDb) { zoneMin = minDb; zoneMax = maxDb; repaint(); }
+    /** The output limiter's gain reduction (dB): a LIM lamp while it works. */
+    void setLimiting (float gainReductionDb);
 
 private:
     juce::String caption;
-    float zoneMin = 0.0f, zoneMax = 0.0f;
+    float zoneMin = 0.0f, zoneMax = 0.0f, limiting = 0.0f;
     std::array<float, 2> level {}, hold {};
     std::array<int, 2> holdTicks {};
 };
