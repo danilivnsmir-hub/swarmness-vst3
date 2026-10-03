@@ -12,6 +12,19 @@
 #include <chrono>
 #include <cstdio>
 
+// CPU budgets catch regressions, not the sanitizer: instrumented builds (CI's ASan job) run several times slower
+#if defined (__SANITIZE_ADDRESS__)
+constexpr double kPerfSlack = 4.0;
+#elif defined (__has_feature)
+ #if __has_feature (address_sanitizer)
+constexpr double kPerfSlack = 4.0;
+ #else
+constexpr double kPerfSlack = 1.0;
+ #endif
+#else
+constexpr double kPerfSlack = 1.0;
+#endif
+
 namespace
 {
     int failures = 0;
@@ -1660,7 +1673,7 @@ namespace
         auto out = render (p, input, sr, 128);
         const double secs = std::chrono::duration<double> (std::chrono::steady_clock::now() - t0).count();
         const double load = secs / 10.0 * 100.0;
-        check (load < 40.0, juce::String::formatted ("everything on (AMP + CAB too): %.2f%% of one core (realtime factor %.0fx)", load, 10.0 / secs));
+        check (load < 40.0 * kPerfSlack, juce::String::formatted ("everything on (AMP + CAB too): %.2f%% of one core (realtime factor %.0fx)", load, 10.0 / secs));
     }
 
     //==========================================================================
@@ -3147,7 +3160,7 @@ namespace
                 a.process (ptr, 2, 128);
             }
             const double load = std::chrono::duration<double> (std::chrono::steady_clock::now() - t0).count() / 5.0 * 100.0;
-            check (load < 20.0, juce::String::formatted ("%s circuit model: %.1f%% of one core", ParamChoices::ampChannels[chn].toRawUTF8(), load));
+            check (load < 20.0 * kPerfSlack, juce::String::formatted ("%s circuit model: %.1f%% of one core", ParamChoices::ampChannels[chn].toRawUTF8(), load));
         }
         {
             // TONE3000 sign-in pieces: PKCE S256 challenge, base64url, the browser's callback
@@ -3178,7 +3191,7 @@ namespace
                 a.process (ptr, 2, 128);
             }
             const double load = std::chrono::duration<double> (std::chrono::steady_clock::now() - t0).count() / 5.0 * 100.0;
-            check (load < 20.0, juce::String::formatted ("NAM A2 capture: %.1f%% of one core", load));
+            check (load < 20.0 * kPerfSlack, juce::String::formatted ("NAM A2 capture: %.1f%% of one core", load));
         }
     }
 
@@ -3748,7 +3761,7 @@ namespace
             }
             const double secs = juce::Time::highResolutionTicksToSeconds (juce::Time::getHighResolutionTicks() - t0);
             const double load = 100.0 * secs / (buf.getNumSamples() / 48000.0);
-            check (load < 10.0, juce::String::formatted ("WASP stereo at 48 kHz: %.1f%% of one core", load));
+            check (load < 10.0 * kPerfSlack, juce::String::formatted ("WASP stereo at 48 kHz: %.1f%% of one core", load));
         }
     }
 
