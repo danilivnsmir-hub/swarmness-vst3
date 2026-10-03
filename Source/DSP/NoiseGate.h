@@ -14,7 +14,7 @@
  *  Opening   on the peak (15 ms decay - a period of the lowest string, so a low note doesn't ripple
  *            the decision): the first sample over the threshold opens it
  *  Closing   on a 6 ms RMS, 8 dB of hysteresis, 12 ms hold - short enough to separate 16th-note chugs
- *  Below     an expander with a knee, not a wall: -6 dB right under the threshold, then 3 dB per dB (2 for
+ *  Below     an expander with a knee, not a wall: from 0 dB at the threshold, 3 dB per dB (2 for
  *            SMOKE's automatic gate) over the first 6 dB - a note's tail is turned down, not chopped - and
  *            6 dB per dB beyond that, so a floor well under the threshold is gone
  *  Attack    0.3 ms on a transient (the level jumped), 15 ms on a swell (it crept up) - no click when a
@@ -132,7 +132,7 @@ public:
             if (! open)
             {
                 const float under = thClose - rmsDb, knee = 6.0f, slope = autoThreshold ? 2.0f : 3.0f;
-                target = -6.0f - slope * juce::jmin (knee, under) - 6.0f * juce::jmax (0.0f, under - knee);
+                target = -slope * juce::jmin (knee, under) - 6.0f * juce::jmax (0.0f, under - knee);   // from 0 dB: no step at the threshold
                 target = juce::jlimit (-70.0f, 0.0f, target);
             }
             lastTarget = target;
