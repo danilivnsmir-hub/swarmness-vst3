@@ -173,6 +173,11 @@ namespace ampsim
                 // compressed where crunch amps hold them 12-20 dB closer (it read as a gate and as "no power").
                 // +8 dB of input: ~12 dB at noon, the capture's character lower down the GAIN range
                 a.inDb += 8.0f;
+                // against a real British stack WITH its cabinet the direct-capture fit came out 5-10 dB short at 1.2-5 kHz
+                // (a 1.8 kHz cut, the transformer rolling off from 4.7 kHz): a low-mid hump without the bark - nasal when
+                // cranked, a thicker, fuzzier breed of amp. Bark back at 1.7 kHz, the transformer open to 9 kHz, the voice
+                // coil's rise from 3 kHz: within ~2 dB of the stack from 125 Hz to 3 kHz on the DI
+                a.voiceHz = 1700.0f; a.voiceDb = 3.0f; a.voiceQ = 0.8f; a.xfLp = 9000.0f; a.coilHz = 3000.0f; a.coilDb = 6.0f;
                 a.bias = 0.5019f; a.satKnee = 1.883f; a.nfb = 1.119f; a.piMax = 1.594f; a.sag = 0.2089f;
                 a.sagMs = 75.51f; a.voiceHz = 1820.0f; a.voiceDb = -4.482f; a.voiceQ = 0.9199f; a.brightDb = 2.129f;
                 a.brightHz = 2254.0f; a.presenceHz = 4460.0f; a.depthHz = 87.22f; a.spkHz = 105.4f; a.spkQ = 0.6176f;
