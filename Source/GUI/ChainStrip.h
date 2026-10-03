@@ -35,7 +35,7 @@ public:
     std::function<int (int block)> stompMarksFor;
 
     /** Height of the zone band (PRE / RIG / POST) under the tiles. */
-    static constexpr float zoneBandHeight = 15.0f;
+    static constexpr float zoneBandHeight = 16.0f;
 
     /** Blocks shown on the current page get a bright outline. */
     void setHighlighted (const std::array<bool, Chain::numBlocks>&);

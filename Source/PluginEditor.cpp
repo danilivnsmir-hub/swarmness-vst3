@@ -88,7 +88,7 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
             case Chain::amp:   { const int ch = index (ampChannel); return ch >= 3 ? juce::String ("NAM") : juce::String (AmpBlock::channelModel (ch)); }
             case Chain::cab:   return pick (ParamChoices::cabTypes, index (cabType));
             case Chain::drive: return paramOn (drvNam) ? juce::String ("NAM") : pick (ParamChoices::waspCharacters, index (drvCharacter));
-            case Chain::crypt: return pick (ParamChoices::reverbTypes, index (revType)) + " REVERB";
+            case Chain::crypt: return pick (ParamChoices::reverbTypes, index (revType));
             case Chain::smoke: return pick (ParamChoices::fuzzVoices, index (fuzzVoice)) + " FUZZ";
             case Chain::shift:
             {
@@ -440,9 +440,10 @@ void MainPanel::resized()
     miniButton.setBounds (baseWidth - 16 - 32 - 8 - 52, 16, 52, 32);
     infoButton.setBounds (baseWidth - 16 - 32, 16, 32, 32);
 
-    // Chain strip (tiles + the PRE / RIG / POST band) and the page area below it: one block at a time
-    chainStrip.setBounds (16, 70, baseWidth - 32, 66 + (int) ChainStrip::zoneBandHeight);
-    pageArea = { 16, 158, baseWidth - 32, 360 };
+    // Chain strip (tiles + the PRE / RIG / POST band) and the page area below it: one block at a time.
+    // The chain is the navigation, so it gets the room; a page keeps its knobs together in the middle.
+    chainStrip.setBounds (16, 70, baseWidth - 32, 84 + (int) ChainStrip::zoneBandHeight);
+    pageArea = { 16, 178, baseWidth - 32, 290 };
     for (auto* c : std::initializer_list<juce::Component*> { &eqPage, &reverbPage, &wasp, &ampCab })
         c->setBounds (pageArea);
     for (auto& page : pages)
@@ -453,41 +454,44 @@ void MainPanel::resized()
 
     auto powerFor = [] (juce::Rectangle<float> a) { return juce::Rectangle<int> ((int) a.getRight() - 40, (int) a.getY() + 8, 26, 26); };
     auto pillFor  = [] (juce::Rectangle<float> a, int slot) { return juce::Rectangle<int> ((int) a.getRight() - 40 - 66 * (slot + 1), (int) a.getY() + 9, 60, 24); };
-    constexpr int bigW = 96, bigH = 132, smallW = 72, smallH = 104;
-    // a row of knobs centred between x0 and x1, at most maxStep apart
-    auto row = [] (std::initializer_list<Knob*> knobs, int x0, int x1, int y, int kw, int kh, int maxStep)
+    constexpr int bigW = 92, bigH = 128, smallW = 70, smallH = 100, bigStep = 124, smallStep = 96;
+    // knobs side by side, centred between x0 and x1; big ones and small ones share a centre line
+    auto row = [] (std::initializer_list<std::pair<Knob*, bool>> knobs, int x0, int x1, int centreY)
     {
-        const int n = (int) knobs.size();
-        const int step = juce::jmin (maxStep, (x1 - x0) / juce::jmax (1, n));
-        int cx = (x0 + x1) / 2 - step * (n - 1) / 2;
-        for (auto* k : knobs)
+        int total = 0;
+        for (auto& k : knobs) total += k.second ? bigStep : smallStep;
+        int x = (x0 + x1 - total) / 2;
+        for (auto& [k, big] : knobs)
         {
-            k->setBounds (cx - kw / 2, y, kw, kh);
-            cx += step;
+            const int step = big ? bigStep : smallStep, w = big ? bigW : smallW, h = big ? bigH : smallH;
+            k->setBounds (x + (step - w) / 2, centreY - h / 2, w, h);
+            x += step;
         }
     };
     const int px0 = (int) P.getX() + 24, px1 = (int) P.getRight() - 24, py = (int) P.getY();
+    const int bodyTop = py + 44, bodyBottom = (int) P.getBottom() - 12, bodyMid = (bodyTop + bodyBottom) / 2;
 
-    // HONEY: four large knobs, the gain-reduction bar under them
+    // HONEY: four knobs, the gain-reduction bar under them
     honeyPower.setBounds (powerFor (honeyArea));
     limitToggle.setBounds (pillFor (honeyArea, 0));
-    row ({ &honeySustainKnob, &honeyAttackKnob, &honeyBlendKnob, &honeyLevelKnob }, px0, px1, py + 84, bigW, bigH, 170);
-    honeyMeter.setBounds ((int) P.getCentreX() - 300, py + 262, 600, 26);
+    row ({ { &honeySustainKnob, true }, { &honeyAttackKnob, true }, { &honeyBlendKnob, true }, { &honeyLevelKnob, true } }, px0, px1, bodyMid - 20);
+    honeyMeter.setBounds ((int) P.getCentreX() - 240, bodyMid + 64, 480, 24);
 
-    // SMOKE: the three that shape it large, the details under them
+    // SMOKE: one row - the three that shape it large, the details smaller
     fuzzPower.setBounds (powerFor (fuzzArea));
     fuzzVoiceSelector.setBounds ((int) fuzzArea.getRight() - 40 - 8 - 150, (int) fuzzArea.getY() + 10, 150, 22);
-    row ({ &fuzzKnob, &fuzzToneKnob, &fuzzBlendKnob }, px0, px1, py + 52, bigW, bigH, 170);
-    row ({ &fuzzScoopKnob, &fuzzGlareKnob, &fuzzGateKnob, &fuzzSagKnob, &fuzzCrushKnob }, px0, px1, py + 200, smallW, smallH, 130);
+    row ({ { &fuzzKnob, true }, { &fuzzToneKnob, true }, { &fuzzBlendKnob, true }, { &fuzzScoopKnob, false }, { &fuzzGlareKnob, false },
+           { &fuzzGateKnob, false }, { &fuzzSagKnob, false }, { &fuzzCrushKnob, false } }, px0, px1, bodyMid);
 
     // SHIFT: the live pitch display on the left; SHIFT A / B and MIX large, the movement knobs under them
     shiftPower  .setBounds (powerFor (shiftArea));
     stackToggle .setBounds (pillFor (shiftArea, 2));
     shSnapToggle.setBounds (pillFor (shiftArea, 1));
     shRawToggle .setBounds (pillFor (shiftArea, 0));
-    pitchScope.setBounds (px0 - 4, py + 50, 330, (int) P.getHeight() - 66);
-    row ({ &shiftAKnob, &shiftBKnob, &blendKnob }, px0 + 350, px1, py + 52, bigW, bigH, 170);
-    row ({ &riseKnob, &fallKnob, &panicKnob, &chaosKnob, &speedKnob, &shDetuneKnob }, px0 + 350, px1, py + 200, smallW, smallH, 112);
+    pitchScope.setBounds (px0 - 4, bodyTop + 4, 300, bodyBottom - bodyTop - 4);
+    row ({ { &shiftAKnob, true }, { &shiftBKnob, true }, { &blendKnob, true } }, px0 + 310, px1, bodyTop + bigH / 2);
+    row ({ { &riseKnob, false }, { &fallKnob, false }, { &panicKnob, false }, { &chaosKnob, false }, { &speedKnob, false }, { &shDetuneKnob, false } },
+         px0 + 310, px1, bodyBottom - smallH / 2);
 
     // HIVE: VOICES | TRAILS | MANGLE
     {
@@ -499,7 +503,7 @@ void MainPanel::resized()
             hiveSections[(size_t) i] = { x, hiveArea.getY(), w, hiveArea.getHeight() };
             x += w;
         }
-        const int y1 = (int) hiveArea.getY() + 72, y2 = (int) hiveArea.getY() + 210, kw = 76, kh = 108;
+        const int y1 = (int) hiveArea.getY() + 64, y2 = (int) hiveArea.getY() + 176, kw = 72, kh = 102;
         auto sectionRow = [&] (juce::Rectangle<float> sec, int y, std::initializer_list<juce::Component*> comps, int slots = 3)
         {
             const int gap = ((int) sec.getWidth() - kw * slots) / (slots + 1);
@@ -524,16 +528,16 @@ void MainPanel::resized()
         trDryToggle .setBounds ((int) trailSec.getRight() - 12 - 126, (int) trailSec.getY() + 36, 60, 22);
         hvStopToggle.setBounds ((int) trailSec.getRight() - 12 - 192, (int) trailSec.getY() + 36, 60, 22);
         {
-            const int kx = (int) trailSec.getX() + 12, ky = (int) hiveArea.getY() + 72, sw = 62, sh = 132;
-            magicKnob     .setBounds (kx,          ky,      sw, 104);
-            rbTimeKnob    .setBounds (kx + sw,     ky,      sw, 104);
-            hvStopTimeKnob.setBounds (kx + 2 * sw, ky,      sw, 104);
-            toneKnob      .setBounds (kx,          ky + sh, sw, 104);
-            gateKnob      .setBounds (kx + sw,     ky + sh, sw, 104);
-            hvStopRiseKnob.setBounds (kx + 2 * sw, ky + sh, sw, 104);
+            const int kx = (int) trailSec.getX() + 12, ky = y1, sw = 62, sh = 112;
+            magicKnob     .setBounds (kx,          ky,      sw, 100);
+            rbTimeKnob    .setBounds (kx + sw,     ky,      sw, 100);
+            hvStopTimeKnob.setBounds (kx + 2 * sw, ky,      sw, 100);
+            toneKnob      .setBounds (kx,          ky + sh, sw, 100);
+            gateKnob      .setBounds (kx + sw,     ky + sh, sw, 100);
+            hvStopRiseKnob.setBounds (kx + 2 * sw, ky + sh, sw, 100);
             rbDivKnob.setBounds (rbTimeKnob.getBounds());
             const int gx = kx + 3 * sw + 14;
-            stepGrid.setBounds (gx, (int) hiveArea.getY() + 70, (int) trailSec.getRight() - 14 - gx, (int) hiveArea.getBottom() - 14 - ((int) hiveArea.getY() + 70));
+            stepGrid.setBounds (gx, y1, (int) trailSec.getRight() - 14 - gx, (int) hiveArea.getBottom() - 12 - y1);
         }
 
         rbRawToggle.setBounds ((int) mangleSec.getRight() - 12 - 60, (int) mangleSec.getY() + 36, 60, 22);
@@ -541,29 +545,28 @@ void MainPanel::resized()
         sectionRow (mangleSec, y2, { &rbDetuneKnob, &rbMixKnob }, 2);
     }
 
-    // SWARM: four large knobs
+    // SWARM: four knobs
     swarmPower.setBounds (powerFor (swarmArea));
     deepToggle.setBounds (pillFor (swarmArea, 0));
-    row ({ &swarmDepthKnob, &swarmRateKnob, &swarmMixKnob, &swarmRingKnob }, px0, px1, py + 50 + ((int) P.getHeight() - 50 - bigH) / 2, bigW, bigH, 180);
+    row ({ { &swarmDepthKnob, true }, { &swarmRateKnob, true }, { &swarmMixKnob, true }, { &swarmRingKnob, true } }, px0, px1, bodyMid);
 
-    // WINGS: depth and rate on the left, the step pattern across the rest
+    // WINGS: depth and rate on the left, the step pattern next to them
     flowPower.setBounds (powerFor (flowArea));
     syncToggle.setBounds ((int) flowArea.getRight() - 44 - 54,  (int) flowArea.getY() + 9, 54, 24);
     hardToggle.setBounds ((int) flowArea.getRight() - 44 - 112, (int) flowArea.getY() + 9, 54, 24);
     {
-        const int y0 = py + 50 + ((int) P.getHeight() - 50 - bigH) / 2;
-        flowAmountKnob.setBounds (px0, y0, bigW, bigH);
-        flowSpeedKnob.setBounds (px0 + bigW + 14, y0, bigW, bigH);
+        flowAmountKnob.setBounds (px0, bodyMid - bigH / 2, bigW, bigH);
+        flowSpeedKnob.setBounds (px0 + bigStep, bodyMid - bigH / 2, bigW, bigH);
         flowDivKnob.setBounds (flowSpeedKnob.getBounds());
         const int gx = flowSpeedKnob.getRight() + 28;
-        wingsGrid.setBounds (gx, py + 48, px1 - gx, (int) P.getBottom() - 16 - (py + 48));
+        wingsGrid.setBounds (gx, bodyTop, px1 - gx, bodyBottom - bodyTop);
     }
 
     // Footer: footswitches centred (LINK mini switches beside the octaves), meters at the sides
     {
         // scenes above the footswitches (full view: under the pages)
-        sceneBar.setBounds (16, mini ? 158 : 526, baseWidth - 32, 40);
-        const int fy = mini ? 210 : 578, fw = 92, fh = 118, spacing = 120;
+        sceneBar.setBounds (16, mini ? 178 : 476, baseWidth - 32, 40);
+        const int fy = mini ? 230 : 528, fw = 92, fh = 118, spacing = 120;
         const int total = spacing * 4 + fw;
         int x = (baseWidth - total) / 2;
         for (auto* f : { &oct1Switch, &oct2Switch, &magicSwitch, &stingSwitch, &bypassSwitch })

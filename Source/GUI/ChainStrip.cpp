@@ -4,7 +4,8 @@ using namespace Theme;
 
 namespace
 {
-    constexpr float kInW = 30.0f, kOutW = 38.0f, kGap = 18.0f, kSplitGap = 26.0f, kMergeGap = 46.0f;
+    constexpr float kInW = 26.0f, kOutW = 34.0f, kGap = 12.0f, kSplitGap = 22.0f, kMergeGap = 42.0f;
+    constexpr float kPoint = 0.24f;   // the tiles' hex points (a flatter capsule than a honeycomb cell: room for the names)
 }
 
 ChainStrip::ChainStrip (juce::AudioProcessorValueTreeState& s) : state (s)
@@ -146,7 +147,7 @@ juce::Rectangle<float> ChainStrip::ledRect (juce::Rectangle<float> tile) const n
 {
     const bool half = isHalf (tile, tileAreaHeight());
     const float s = half ? 9.0f : 10.0f;
-    return juce::Rectangle<float> (s, s - 1.0f).withCentre ({ tile.getX() + (half ? 14.0f : 15.0f), tile.getCentreY() });
+    return juce::Rectangle<float> (s, s - 1.0f).withCentre ({ tile.getX() + (half ? 14.0f : 16.0f), tile.getCentreY() });
 }
 
 Chain::Layout ChainStrip::displayLayout() const
@@ -343,7 +344,7 @@ void ChainStrip::paint (juce::Graphics& g)
     auto drawTile = [&] (int b, juce::Rectangle<float> r, bool floating)
     {
         const bool half = isHalf (r, bounds.getHeight());
-        const auto shape = hexCapsule (r);
+        const auto shape = hexCapsule (r, kPoint);
         const bool on = lit[(size_t) b];
         const bool hi = highlighted[(size_t) b];
         const bool hov = hover == b && ! dragging;
@@ -419,7 +420,7 @@ void ChainStrip::paint (juce::Graphics& g)
 
         // name (+ subtitle on full-height tiles)
         // eleven blocks share the strip: names squeeze rather than getting cut
-        auto text = r.withTrimmedLeft (half ? 21.0f : 23.0f).withTrimmedRight (half ? 7.0f : 7.0f);
+        auto text = r.withTrimmedLeft (half ? 21.0f : 25.0f).withTrimmedRight (r.getHeight() * kPoint * 0.5f + 2.0f);
         if (half)
         {
             g.setFont (displayFont (16.0f));
@@ -428,19 +429,19 @@ void ChainStrip::paint (juce::Graphics& g)
             g.drawFittedText (Chain::names[b], text.translated (0.0f, 1.0f).toNearestInt(), juce::Justification::centredLeft, 1, 0.5f);
             return;
         }
-        g.setFont (displayFont (19.0f));
-        const auto nameArea = text.withTrimmedBottom (text.getHeight() * 0.42f).translated (0.0f, 2.0f);
+        g.setFont (displayFont (22.0f));
+        const auto nameArea = text.withTrimmedBottom (text.getHeight() * 0.44f).translated (0.0f, 2.0f);
         if (dark) g.setColour (Colours::background);
         else if (on || hi) g.setGradientFill (honeyGradient (nameArea)); else g.setColour (Colours::textDim);
         g.drawFittedText (Chain::names[b], nameArea.toNearestInt(), juce::Justification::bottomLeft, 1, 0.55f);
-        g.setFont (font (9.5f, true));
+        g.setFont (font (11.0f, true));
         g.setColour (dark ? Colours::background.withAlpha (0.75f) : hi ? Colours::text.withAlpha (0.8f) : Colours::textFaint);
         g.drawFittedText (subtitles[(size_t) b].isNotEmpty() ? subtitles[(size_t) b] : juce::String (Chain::subtitles[b]),
                           text.withTrimmedTop (text.getHeight() * 0.58f).toNearestInt(), juce::Justification::topLeft, 1, 0.5f);
 
         // stomp wiring: VENOM purple, STING green, on the tile's top edge
         const int marks = stompMarks[(size_t) b];
-        float mx = r.getRight() - r.getHeight() * 0.42f * 0.5f - 7.0f;
+        float mx = r.getRight() - r.getHeight() * kPoint - 6.0f;
         for (int bit : { 1, 0 })
             if ((marks >> bit) & 1)
             {
@@ -464,9 +465,9 @@ void ChainStrip::paint (juce::Graphics& g)
         // where it will land, then the lifted tile
         const auto target = geo.rects[(size_t) pressed];
         g.setColour (Colours::accentBright.withAlpha (0.12f));
-        g.fillPath (hexCapsule (target));
+        g.fillPath (hexCapsule (target, kPoint));
         g.setColour (Colours::accentBright.withAlpha (0.7f));
-        g.strokePath (hexCapsule (target), juce::PathStrokeType (1.0f, juce::PathStrokeType::mitered, juce::PathStrokeType::butt));
+        g.strokePath (hexCapsule (target, kPoint), juce::PathStrokeType (1.0f, juce::PathStrokeType::mitered, juce::PathStrokeType::butt));
         drawTile (pressed, target.withPosition (dragPos - grabOffset), true);
 
         g.setFont (font (11.0f, true));

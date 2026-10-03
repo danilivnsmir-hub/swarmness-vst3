@@ -92,9 +92,9 @@ namespace Theme
     }
 
     /** Capsule with pointed (hexagonal) ends - used for pills and segmented selectors. */
-    inline juce::Path hexCapsule (juce::Rectangle<float> r)
+    inline juce::Path hexCapsule (juce::Rectangle<float> r, float pointRatio = 0.42f)
     {
-        const float t = r.getHeight() * 0.42f;
+        const float t = r.getHeight() * pointRatio;
         juce::Path p;
         p.startNewSubPath (r.getX() + t, r.getY());
         p.lineTo (r.getRight() - t, r.getY());
