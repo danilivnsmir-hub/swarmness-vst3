@@ -2909,7 +2909,7 @@ namespace
                    juce::String::formatted ("BASS / TREBLE / MID ranges: %.1f / %.1f / %.1f dB", bassUp, trebleUp, midUp));
         }
 
-        // The three channel amps (CLEAN = CHROME, CRUNCH = BRIT, LEAD = STEEL): bounded, level-matched
+        // The three channel amps (CLEAN = VELVET, CRUNCH = BRIT, LEAD = STEEL): bounded, level-matched
         double minDb = 1e9, maxDb = -1e9;
         for (int chn = 0; chn < 3; ++chn)
             for (float character : { AmpBlock::channelSide (chn) })

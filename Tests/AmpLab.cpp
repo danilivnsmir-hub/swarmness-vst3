@@ -9,7 +9,9 @@
 //   nam:<file.nam>
 //   amp:<channel 0..2>:<character 0..1>[:gain:bass:mid:treble:presence:depth:master]   (knobs 0..10)
 //   wasp:<drive>:<bright>:<attack>:<volume>                                             (knobs 0..10)
-//   any target can end in @<dB> = input gain in front of it
+//   cab:<type 0..3>:<mic 0..1>:<distance 0..1>   (one of our modelled cabinets)
+//   ir:<file.wav>                                (a cabinet impulse response, any rate)
+//   any target can end in @<dB> = input gain in front of it; targets chain with | (amp:1:0|ir:cab.wav)
 
 #include <JuceHeader.h>
 #include "DSP/AmpBlock.h"
@@ -32,7 +34,70 @@ constexpr double kRate = 48000.0;
 using Device = std::function<void (const float*, float*, int)>;
 using Factory = std::function<Device()>;
 
+Factory parseOne (juce::String t);
+
+/** a|b|c: the signal runs through a, then b, then c. */
 Factory parseTarget (juce::String t)
+{
+    if (! t.contains ("|"))
+        return parseOne (t);
+    std::vector<Factory> parts;
+    for (const auto& p : juce::StringArray::fromTokens (t, "|", ""))
+        parts.push_back (parseOne (p.trim()));
+    return [parts]() -> Device
+    {
+        std::vector<Device> devs;
+        for (const auto& p : parts) devs.push_back (p());
+        auto tmp = std::make_shared<std::vector<float>>();
+        return [devs, tmp] (const float* in, float* out, int n)
+        {
+            tmp->resize ((size_t) n);
+            const float* src = in;
+            for (const auto& d : devs)
+            {
+                d (src, out, n);
+                std::memcpy (tmp->data(), out, sizeof (float) * (size_t) n);
+                src = tmp->data();
+            }
+        };
+    };
+}
+
+/** A convolution with an IR (zero latency, like the CAB block). */
+Factory irFactory (juce::AudioBuffer<float> ir, double irRate)
+{
+    auto irPtr = std::make_shared<juce::AudioBuffer<float>> (std::move (ir));
+    return [irPtr, irRate]() -> Device
+    {
+        auto conv = std::make_shared<juce::dsp::Convolution>();
+        conv->prepare ({ kRate, 4096, 1 });
+        conv->loadImpulseResponse (juce::AudioBuffer<float> (*irPtr), irRate, juce::dsp::Convolution::Stereo::no,
+                                   juce::dsp::Convolution::Trim::no, juce::dsp::Convolution::Normalise::no);
+        // the engine loads in the background: wait for it, then flush its silence
+        std::vector<float> z (4096, 0.0f), o (4096);
+        for (int it = 0; it < 200; ++it)
+        {
+            float* p[1] { o.data() };
+            juce::dsp::AudioBlock<float> b (p, 1, 4096);
+            juce::dsp::ProcessContextReplacing<float> ctx (b);
+            std::memcpy (o.data(), z.data(), sizeof (float) * 4096);
+            conv->process (ctx);
+            if (conv->getCurrentIRSize() > 0 && it > 2) break;
+            juce::Thread::sleep (5);
+        }
+        conv->reset();
+        return [conv] (const float* in, float* out, int n)
+        {
+            std::memcpy (out, in, sizeof (float) * (size_t) n);
+            float* p[1] { out };
+            juce::dsp::AudioBlock<float> b (p, 1, (size_t) n);
+            juce::dsp::ProcessContextReplacing<float> ctx (b);
+            conv->process (ctx);
+        };
+    };
+}
+
+Factory parseOne (juce::String t)
 {
     float inGain = 1.0f;
     if (t.contains ("@"))
@@ -67,8 +132,28 @@ Factory parseTarget (juce::String t)
             return withGain ([m] (const float* in, float* out, int n) { m->process (in, out, n); });
         };
     }
+    if (kind == "ir")
+    {
+        juce::AudioFormatManager fm;
+        fm.registerBasicFormats();
+        std::unique_ptr<juce::AudioFormatReader> r (fm.createReaderFor (juce::File (rest)));
+        if (r == nullptr) { std::fprintf (stderr, "cannot read IR %s\n", rest.toRawUTF8()); std::exit (2); }
+        juce::AudioBuffer<float> ir (1, (int) r->lengthInSamples);
+        r->read (&ir, 0, ir.getNumSamples(), 0, true, false);
+        auto f = irFactory (std::move (ir), r->sampleRate);
+        return [f, withGain]() { return withGain (f()); };
+    }
     auto nums = juce::StringArray::fromTokens (rest, ":", "");
     auto num = [&nums] (int i, float def) { return i < nums.size() ? nums[i].getFloatValue() : def; };
+    if (kind == "cab")
+    {
+        auto ir = CabBlock::designIR ((int) num (0, 2), num (1, 0.3f), num (2, 0.2f), kRate);
+        CabBlock::levelIR (ir, kRate);
+        juce::AudioBuffer<float> mono (1, ir.getNumSamples());
+        mono.copyFrom (0, 0, ir, 0, 0, ir.getNumSamples());
+        auto f = irFactory (std::move (mono), kRate);
+        return [f, withGain]() { return withGain (f()); };
+    }
     if (kind == "amp")
     {
         AmpBlock::Settings s;
@@ -424,12 +509,12 @@ std::string fitFeatures (const Factory& f)
         fft.perform (in.data(), out.data(), false);
         return out;
     };
-    const std::vector<double> levels { -52.0, -42.0, -32.0, -22.0, -12.0 };
+    const std::vector<double> levels { -52.0, -42.0, -32.0, -22.0, -12.0, -2.0 };
     for (int k0 : { 75, 19 })   // 439.5 Hz, 111.3 Hz
     {
         std::vector<float> one ((size_t) N);
         for (int i = 0; i < N; ++i) one[(size_t) i] = (float) std::sin (juce::MathConstants<double>::twoPi * k0 * i / N);
-        std::vector<double> g, h2, h3, h5;
+        std::vector<double> g, h2, h3, h5, thd, hf;
         for (double lvl : levels)
         {
             auto x = repeat (one, 2, (float) juce::Decibels::decibelsToGain (lvl));
@@ -440,9 +525,20 @@ std::string fitFeatures (const Factory& f)
             h2.push_back (db (std::abs (Y[(size_t) (2 * k0)]) / a1));
             h3.push_back (db (std::abs (Y[(size_t) (3 * k0)]) / a1));
             h5.push_back (db (std::abs (Y[(size_t) (5 * k0)]) / a1));
+            // all harmonics, and the share of them above 3 kHz (the fizz)
+            double e = 0.0, hi = 0.0;
+            for (int n = 2; k0 * n < N / 2; ++n)
+            {
+                const double pw = std::norm (Y[(size_t) (k0 * n)]);
+                e += pw;
+                if (n * k0 * kRate / N > 3000.0) hi += pw;
+            }
+            thd.push_back (10.0 * std::log10 (e / (a1 * a1) + 1.0e-30));
+            hf.push_back (10.0 * std::log10 (hi / (e + 1.0e-30) + 1.0e-30));
         }
         const auto tag = juce::String (k0).toStdString();
         j.arr ("g" + tag, g); j.arr ("h2_" + tag, h2); j.arr ("h3_" + tag, h3); j.arr ("h5_" + tag, h5);
+        j.arr ("thd" + tag, thd); j.arr ("hf" + tag, hf);
     }
     {
         constexpr int mo = 14, M = 1 << mo;   // 16384: 2.93 Hz bins
@@ -507,6 +603,29 @@ std::string fitFeatures (const Factory& f)
         }
         j.arr ("recover", env);
     }
+    {
+        // the riff at a hard-playing level: crest factor and the envelope's range (a real amp compresses
+        // slowly - sag, bias - and keeps its peaks; a hard clipper flattens them)
+        static const auto riff = guitarRiff (3.0);
+        std::vector<float> x (riff);
+        const float g = (float) juce::Decibels::decibelsToGain (-4.0);   // peaks like a hot DI
+        for (auto& v : x) v *= g;
+        auto y = run (f, x);
+        const int w = (int) (0.01 * kRate);
+        std::vector<double> env;
+        double rms = 0.0, pk = 0.0;
+        for (size_t s0 = (size_t) kRate / 4; s0 + (size_t) w <= y.size(); s0 += (size_t) w)
+        {
+            double e = 0.0;
+            for (size_t i = s0; i < s0 + (size_t) w; ++i) { e += (double) y[i] * y[i]; pk = std::max (pk, (double) std::abs (y[i])); }
+            rms += e;
+            if (e / w > 1.0e-7) env.push_back (10.0 * std::log10 (e / w));
+        }
+        rms = std::sqrt (rms / (double) (y.size() - (size_t) kRate / 4));
+        std::sort (env.begin(), env.end());
+        j.num ("riff_crest", db (pk / rms));
+        j.num ("riff_range", env.empty() ? 0.0 : env[(size_t) (0.95 * (double) env.size())] - env[(size_t) (0.30 * (double) env.size())]);
+    }
     return j.done();
 }
 
@@ -540,7 +659,8 @@ void applyOverrides (int channel, int side, const juce::String& spec)
                 { "hard", &a.hard }, { "satKnee", &a.satKnee }, { "nfb", &a.nfb }, { "sag", &a.sag }, { "sagMs", &a.sagMs },
                 { "presenceHz", &a.presenceHz }, { "presenceMax", &a.presenceMax }, { "depthHz", &a.depthHz }, { "depthMax", &a.depthMax },
                 { "spkHz", &a.spkHz }, { "spkQ", &a.spkQ }, { "spkDb", &a.spkDb }, { "coilHz", &a.coilHz }, { "coilDb", &a.coilDb },
-                { "xfHp", &a.xfHp }, { "xfLp", &a.xfLp }, { "paRef", &a.paRef }, { "outDb", &a.outDb }, { "gridKg", &a.gridKg }, { "inDb", &a.inDb } };
+                { "xfHp", &a.xfHp }, { "xfLp", &a.xfLp }, { "paRef", &a.paRef }, { "outDb", &a.outDb }, { "gridKg", &a.gridKg }, { "inDb", &a.inDb },
+                { "paAsym", &a.paAsym } };
             if (auto it = m.find (key); it != m.end()) *it->second = v;
             else if (key == "gainPotAfter") a.gainPotAfter = (int) v;
             else { std::fprintf (stderr, "unknown key %s\n", key.toRawUTF8()); std::exit (2); }
@@ -569,7 +689,8 @@ std::string dumpReference (int channel, int side)
              { "hard", a.hard }, { "satKnee", a.satKnee }, { "nfb", a.nfb }, { "sag", a.sag }, { "sagMs", a.sagMs },
              { "presenceHz", a.presenceHz }, { "presenceMax", a.presenceMax }, { "depthHz", a.depthHz }, { "depthMax", a.depthMax },
              { "spkHz", a.spkHz }, { "spkQ", a.spkQ }, { "spkDb", a.spkDb }, { "coilHz", a.coilHz }, { "coilDb", a.coilDb },
-             { "xfHp", a.xfHp }, { "xfLp", a.xfLp }, { "paRef", a.paRef }, { "outDb", a.outDb }, { "gridKg", a.gridKg }, { "inDb", a.inDb } })
+             { "xfHp", a.xfHp }, { "xfLp", a.xfLp }, { "paRef", a.paRef }, { "outDb", a.outDb }, { "gridKg", a.gridKg }, { "inDb", a.inDb },
+             { "paAsym", a.paAsym } })
         j.num (k, v);
     return j.done();
 }
@@ -581,7 +702,7 @@ bool writeWav (const juce::File& file, const std::vector<float>& data)
     auto stream = file.createOutputStream();
     if (stream == nullptr) return false;
     std::unique_ptr<juce::OutputStream> os (stream.release());
-    auto writer = wav.createWriterFor (os, juce::AudioFormatWriterOptions().withSampleRate (kRate).withNumChannels (1).withBitsPerSample (24));
+    auto writer = wav.createWriterFor (os, juce::AudioFormatWriterOptions().withSampleRate (kRate).withNumChannels (1).withBitsPerSample (32));
     if (writer == nullptr) return false;
     const float* ch[1] { data.data() };
     return writer->writeFromFloatArrays (ch, 1, (int) data.size());
