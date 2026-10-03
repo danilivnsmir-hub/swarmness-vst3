@@ -13,8 +13,8 @@ class MainPanel : public juce::Component
 {
 public:
     static constexpr int baseWidth  = 1100;
-    static constexpr int baseHeight = 660;   // full view: the chain, ONE block's page, scenes, footswitches
-    static constexpr int miniHeight = 362;   // MINI: chain, scenes and footswitches for playing live
+    static constexpr int baseHeight = 636;   // full view: the chain, ONE block's page, scenes, footswitches
+    static constexpr int miniHeight = 338;   // MINI: chain, scenes and footswitches for playing live
 
     int getBaseHeight() const noexcept { return mini ? miniHeight : baseHeight; }
     bool isMini() const noexcept { return mini; }

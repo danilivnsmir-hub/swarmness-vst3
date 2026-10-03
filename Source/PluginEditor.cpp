@@ -442,8 +442,8 @@ void MainPanel::resized()
 
     // Chain strip (tiles + the PRE / RIG / POST band) and the page area below it: one block at a time.
     // The chain is the navigation, so it gets the room; a page keeps its knobs together in the middle.
-    chainStrip.setBounds (16, 70, baseWidth - 32, 84 + (int) ChainStrip::zoneBandHeight);
-    pageArea = { 16, 178, baseWidth - 32, 290 };
+    chainStrip.setBounds (16, 70, baseWidth - 32, 60 + (int) ChainStrip::zoneBandHeight);
+    pageArea = { 16, 154, baseWidth - 32, 290 };
     for (auto* c : std::initializer_list<juce::Component*> { &eqPage, &reverbPage, &wasp, &ampCab })
         c->setBounds (pageArea);
     for (auto& page : pages)
@@ -565,8 +565,8 @@ void MainPanel::resized()
     // Footer: footswitches centred (LINK mini switches beside the octaves), meters at the sides
     {
         // scenes above the footswitches (full view: under the pages)
-        sceneBar.setBounds (16, mini ? 178 : 476, baseWidth - 32, 40);
-        const int fy = mini ? 230 : 528, fw = 92, fh = 118, spacing = 120;
+        sceneBar.setBounds (16, mini ? 154 : 452, baseWidth - 32, 40);
+        const int fy = mini ? 206 : 504, fw = 92, fh = 118, spacing = 120;
         const int total = spacing * 4 + fw;
         int x = (baseWidth - total) / 2;
         for (auto* f : { &oct1Switch, &oct2Switch, &magicSwitch, &stingSwitch, &bypassSwitch })

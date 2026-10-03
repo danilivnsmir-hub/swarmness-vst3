@@ -5,7 +5,7 @@ using namespace Theme;
 namespace
 {
     constexpr float kInW = 26.0f, kOutW = 34.0f, kGap = 12.0f, kSplitGap = 22.0f, kMergeGap = 42.0f;
-    constexpr float kPoint = 0.24f;   // the tiles' hex points (a flatter capsule than a honeycomb cell: room for the names)
+    constexpr float kPoint = 0.3f;    // the tiles' hex points (a flatter capsule than a honeycomb cell: room for the names)
 }
 
 ChainStrip::ChainStrip (juce::AudioProcessorValueTreeState& s) : state (s)
@@ -429,15 +429,15 @@ void ChainStrip::paint (juce::Graphics& g)
             g.drawFittedText (Chain::names[b], text.translated (0.0f, 1.0f).toNearestInt(), juce::Justification::centredLeft, 1, 0.5f);
             return;
         }
-        g.setFont (displayFont (22.0f));
-        const auto nameArea = text.withTrimmedBottom (text.getHeight() * 0.44f).translated (0.0f, 2.0f);
+        g.setFont (displayFont (21.0f));
+        const auto nameArea = text.withTrimmedBottom (text.getHeight() * 0.42f).translated (0.0f, 2.0f);
         if (dark) g.setColour (Colours::background);
         else if (on || hi) g.setGradientFill (honeyGradient (nameArea)); else g.setColour (Colours::textDim);
         g.drawFittedText (Chain::names[b], nameArea.toNearestInt(), juce::Justification::bottomLeft, 1, 0.55f);
         g.setFont (font (11.0f, true));
         g.setColour (dark ? Colours::background.withAlpha (0.75f) : hi ? Colours::text.withAlpha (0.8f) : Colours::textFaint);
         g.drawFittedText (subtitles[(size_t) b].isNotEmpty() ? subtitles[(size_t) b] : juce::String (Chain::subtitles[b]),
-                          text.withTrimmedTop (text.getHeight() * 0.58f).toNearestInt(), juce::Justification::topLeft, 1, 0.5f);
+                          text.withTrimmedTop (text.getHeight() * 0.58f).withTrimmedTop (1.0f).toNearestInt(), juce::Justification::topLeft, 1, 0.5f);
 
         // stomp wiring: VENOM purple, STING green, on the tile's top edge
         const int marks = stompMarks[(size_t) b];
@@ -445,7 +445,7 @@ void ChainStrip::paint (juce::Graphics& g)
         for (int bit : { 1, 0 })
             if ((marks >> bit) & 1)
             {
-                const auto dot = juce::Rectangle<float> (7.0f, 7.0f).withCentre ({ mx, r.getY() + 7.0f });
+                const auto dot = juce::Rectangle<float> (7.0f, 7.0f).withCentre ({ mx, r.getY() + 1.0f });
                 g.setColour (Colours::background);
                 g.fillEllipse (dot.expanded (1.5f));
                 g.setColour (bit == 0 ? juce::Colour (0xffb46bff) : juce::Colour (0xff5fd36b));
