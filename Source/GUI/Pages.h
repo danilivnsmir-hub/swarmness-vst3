@@ -157,8 +157,6 @@ private:
     PowerButton power;
     SegmentedChoice typeSelector;
     PillToggle freezeToggle { "FREEZE" };
-    MoreToggle moreButton;
-    bool moreOpen() const;
     TailView tail;
     juce::TextButton loadButton { "LOAD IR" }, clearButton { "CLEAR" };
     Knob mixKnob { "MIX" }, decayKnob { "DECAY" }, sizeKnob { "SIZE" }, preDelayKnob { "PRE-DELAY" };

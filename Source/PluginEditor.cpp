@@ -1,4 +1,7 @@
 #include "PluginEditor.h"
+#if JucePlugin_Build_Standalone
+ #include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>
+#endif
 
 using namespace Theme;
 
@@ -65,7 +68,7 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     chainStrip.onBlockRightClick = [this] (int block)
     {
         if (auto* id = ChainStrip::powerParamFor (block))
-            showMidiMenu (id, &chainStrip);
+            showMidiMenu (id, &chainStrip, -1, block);
     };
     chainStrip.isBlockActive = [this] (int block)
     {
@@ -145,8 +148,10 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
                                                  "(HOLD steps = plain echoes, UP / DOWN = a pitch-shifting delay). DRONE / QUEEN still sound on top if turned up");
     attachButton (pitchPage, hvStopToggle, hvStop, "STOP: the repeats slow to a halt like a tape (pitch falls with them) and start again when released - "
                                                    "the STOP knob sets how long; wire VENOM or STING to it for a pedal. Right-click: MIDI learn");
-    hvStopTimeKnob.attach (state, hvStopTime, "STOP: how long the tape takes to halt (and to come back up to speed)");
+    hvStopTimeKnob.attach (state, hvStopTime, "FALL: how long the tape takes to halt after STOP goes down");
+    hvStopRiseKnob.attach (state, hvStopRise, "RISE: how long the tape takes to come back up to speed when STOP is released (the live repeats blend back in on the way)");
     pitchPage.addAndMakeVisible (hvStopTimeKnob);
+    pitchPage.addAndMakeVisible (hvStopRiseKnob);
     attachButton (pitchPage, rbSyncToggle, rbSync, "SYNC: lock the repeats to the host tempo - while the song plays, the STEPS follow the bar grid");
     // MANGLE
     hvMangleKnob.attach (state, hvMangle, "MANGLE: chaos for the voices and trails in one knob - first sour detuned voices (ANGER), "
@@ -221,8 +226,15 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     learnButton.setTooltip ("LEARN: play your loudest for 5 seconds - INPUT is set so the peaks land at -12 dBFS");
     learnButton.onClick = [this] { processor.startInputLearn(); };
     addAndMakeVisible (learnButton);
+    attachButton (*this, outFreezeToggle, outFreeze, "FREEZE: holds what is sounding right now as a pad (the whole output) while you play on top. "
+                                                     "Wire VENOM or STING to it for a pedal. Right-click: MIDI learn");
+    attachButton (*this, outStopToggle, outStop, "STOP: a tape stop of everything - the output slows to a halt (pitch falls) and spins back up when released "
+                                                 "(Output Stop Time, 1 s by default, is an automatable parameter). Right-click: MIDI learn");
     volumeKnob.attach (state, output, "Output level");
     addAndMakeVisible (volumeKnob);
+    inGateKnob.attach (state, inGate, "GATE: one noise gate for the whole chain, right after INPUT, keyed from your guitar (0 = off, then -75 .. -20 dBFS). "
+                                      "Opens on the pick a moment early, holds 30 ms, lets a note's tail fade instead of chopping it; shuts fast after a mute");
+    addAndMakeVisible (inGateKnob);
 
     // Footswitches
     oct1Switch  .setTooltip ("SHIFT A: transposes by the SHIFT A interval (hold, or click in LATCH mode) - works even while the plug-in is bypassed. Right-click: MIDI learn");
@@ -259,13 +271,6 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     tunerButton.setTooltip ("TUNE: open the tuner (MUTE silences the output while it is open)");
     tunerButton.onClick = [this] { tunerOverlay.open(); };
 
-    // MORE: the secondary controls of the busier blocks, hidden until asked for
-    setupDisclosure (moreSmoke, fxPage, Chain::smoke, { &fuzzScoopKnob, &fuzzGlareKnob, &fuzzGateKnob, &fuzzSagKnob, &fuzzCrushKnob },
-                     { fuzzScoop, fuzzGlare, fuzzGate, fuzzSag, fuzzCrush }, "MORE: SCOOP, GLARE, GATE, SAG and CRUSH");
-    setupDisclosure (moreHive, pitchPage, Chain::pitch, { &secondaryKnob, &trackingKnob, &hvStopTimeKnob, &toneKnob, &gateKnob, &rbDetuneKnob },
-                     { rbSecondary, rbTracking, hvStopTime, rbTone, trChop, rbDetune }, "MORE: QUEEN and TRACKING, the STOP time, TONE and GATE of the repeats, DETUNE");
-    setupDisclosure (moreShift, pitchPage, Chain::shift, { &panicKnob, &chaosKnob, &speedKnob, &shDetuneKnob },
-                     { panic, chaos, speed, shDetune }, "MORE: ANGER, FRENZY, BUZZ and DETUNE - the mangling of the shifter");
     Knob::alwaysShowValues = processor.getUiValues();
     presetBar.extraMenuItems = [this] (juce::PopupMenu& m)
     {
@@ -275,6 +280,33 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
             processor.setUiValues (Knob::alwaysShowValues);
             repaint();
         });
+       #if JucePlugin_Build_Standalone
+        if (processor.wrapperType == juce::AudioProcessor::wrapperType_Standalone)
+        {
+            m.addSeparator();
+            juce::PopupMenu source;
+            static const char* names[] { "Auto (follows the signal)", "Left channel", "Right channel", "Stereo" };
+            for (int i = 0; i < 4; ++i)
+                source.addItem (names[i], true, (int) processor.getInputSource() == i, [this, i] { processor.setInputSource ((SwarmnessAudioProcessor::InputSource) i); });
+            m.addSubMenu ("Input source", source);
+            m.addItem ("Audio settings (single channels)...", [this]
+            {
+                if (auto* holder = juce::StandalonePluginHolder::getInstance())
+                {
+                    auto* selector = new juce::AudioDeviceSelectorComponent (holder->deviceManager, 0, 2, 0, 2, true, false, false, false);
+                    selector->setSize (520, 600);
+                    juce::DialogWindow::LaunchOptions o;
+                    o.content.setOwned (selector);
+                    o.dialogTitle = "Audio settings - one channel at a time";
+                    o.dialogBackgroundColour = Colours::panel;
+                    o.escapeKeyTriggersCloseButton = true;
+                    o.useNativeTitleBar = true;
+                    o.resizable = false;
+                    o.launchAsync();
+                }
+            });
+        }
+       #endif
     };
     // the LINK switches left the footer: VENOM's wiring menu has SHIFT A / B (the parameters are unchanged)
     link1Switch.setVisible (false);
@@ -291,39 +323,6 @@ MainPanel::~MainPanel()
     processor.getLicence().onChange = nullptr;   // no more callbacks into a panel that is gone
 }
 
-void MainPanel::setupDisclosure (Disclosure& d, juce::Component& parent, int block, std::initializer_list<juce::Component*> hidden,
-                                 std::initializer_list<const char*> paramIds, const juce::String& tooltip)
-{
-    d.bit = block;
-    d.hidden.assign (hidden);
-    d.paramIds.assign (paramIds);
-    d.button.setTooltip (tooltip + ". A dot = something in there is set away from its default");
-    d.button.setToggleState (moreOpen (d), juce::dontSendNotification);
-    d.button.hasHiddenChanges = [this, &d]
-    {
-        for (auto* id : d.paramIds)
-            if (auto* p = state.getParameter (id))
-                if (std::abs (p->getValue() - p->getDefaultValue()) > 1.0e-3f)
-                    return true;
-        return false;
-    };
-    d.button.onClick = [this, &d]
-    {
-        const int bits = processor.getUiMore();
-        processor.setUiMore (d.button.getToggleState() ? bits | (1 << d.bit) : bits & ~(1 << d.bit));
-        applyDisclosure (d);
-        resized();
-    };
-    parent.addAndMakeVisible (d.button);
-    applyDisclosure (d);
-}
-
-void MainPanel::applyDisclosure (Disclosure& d)
-{
-    const bool open = moreOpen (d);
-    for (auto* c : d.hidden)
-        c->setVisible (open);
-}
 
 void MainPanel::attachButton (juce::Component& parent, juce::Button& b, const juce::String& id, const juce::String& tooltip)
 {
@@ -459,20 +458,9 @@ void MainPanel::resized()
         const auto& mangleSec = hiveSections[2];
 
         hivePower.setBounds (powerFor (hiveArea));
-        moreHive.button.setBounds (pillFor (hiveArea, 0));
 
-        if (moreOpen (moreHive))
-        {
-            row (voiceSec, y1, { &pitchKnob, &primaryKnob, &secondaryKnob });
-            row (voiceSec, y2, { &trackingKnob, nullptr, nullptr });
-        }
-        else
-        {
-            // collapsed: PITCH and DRONE large, centred
-            kw = 88;
-            row (voiceSec, y1 + 8, { &pitchKnob, &primaryKnob }, 2);
-            kw = 72;
-        }
+        row (voiceSec, y1, { &pitchKnob, &primaryKnob, &secondaryKnob });
+        row (voiceSec, y2, { &trackingKnob, nullptr, nullptr });
         // switches live in the section's heading row, right-aligned
         snapToggle.setBounds ((int) voiceSec.getRight() - 12 - 60, (int) voiceSec.getY() + 36, 60, 22);
 
@@ -482,36 +470,20 @@ void MainPanel::resized()
         // TRAILS: TRAILS and TIME large on the left (the small STOP / TONE / GATE under MORE), a tall step grid on the right
         {
             const int kx = (int) trailSec.getX() + 12, ky = (int) hiveArea.getY() + 62, sw = 60, sh = 96;
-            if (moreOpen (moreHive))
-            {
-                magicKnob     .setBounds (kx,          ky,      sw, sh);
-                rbTimeKnob    .setBounds (kx + sw,     ky,      sw, sh);
-                hvStopTimeKnob.setBounds (kx + 2 * sw, ky,      sw, sh);
-                toneKnob      .setBounds (kx,          ky + sh, sw, sh);
-                gateKnob      .setBounds (kx + sw,     ky + sh, sw, sh);
-            }
-            else
-            {
-                magicKnob .setBounds (kx + 2,  ky + 2, 88, 124);
-                rbTimeKnob.setBounds (kx + 92, ky + 2, 88, 124);
-            }
+            magicKnob     .setBounds (kx,          ky,      sw, sh);
+            rbTimeKnob    .setBounds (kx + sw,     ky,      sw, sh);
+            hvStopTimeKnob.setBounds (kx + 2 * sw, ky,      sw, sh);
+            toneKnob      .setBounds (kx,          ky + sh, sw, sh);
+            gateKnob      .setBounds (kx + sw,     ky + sh, sw, sh);
+            hvStopRiseKnob.setBounds (kx + 2 * sw, ky + sh, sw, sh);
             rbDivKnob.setBounds (rbTimeKnob.getBounds());
             const int gx = kx + 3 * sw + 12;
             stepGrid.setBounds (gx, (int) hiveArea.getY() + 64, (int) trailSec.getRight() - 14 - gx, (int) hiveArea.getBottom() - 12 - ((int) hiveArea.getY() + 64));
         }
 
         rbRawToggle.setBounds ((int) mangleSec.getRight() - 12 - 60, (int) mangleSec.getY() + 36, 60, 22);
-        if (moreOpen (moreHive))
-        {
-            row (mangleSec, y1, { &hvMangleKnob }, 1);
-            row (mangleSec, y2, { &rbDetuneKnob, &rbMixKnob }, 2);
-        }
-        else
-        {
-            kw = 88;
-            row (mangleSec, y1 + 8, { &hvMangleKnob, &rbMixKnob }, 2);
-            kw = 72;
-        }
+        row (mangleSec, y1, { &hvMangleKnob }, 1);
+        row (mangleSec, y2, { &rbDetuneKnob, &rbMixKnob }, 2);
     }
 
     // SHIFT: live pitch display on the left, nine knobs, STACK / SNAP / RAW in the title row
@@ -521,11 +493,8 @@ void MainPanel::resized()
         stackToggle .setBounds (pillFor (shiftArea, 2));
         shSnapToggle.setBounds (pillFor (shiftArea, 1));
         shRawToggle .setBounds (pillFor (shiftArea, 0));
-        moreShift.button.setBounds (pillFor (shiftArea, 3));
         const int x0 = (int) shiftArea.getX() + 282, x1 = (int) shiftArea.getRight() - 10;
-        const bool open = moreOpen (moreShift);
-        const std::vector<Knob*> knobs = open ? std::vector<Knob*> { &shiftAKnob, &shiftBKnob, &riseKnob, &fallKnob, &blendKnob, &panicKnob, &chaosKnob, &speedKnob, &shDetuneKnob }
-                                              : std::vector<Knob*> { &shiftAKnob, &shiftBKnob, &riseKnob, &fallKnob, &blendKnob };
+        const std::vector<Knob*> knobs { &shiftAKnob, &shiftBKnob, &riseKnob, &fallKnob, &blendKnob, &panicKnob, &chaosKnob, &speedKnob, &shDetuneKnob };
         const float step = (float) (x1 - x0) / (float) knobs.size();
         int k = 0;
         for (auto* knob : knobs)
@@ -579,8 +548,6 @@ void MainPanel::resized()
     // FUZZ
     fuzzPower.setBounds (powerFor (fuzzArea));
     fuzzVoiceSelector.setBounds ((int) fuzzArea.getRight() - 40 - 8 - 150, (int) fuzzArea.getY() + 10, 150, 22);
-    moreSmoke.button.setBounds (fuzzVoiceSelector.getX() - 12 - 60, (int) fuzzArea.getY() + 9, 60, 24);
-    if (moreOpen (moreSmoke))
     {
         // the primary three large, the rest small, all in one row
         const int kw = 88, sw = 64, kh = 124, sh = 96, y = (int) fuzzArea.getY() + 40 + ((int) fuzzArea.getHeight() - 40 - kh) / 2;
@@ -593,8 +560,6 @@ void MainPanel::resized()
             x += (primary ? kw : sw) + gap;
         }
     }
-    else
-        threeKnobs (fuzzArea.withTrimmedLeft (120.0f).withTrimmedRight (120.0f), { &fuzzKnob, &fuzzToneKnob, &fuzzBlendKnob });
 
     // FLOW
     flowPower.setBounds (powerFor (flowArea));
@@ -631,11 +596,14 @@ void MainPanel::resized()
         link2Switch.setBounds (oct2Switch.getRight() + 2, fy + 34, 38, 50);
         footswitchArea = juce::Rectangle<float> ((float) oct1Switch.getX() - 14.0f, (float) fy - 4.0f,
                                                  (float) (bypassSwitch.getRight() - oct1Switch.getX()) + 28.0f, (float) fh + 6.0f);
-        inputKnob .setBounds (16, fy - 8, 72, 104);
-        inMeter   .setBounds (96, fy + 48, 140, 26);
-        learnButton.setBounds (96, fy + 80, 64, 18);
+        inputKnob .setBounds (14, fy - 6, 62, 100);
+        inGateKnob.setBounds (80, fy - 6, 62, 100);
+        inMeter   .setBounds (150, fy + 48, 90, 26);
+        learnButton.setBounds (150, fy + 80, 64, 18);
         volumeKnob.setBounds (baseWidth - 16 - 72, fy - 8, 72, 104);
         outMeter  .setBounds (baseWidth - 16 - 72 - 8 - 140, fy + 48, 140, 26);
+        outFreezeToggle.setBounds (outMeter.getX(), fy + 80, 66, 18);
+        outStopToggle  .setBounds (outMeter.getX() + 74, fy + 80, 66, 18);
     }
 
     infoOverlay.setBounds (getLocalBounds());
@@ -809,6 +777,7 @@ void MainPanel::tick()
     auto& meters = processor.getMeters();
     inMeter .update (meters.input[0].exchange (0.0f),  meters.input[1].exchange (0.0f));
     outMeter.update (meters.output[0].exchange (0.0f), meters.output[1].exchange (0.0f));
+    outMeter.setLimiting (meters.limiterGr.exchange (0.0f));
 
     const bool noiseOn = meters.noiseEngaged.load();
 
@@ -857,8 +826,6 @@ void MainPanel::tick()
         learnMarker.setVisible (false);
     }
 
-    for (auto* d : { &moreSmoke, &moreHive, &moreShift })
-        d->button.repaint();
     learnButton.setButtonText (processor.isInputLearning() ? "PLAY..." : "LEARN");
     const bool synced = paramOn (ParamIDs::flowSync);
     flowSpeedKnob.setVisible (! synced);
@@ -877,7 +844,7 @@ void MainPanel::tick()
                         &hvMangleKnob, &rbDetuneKnob, &rbMixKnob, &rbRawToggle }, ! states[1]);
     // STEPS / TIME / TONE / GATE only matter once there are repeats: TRAILS up (or VENOM held)
     const bool trailsAudible = states[1] && (state.getRawParameterValue (ParamIDs::rbMagic)->load() > 0.5f || venom || sting);
-    setSectionDimmed ({ &rbSyncToggle, &trDryToggle, &hvStopToggle, &hvStopTimeKnob, &rbTimeKnob, &rbDivKnob, &toneKnob, &gateKnob, &stepGrid }, ! trailsAudible);
+    setSectionDimmed ({ &rbSyncToggle, &trDryToggle, &hvStopToggle, &hvStopTimeKnob, &hvStopRiseKnob, &rbTimeKnob, &rbDivKnob, &toneKnob, &gateKnob, &stepGrid }, ! trailsAudible);
     stepGrid.refresh (trailsAudible ? meters.trailStep.load() : -1);
     setSectionDimmed ({ &deepToggle, &swarmDepthKnob, &swarmRateKnob, &swarmMixKnob, &swarmRingKnob }, ! states[2]);
     setSectionDimmed ({ &fuzzVoiceSelector, &fuzzKnob, &fuzzToneKnob, &fuzzScoopKnob,
@@ -958,7 +925,7 @@ juce::Component* MainPanel::findLearnable (const juce::String& paramID)
     return search (*this);
 }
 
-void MainPanel::showMidiMenu (const juce::String& paramID, juce::Component* target, int value)
+void MainPanel::showMidiMenu (const juce::String& paramID, juce::Component* target, int value, int block)
 {
     auto* param = state.getParameter (paramID);
     if (param == nullptr)
@@ -976,6 +943,47 @@ void MainPanel::showMidiMenu (const juce::String& paramID, juce::Component* targ
                       [&proc, paramID, value] { proc.startMidiLearn (paramID, value); });
     menu.addItem ("Clear MIDI", bound.isNotEmpty(), false, [&proc, paramID, value] { proc.clearMidiBindings (paramID, value); });
     menu.addSeparator();
+    if (block >= 0)
+    {
+        // a block's settings travel through the clipboard: to another preset, scene or plug-in instance
+        const juce::String name (Chain::names[block]);
+        auto& pm = proc.getPresetManager();
+        menu.addItem ("Copy " + name + " settings", [&pm, block] { juce::SystemClipboard::copyTextToClipboard (pm.copyBlock (block)); });
+        const auto clip = juce::SystemClipboard::getTextFromClipboard();
+        menu.addItem ("Paste " + name + " settings", PresetManager::clipboardHoldsBlock (clip, block), false,
+                      [&pm, block, clip] { pm.pasteBlock (block, clip); });
+        // block presets: the block as set in any factory preset, or saved by the user
+        juce::PopupMenu fromFactory;
+        for (const auto& src : pm.blockPresetSources (block))
+            fromFactory.addItem (src, [&pm, block, src] { pm.applyBlockFromPreset (block, src); });
+        menu.addSubMenu (name + " from a factory preset", fromFactory);
+        juce::PopupMenu user;
+        for (const auto& bp : pm.getUserBlockPresets (block))
+        {
+            juce::PopupMenu one;
+            one.addItem ("Load", [&pm, block, bp] { pm.loadUserBlockPreset (block, bp); });
+            one.addItem ("Delete", [&pm, block, bp] { pm.deleteUserBlockPreset (block, bp); });
+            user.addSubMenu (bp, one);
+        }
+        if (user.getNumItems() > 0)
+            user.addSeparator();
+        juce::Component::SafePointer<MainPanel> safe (this);
+        user.addItem ("Save " + name + " settings as...", [safe, block, name]
+        {
+            if (safe == nullptr) return;
+            auto* w = new juce::AlertWindow ("Save " + name + " settings", "A name for these " + name + " settings:", juce::MessageBoxIconType::NoIcon);
+            w->addTextEditor ("name", "", "Name");
+            w->addButton ("Save", 1, juce::KeyPress (juce::KeyPress::returnKey));
+            w->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+            w->enterModalState (true, juce::ModalCallbackFunction::create ([safe, block, w] (int r)
+            {
+                if (safe != nullptr && r == 1)
+                    safe->processor.getPresetManager().saveUserBlockPreset (block, w->getTextEditorContents ("name"));
+            }), true);
+        });
+        menu.addSubMenu (name + " presets of yours", user);
+        menu.addSeparator();
+    }
     if (isScene)
     {
         auto& pm = proc.getPresetManager();
@@ -991,6 +999,21 @@ void MainPanel::showMidiMenu (const juce::String& paramID, juce::Component* targ
         const bool isFootswitch = isFootswitchParameter (paramID);
         if (paramID == ParamIDs::magicHold || paramID == ParamIDs::stingHold)
             addStompWiring (menu, paramID == ParamIDs::magicHold);
+        if (paramID == ParamIDs::outStop)
+        {
+            // the output tape stop's times (also automatable parameters)
+            for (auto [id, title] : { std::pair { ParamIDs::outStopTime, "Fall - time to a halt" }, std::pair { ParamIDs::outStopRise, "Rise - time back up" } })
+                if (auto* p = state.getParameter (id))
+                {
+                    juce::PopupMenu times;
+                    const float now = p->convertFrom0to1 (p->getValue());
+                    for (float t : { 0.2f, 0.4f, 0.7f, 1.0f, 1.5f, 2.5f })
+                        times.addItem (juce::String (t, 1) + " s", true, std::abs (now - t) < 0.05f,
+                                       [p, t] { p->beginChangeGesture(); p->setValueNotifyingHost (p->convertTo0to1 (t)); p->endChangeGesture(); });
+                    menu.addSubMenu (juce::String (title) + "  (" + juce::String (now, 1) + " s)", times);
+                }
+            menu.addSeparator();
+        }
         menu.addItem (isFootswitch ? "Footswitch: follows MOMENTARY (held = on) / LATCH (press = on / off)"
                       : isSwitch   ? "Switch: every press toggles it - one pedal can drive several switches"
                       : isChoice   ? "Selector: every press steps to the next option"
@@ -1031,6 +1054,8 @@ void MainPanel::addStompWiring (juce::PopupMenu& menu, bool venom)
         choiceItem (venom ? venomBlock[b] : stingBlock[b], juce::String (Chain::names[b]) + (b == Chain::pitch ? " (+ self-oscillation)" : ""));
     choiceItem (venom ? venomFreeze : stingFreeze, "CRYPT FREEZE");
     choiceItem (venom ? venomStop : stingStop, "HIVE STOP (tape stop)");
+    choiceItem (venom ? venomOutFreeze : stingOutFreeze, "OUTPUT FREEZE (the whole signal)");
+    choiceItem (venom ? venomOutStop : stingOutStop, "OUTPUT STOP (tape stop of everything)");
     menu.addSeparator();
 }
 

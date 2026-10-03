@@ -377,6 +377,8 @@ private:
     static float diodeLaw (float v, float k) noexcept
     {
         const float a = std::abs (k * v);
+        if (a < 0.02f)
+            return v;   // asinh (a) = a - a^3 / 6 + ...: linear here (fastLn's ~3e-4 error floor would turn a -160 dBFS floor into -80 dBFS of grit)
         const float y = fastLn (a + std::sqrt (a * a + 1.0f)) / k;   // asinh
         return v < 0.0f ? -y : y;
     }

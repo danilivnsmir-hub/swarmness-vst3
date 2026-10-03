@@ -413,6 +413,12 @@ EqPage::EqPage (SwarmnessAudioProcessor& p)
     : processor (p), state (p.getAPVTS()),
       combGraph (p.getAPVTS(), 13.0f), carveGraph (p.getAPVTS(), 19.0f)
 {
+    // an EQ is read by its numbers: these knobs always show their values
+    for (auto* k : { &lowCutKnob, &highCutKnob, &lowFreqKnob, &lowGainKnob, &highFreqKnob, &highGainKnob })
+        k->setAlwaysShowValue (true);
+    for (auto* arr : { &bellFreqKnobs, &bellGainKnobs, &bellQKnobs })
+        for (auto& k : *arr)
+            k.setAlwaysShowValue (true);
     using namespace ParamIDs;
     setBufferedToImage (true);
 
@@ -769,23 +775,6 @@ ReverbPage::ReverbPage (SwarmnessAudioProcessor& p)
     duckKnob    .attach (state, revDuck,     "DUCK: the reverb dips while you play and blooms in the gaps - big space without the mud");
     for (auto* k : { &mixKnob, &decayKnob, &sizeKnob, &preDelayKnob, &toneKnob, &lowCutKnob, &modKnob, &duckKnob })
         addAndMakeVisible (k);
-    moreButton.setTooltip ("MORE: SIZE, PRE-DELAY, LOW CUT, MOD and DUCK. A dot = something in there is set away from its default");
-    moreButton.setToggleState (moreOpen(), juce::dontSendNotification);
-    moreButton.hasHiddenChanges = [this]
-    {
-        for (auto* id : { revSize, revPreDelay, revLowCut, revMod, revDuck })
-            if (auto* p = state.getParameter (id))
-                if (std::abs (p->getValue() - p->getDefaultValue()) > 1.0e-3f)
-                    return true;
-        return false;
-    };
-    moreButton.onClick = [this]
-    {
-        const int bits = processor.getUiMore();
-        processor.setUiMore (moreButton.getToggleState() ? bits | (1 << Chain::crypt) : bits & ~(1 << Chain::crypt));
-        resized();
-    };
-    addAndMakeVisible (moreButton);
 
     loadButton.setTooltip ("Load an impulse response (WAV / AIFF / FLAC, up to 12 s). Or drop a file on this page");
     loadButton.onClick = [this] { chooseFile(); };
@@ -801,20 +790,15 @@ void ReverbPage::resized()
     power.setBounds ((int) panelArea.getRight() - 40, 8, 26, 26);
     typeSelector.setBounds ((int) panelArea.getRight() - 52 - 400, 10, 400, 24);
     freezeToggle.setBounds (typeSelector.getX() - 12 - 76, 10, 76, 24);
-    moreButton.setBounds (freezeToggle.getX() - 12 - 60, 10, 60, 24);
 
     tail.setBounds (16, 46, 700, 244);
     irArea = { 728.0f, 46.0f, panelArea.getWidth() - 744.0f, 244.0f };
     loadButton .setBounds ((int) irArea.getX() + 16, (int) irArea.getBottom() - 46, 150, 30);
     clearButton.setBounds (loadButton.getRight() + 10, loadButton.getY(), 90, 30);
 
-    // MIX, DECAY and TONE large; SIZE, PRE-DELAY, LOW CUT, MOD, DUCK small and under MORE
-    const bool open = moreOpen();
-    const std::vector<Knob*> shown = open ? std::vector<Knob*> { &mixKnob, &decayKnob, &toneKnob, &sizeKnob, &preDelayKnob, &lowCutKnob, &modKnob, &duckKnob }
-                                          : std::vector<Knob*> { &mixKnob, &decayKnob, &toneKnob };
-    for (auto* k : { &sizeKnob, &preDelayKnob, &lowCutKnob, &modKnob, &duckKnob })
-        k->setVisible (open);
-    const float left = open ? 16.0f : 200.0f, width = panelArea.getWidth() - 2.0f * left;
+    // MIX, DECAY and TONE large; SIZE, PRE-DELAY, LOW CUT, MOD, DUCK small
+    const std::vector<Knob*> shown { &mixKnob, &decayKnob, &toneKnob, &sizeKnob, &preDelayKnob, &lowCutKnob, &modKnob, &duckKnob };
+    const float left = 16.0f, width = panelArea.getWidth() - 2.0f * left;
     const float slotW = width / (float) shown.size();
     int i = 0;
     for (auto* k : shown)
@@ -826,7 +810,6 @@ void ReverbPage::resized()
     }
 }
 
-bool ReverbPage::moreOpen() const { return (processor.getUiMore() & (1 << Chain::crypt)) != 0; }
 
 void ReverbPage::paint (juce::Graphics& g)
 {
@@ -887,7 +870,6 @@ void ReverbPage::tick()
     for (auto* k : { &decayKnob, &sizeKnob, &modKnob })
         k->setAlpha (irMode ? 0.35f : 1.0f);
     freezeToggle.setAlpha (irMode ? 0.35f : (on ? 1.0f : 0.6f));
-    moreButton.repaint();
     for (auto* k : { &mixKnob, &preDelayKnob, &toneKnob, &lowCutKnob, &duckKnob })
         k->setAlpha (on ? 1.0f : 0.6f);
     clearButton.setEnabled (irDescription.isNotEmpty());
@@ -967,7 +949,7 @@ AmpCabSection::AmpCabSection (SwarmnessAudioProcessor& p)
     attachButton (ampPower, ParamIDs::ampOn, "AMP on / off");
     attachButton (cabPower, ParamIDs::cabOn, "CAB on / off");
 
-    channelSelector.setTooltip ("CLEAN = CHROME (crystal clean), CRUNCH = BRIT (barking crunch), LEAD = STEEL (tight high gain). "
+    channelSelector.setTooltip ("CLEAN = VELVET (a tube clean fitted to a real amp: warm, a little sag, breaks up from GAIN 5), CRUNCH = BRIT (barking crunch), LEAD = STEEL (tight high gain). "
                                 "NAM: a Neural Amp Modeler capture (.nam) - load one below, or browse captures on TONE3000");
     cabSelector.setTooltip ("Modelled cabinets: 1x12 / 2x12 open-back combos, 4x12 BRIT (warm, mid-forward) and 4x12 MOD (tight, aggressive upper mids). "
                             "IR = your cabinet impulse response");

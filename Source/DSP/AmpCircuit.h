@@ -74,6 +74,7 @@ namespace ampsim
         float outDb = 0.0f;
         float gridKg = 3.0e-4f;                // preamp grid conduction (A / V^1.5): how hard the grids clamp
         float inDb = 0.0f;                     // input sensitivity (the amp's gain ahead of the first stage)
+        float paAsym = 0.0f;                   // phase-inverter imbalance (fraction of its headroom): even harmonics when the power amp is cranked
     };
 
     /** Development hook (the amp lab fits circuit values to measurements): edits a reference as it is built. */
@@ -126,14 +127,20 @@ namespace ampsim
                 a.presenceHz = 3500.0f; a.presenceMax = 0.5f; a.depthHz = 100.0f; a.depthMax = 0.5f;
                 a.spkHz = 110.0f; a.spkQ = 1.8f; a.spkDb = 8.0f; a.coilHz = 1800.0f; a.coilDb = 5.0f;
                 a.xfHp = 45.0f; a.xfLp = 13000.0f; a.paRef = 2.35f; a.outDb = -3.0f;
-                // tone fitted to captures of a real tube clean amp (SwarmnessAmpLab)
-                a.R1 = 2.471e4f; a.R2 = 1.146e6f; a.R3 = 8921.0f; a.R4 = 1.186e5f; a.C1 = 9.592e-10f; a.C2 = 5.393e-8f;
-                a.C3 = 3.305e-8f; a.voiceHz = 1319.0f; a.voiceDb = -5.06f; a.voiceQ = 0.5462f; a.brightDb = 4.549f;
-                a.brightHz = 3617.0f; a.spkHz = 68.5f; a.spkQ = 0.8886f; a.spkDb = 8.085f; a.coilHz = 2538.0f;
-                a.coilDb = 12.48f; a.xfHp = 68.54f; a.xfLp = 1.272e4f;
-                a.st[0].cathDb = -8.617f; a.st[0].cathHz = 195.1f; a.st[0].lpHz = 1.28e4f;
-                a.st[1].cathDb = -10.27f; a.st[1].cathHz = 1469.0f; a.st[1].lpHz = 1.179e4f;
-                a.outDb += 8.3f;   // level-matched to the other models at noon
+                // fitted to captures of real tube clean amps (SwarmnessAmpLab): the tone to clean captures, then the
+                // behaviour - harmonics vs level, compression, crest, recovery - to a cranked tube clean amp at
+                // GAIN 8, with the tone held: a warm second harmonic as soon as it is hit, a slow sag that keeps
+                // the pick attack, breakup that grows with GAIN instead of switching on
+                a.gridKg = 6.772e-5f; a.inDb = -0.551f; a.paRef = 1.946f; a.bias = 0.7587f;
+                a.satKnee = 2.209f; a.nfb = 3.529f; a.piMax = 2.816f; a.sag = 0.5897f; a.sagMs = 149.8f;
+                a.voiceHz = 708.7f; a.voiceDb = -4.387f; a.voiceQ = 1.347f; a.brightDb = 4.647f;
+                a.brightHz = 3288.0f; a.presenceHz = 1524.0f; a.depthHz = 63.92f; a.spkHz = 76.55f; a.spkQ = 0.5621f;
+                a.spkDb = 14.0f; a.coilHz = 4251.0f; a.coilDb = 10.0f; a.xfHp = 32.58f; a.xfLp = 1.587e4f;
+                a.R1 = 1.338e4f; a.R2 = 1.434e6f; a.R3 = 8592.0f; a.R4 = 6.179e5f; a.C1 = 6.398e-10f;
+                a.C2 = 4.363e-8f; a.C3 = 2.253e-8f;
+                a.st[0].Rk = 505.0f; a.st[0].fb = 0.5839f; a.st[0].Rs = 2.736e5f; a.st[0].cathDb = -4.819f; a.st[0].cathHz = 77.42f; a.st[0].lpHz = 1.992e4f; a.st[0].div = 0.9987f;
+                a.st[1].Rk = 1313.0f; a.st[1].fb = 0.0002097f; a.st[1].Rs = 1.01e4f; a.st[1].cathDb = -14.72f; a.st[1].cathHz = 109.3f; a.st[1].lpHz = 1.769e4f; a.st[1].div = 0.9584f;
+                a.outDb += -3.2f;   // level-matched to the other models at noon
                 break;
             }
             case 2: // BRIT - British crunch: hot V1a, cold-biased V1b, V2a, an extra stage, cathode follower, EL34s
@@ -152,18 +159,23 @@ namespace ampsim
                 a.presenceHz = 2500.0f; a.presenceMax = 0.85f; a.depthHz = 100.0f; a.depthMax = 0.6f;
                 a.spkHz = 90.0f; a.spkQ = 1.5f; a.spkDb = 8.0f; a.coilHz = 2000.0f; a.coilDb = 6.0f;
                 a.xfHp = 40.0f; a.xfLp = 12000.0f; a.paRef = 27.80f; a.outDb = 4.0f;
-                // fitted on a real DI, through one IR, to the average of three captures of real crunch amps (spectrum,
-                // envelope, attack), with their sine / response features as a regulariser
-                a.gridKg = 9.261e-6f; a.inDb = 30.0f; a.bias = 0.3463f; a.satKnee = 2.494f; a.nfb = 6.036f; a.piMax = 1.157f;
-                a.sag = 0.2272f; a.R1 = 2.939e4f; a.R2 = 1.978e6f; a.R3 = 1.95e4f; a.R4 = 1.16e5f; a.C1 = 3.557e-10f;
-                a.C2 = 1.231e-8f; a.C3 = 2.648e-8f; a.voiceHz = 737.6f; a.voiceDb = -2.177f; a.voiceQ = 0.7432f;
-                a.brightDb = 8.558f; a.brightHz = 3052.0f; a.presenceHz = 1717.0f; a.depthHz = 92.07f; a.spkHz = 106.8f;
-                a.spkQ = 1.764f; a.spkDb = 5.749f; a.coilHz = 4044.0f; a.coilDb = 3.708f; a.xfHp = 35.25f; a.xfLp = 1.29e4f;
-                a.st[0].Rk = 1840.0f; a.st[0].fb = 0.2339f; a.st[0].Rs = 3.52e4f; a.st[0].cathDb = -13.08f; a.st[0].cathHz = 536.5f; a.st[0].lpHz = 1.136e4f; a.st[0].div = 0.1162f;
-                a.st[1].Rk = 9354.0f; a.st[1].fb = 0.6738f; a.st[1].Rs = 2.36e4f; a.st[1].cathDb = -2.33f; a.st[1].cathHz = 35.2f; a.st[1].lpHz = 1.399e4f; a.st[1].C = 9.738e-9f; a.st[1].div = 0.4817f;
-                a.st[2].Rk = 977.4f; a.st[2].fb = 0.6186f; a.st[2].Rs = 3.152e5f; a.st[2].cathDb = -0.3413f; a.st[2].cathHz = 994.1f; a.st[2].lpHz = 1.034e4f; a.st[2].C = 6.633e-8f; a.st[2].div = 0.02631f;
-                a.st[3].Rk = 2792.0f; a.st[3].fb = 0.4607f; a.st[3].Rs = 8.14e4f; a.st[3].cathDb = -8.781f; a.st[3].cathHz = 69.13f; a.st[3].lpHz = 3323.0f; a.st[3].C = 1.469e-9f;
-                a.outDb += 7.6f;   // level-matched to the other models at noon
+                // fitted (SwarmnessAmpLab) to a direct capture of a real cranked British non-master amp - no cabinet
+                // on either side: harmonics vs level (second-harmonic warmth at playing levels, not a symmetric
+                // clip), the knee of its compression, intermodulation, fizz, crest factor, recovery and the
+                // small-signal tone; at noon the user's DI comes out within ~2 dB of the capture everywhere
+                a.R1 = 1e5f; a.gridKg = 1.024e-5f; a.inDb = 36.88f; a.paAsym = 0.3434f; a.paRef = 2.5f;   // (the fit left the power amp linear; 2.5 lets it squash from GAIN 7 up, like the real one)
+                a.bias = 0.5019f; a.satKnee = 1.883f; a.nfb = 1.119f; a.piMax = 1.594f; a.sag = 0.2089f;
+                a.sagMs = 75.51f; a.voiceHz = 1820.0f; a.voiceDb = -4.482f; a.voiceQ = 0.9199f; a.brightDb = 2.129f;
+                a.brightHz = 2254.0f; a.presenceHz = 4460.0f; a.depthHz = 87.22f; a.spkHz = 105.4f; a.spkQ = 0.6176f;
+                a.spkDb = 3.178f; a.coilHz = 5187.0f; a.coilDb = 2.694f; a.xfHp = 99.33f; a.xfLp = 4687.0f;
+                a.R2 = 1.76e6f; a.R3 = 1.083e4f; a.R4 = 5.999e4f; a.C1 = 2.492e-10f; a.C2 = 1.488e-8f;
+                a.C3 = 4.501e-8f;
+                a.st[0].Rk = 3030.0f; a.st[0].fb = 0.73f; a.st[0].Rs = 1.021e4f; a.st[0].cathDb = -13.42f; a.st[0].cathHz = 1391.0f; a.st[0].lpHz = 1.021e4f; a.st[0].div = 0.1832f;
+                a.st[1].Rk = 1.177e4f; a.st[1].fb = 0.0001748f; a.st[1].Rs = 3.721e4f; a.st[1].cathDb = -2.99f; a.st[1].cathHz = 425.7f; a.st[1].lpHz = 7353.0f; a.st[1].C = 1.347e-8f; a.st[1].div = 0.02096f;
+                a.st[2].Rk = 9298.0f; a.st[2].fb = 0.9744f; a.st[2].Rs = 1.568e4f; a.st[2].cathDb = -3.031f; a.st[2].cathHz = 38.56f; a.st[2].lpHz = 4977.0f; a.st[2].C = 3.35e-8f; a.st[2].div = 0.05397f;
+                a.st[3].Rk = 6019.0f; a.st[3].fb = 0.03207f; a.st[3].Rs = 6.789e4f; a.st[3].cathDb = -12.65f; a.st[3].cathHz = 30.0f; a.st[3].lpHz = 1.539e4f; a.st[3].C = 9.975e-8f;
+
+                a.outDb += 2.4f;   // level-matched to the other models at noon
                 break;
             }
             case 3: // thick fuzz-crunch: four hot stages, big coupling caps, dark, low feedback

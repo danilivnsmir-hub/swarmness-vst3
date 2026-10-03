@@ -51,7 +51,7 @@ private:
 
     // MIDI learn: right-click any control (or a chain tile) for its menu
     void mouseDown (const juce::MouseEvent&) override;
-    void showMidiMenu (const juce::String& paramID, juce::Component* target, int value = -1);
+    void showMidiMenu (const juce::String& paramID, juce::Component* target, int value = -1, int block = -1);
     void addStompWiring (juce::PopupMenu&, bool venom);
     juce::Component* findLearnable (const juce::String& paramID);
     struct LearnMarker : juce::Component
@@ -63,20 +63,6 @@ private:
 
     SwarmnessAudioProcessor& processor;
     APVTS& state;
-
-    /** A block's MORE pill and the secondary controls it reveals (bit = Chain::Block, saved with the session). */
-    struct Disclosure
-    {
-        MoreToggle button;
-        std::vector<juce::Component*> hidden;
-        std::vector<const char*> paramIds;
-        int bit = 0;
-    };
-    Disclosure moreSmoke, moreHive, moreShift;
-    void setupDisclosure (Disclosure&, juce::Component& parent, int block, std::initializer_list<juce::Component*> hidden,
-                          std::initializer_list<const char*> paramIds, const juce::String& tooltip);
-    void applyDisclosure (Disclosure&);
-    bool moreOpen (const Disclosure& d) const { return (processor.getUiMore() & (1 << d.bit)) != 0; }
 
     juce::Image logo, emblem;
     Backdrop backdrop;
@@ -109,7 +95,7 @@ private:
     PillToggle snapToggle { "SNAP" };
     Knob pitchKnob { "PITCH", true }, primaryKnob { "DRONE" }, secondaryKnob { "QUEEN" }, trackingKnob { "TRACKING" };
     PillToggle rbSyncToggle { "SYNC" }, trDryToggle { "DRY" }, hvStopToggle { "STOP" };
-    Knob magicKnob { "TRAILS" }, rbTimeKnob { "TIME" }, rbDivKnob { "DIV" }, toneKnob { "TONE" }, gateKnob { "GATE" }, hvStopTimeKnob { "STOP" };
+    Knob magicKnob { "TRAILS" }, rbTimeKnob { "TIME" }, rbDivKnob { "DIV" }, toneKnob { "TONE" }, gateKnob { "GATE" }, hvStopTimeKnob { "FALL" }, hvStopRiseKnob { "RISE" };
     StepGrid stepGrid;
     PillToggle rbRawToggle { "RAW" };
     Knob hvMangleKnob { "MANGLE" }, rbDetuneKnob { "DETUNE", true }, rbMixKnob { "MIX" };
@@ -138,7 +124,7 @@ private:
     StepGrid wingsGrid;
 
     // Levels (footer, next to the meters)
-    Knob inputKnob { "INPUT", true }, volumeKnob { "VOLUME", true };
+    Knob inputKnob { "INPUT", true }, volumeKnob { "VOLUME", true }, inGateKnob { "GATE" };
 
     // Footswitches
     Footswitch oct1Switch, oct2Switch, magicSwitch, stingSwitch, bypassSwitch;
@@ -146,6 +132,7 @@ private:
     MiniSwitch link1Switch { "LINK" }, link2Switch { "LINK" };
     LevelMeter inMeter { "IN" }, outMeter { "OUT" };
     juce::TextButton learnButton { "LEARN" };
+    PillToggle outFreezeToggle { "FREEZE" }, outStopToggle { "STOP" };
 
     InfoOverlay infoOverlay;
 

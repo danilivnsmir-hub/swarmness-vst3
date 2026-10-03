@@ -52,6 +52,8 @@ public:
 
     /** The value readout is shown while the mouse is over the knob (or always, a user setting). */
     static inline bool alwaysShowValues = false;
+    /** This knob always shows its value (an EQ frequency you need to read while you turn it). */
+    void setAlwaysShowValue (bool b) { alwaysShowValue = b; repaint(); }
 
 private:
     struct SnappingSlider : public RightClickSafeSlider
@@ -64,6 +66,7 @@ private:
     void closeValueEditor();
 
     juce::String caption;
+    bool alwaysShowValue = false;
     SnappingSlider slider;
     std::unique_ptr<juce::TextEditor> valueEditor;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;
@@ -113,15 +116,6 @@ public:
     explicit PillToggle (const juce::String& label);
     void paintButton (juce::Graphics&, bool isMouseOver, bool isDown) override;
     SWARM_RIGHT_CLICK_SAFE_BUTTON
-};
-
-/** The MORE pill of a block: opens the secondary controls; a dot while any hidden parameter is off its default. */
-class MoreToggle : public PillToggle
-{
-public:
-    MoreToggle() : PillToggle ("MORE") {}
-    std::function<bool()> hasHiddenChanges;
-    void paintButton (juce::Graphics&, bool isMouseOver, bool isDown) override;
 };
 
 //==============================================================================
@@ -319,10 +313,12 @@ public:
 
     /** Highlights a recommended level range (e.g. where the input should peak). */
     void setTargetZone (float minDb, float maxDb) { zoneMin = minDb; zoneMax = maxDb; repaint(); }
+    /** The output limiter's gain reduction (dB): a LIM lamp while it works. */
+    void setLimiting (float gainReductionDb);
 
 private:
     juce::String caption;
-    float zoneMin = 0.0f, zoneMax = 0.0f;
+    float zoneMin = 0.0f, zoneMax = 0.0f, limiting = 0.0f;
     std::array<float, 2> level {}, hold {};
     std::array<int, 2> holdTicks {};
 };

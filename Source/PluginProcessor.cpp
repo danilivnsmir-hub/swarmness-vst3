@@ -82,6 +82,10 @@ SwarmnessAudioProcessor::SwarmnessAudioProcessor()
     p.venomFreeze = get (id::venomFreeze); p.stingFreeze = get (id::stingFreeze);
     p.hvStop = get (id::hvStop); p.hvStopTime = get (id::hvStopTime); p.venomStop = get (id::venomStop); p.stingStop = get (id::stingStop);
     p.fuzzCrush = get (id::fuzzCrush); p.swarmRing = get (id::swarmRing);
+    p.inGate = get (id::inGate); p.hvStopRise = get (id::hvStopRise); p.outStopRise = get (id::outStopRise);
+    p.outFreeze = get (id::outFreeze); p.outStop = get (id::outStop); p.outStopTime = get (id::outStopTime);
+    p.venomOutFreeze = get (id::venomOutFreeze); p.stingOutFreeze = get (id::stingOutFreeze);
+    p.venomOutStop = get (id::venomOutStop); p.stingOutStop = get (id::stingOutStop);
     p.ampOn = get (id::ampOn);           p.ampChannel = get (id::ampChannel);   p.ampGain = get (id::ampGain);
     p.ampBass = get (id::ampBass);       p.ampMid = get (id::ampMid);           p.ampTreble = get (id::ampTreble);   p.ampPresence = get (id::ampPresence);
     p.ampDepth = get (id::ampDepth);     p.ampMaster = get (id::ampMaster);     p.ampGate = get (id::ampGate);       p.ampLevel = get (id::ampLevel);
@@ -215,6 +219,8 @@ void SwarmnessAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBl
     int latency = 0;
     for (int b = 0; b < Chain::numBlocks; ++b)
         latency += blockLatency (b);
+    inputGate.prepare (sampleRate, maxBlockSize, 0.001);
+    latency += inputGate.lookaheadSamples();   // the GATE after INPUT looks ahead too
     dryDelay.setMaximumDelayInSamples (latency + 8);
     dryDelay.prepare ({ sampleRate, (juce::uint32) maxBlockSize, 2 });
     dryDelay.setDelay ((float) latency);
@@ -231,6 +237,9 @@ void SwarmnessAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBl
     init (inputGainSmoothed,  0.03, juce::Decibels::decibelsToGain (p.input->load()));
     init (bypassSmoothed,     0.02, on (p.bypass) ? 1.0f : 0.0f);
     init (licenceGate,        0.05, licence.isAuthorised() ? 0.0f : 1.0f);
+    limiterGain = 1.0f;
+    limiterRelease = (float) (1.0 - std::exp (-1.0 / (0.12 * sampleRate)));
+    outputHold.prepare (sampleRate, maxBlockSize);
     init (chainFade,          0.008, 1.0f);
     for (int sp = 0; sp < Chain::maxSplits; ++sp)
         init (parMixSmoothed[(size_t) sp], 0.03, pct (p.parMix[(size_t) sp]));
@@ -264,6 +273,7 @@ void SwarmnessAudioProcessor::releaseResources()
     cab.reset();
     wasp.reset();
     dryDelay.reset();
+    inputGate.reset();
 }
 
 //==============================================================================
@@ -288,6 +298,24 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
 
     if (numSamples == 0 || numChannels == 0)
         return;
+
+    // Standalone: the guitar is on one channel of the interface (or a pair). AUTO: a channel that stays
+    // silent (40 dB under the other for a while) is ignored and the live one feeds both sides
+    if ((wrapperType == wrapperType_Standalone || standaloneInput) && numChannels == 2)
+    {
+        auto mode = getInputSource();
+        if (mode == InputSource::automatic)
+        {
+            const float decay = std::exp (-(float) numSamples / (0.5f * (float) currentSampleRate));
+            for (int ch = 0; ch < 2; ++ch)
+                inputEnv[ch] = juce::jmax (buffer.getMagnitude (ch, 0, numSamples), inputEnv[ch] * decay);
+            if (inputEnv[1] < inputEnv[0] * 0.01f && inputEnv[0] > 1.0e-4f)      mode = InputSource::left;
+            else if (inputEnv[0] < inputEnv[1] * 0.01f && inputEnv[1] > 1.0e-4f) mode = InputSource::right;
+            else                                                                  mode = InputSource::stereo;
+        }
+        if (mode == InputSource::left)       buffer.copyFrom (1, 0, buffer, 0, 0, numSamples);
+        else if (mode == InputSource::right) buffer.copyFrom (0, 0, buffer, 1, 0, numSamples);
+    }
 
     // Hosts may occasionally exceed the announced block size: process in safe chunks.
     if (numSamples > maxBlockSize)
@@ -355,6 +383,15 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
             audio[ch][i] = std::isfinite (audio[ch][i]) ? audio[ch][i] * g : 0.0f;
     }
 
+    // ---- GATE: one gate for the whole chain, keyed from the guitar right here (1 ms lookahead, always delayed)
+    {
+        const float* curve = inputGate.compute (audio, numChannels, numSamples, pct (p.inGate));
+        inputGate.delayInPlace (audio, numChannels, numSamples);
+        if (curve != nullptr)
+            for (int ch = 0; ch < numChannels; ++ch)
+                juce::FloatVectorOperations::multiply (audio[ch], curve, numSamples);
+    }
+
     for (int ch = 0; ch < numChannels; ++ch)
         updatePeak (meters.input[(size_t) ch], buffer.getMagnitude (ch, 0, numSamples));
 
@@ -380,6 +417,8 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
         ctx.force[(size_t) b] = forceOf (action (p.venomBlock[(size_t) b]), action (p.stingBlock[(size_t) b]));
     ctx.freezeForce = forceOf (action (p.venomFreeze), action (p.stingFreeze));
     ctx.stopForce = forceOf (action (p.venomStop), action (p.stingStop));
+    ctx.outFreezeForce = forceOf (action (p.venomOutFreeze), action (p.stingOutFreeze));
+    ctx.outStopForce = forceOf (action (p.venomOutStop), action (p.stingOutStop));
     ctx.venom = ctx.force[Chain::pitch] > 0;
     const bool anySwitchHeld = ctx.oct1Held || ctx.oct2Held || ctx.magicHeld || ctx.stingHeld;
     {
@@ -482,6 +521,17 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
         }
     }
 
+    // FREEZE / STOP of the whole output (after VOLUME, before the limiter)
+    {
+        const bool fz = ctx.outFreezeForce > 0 || (ctx.outFreezeForce == 0 && on (p.outFreeze));
+        const bool st = ctx.outStopForce > 0 || (ctx.outStopForce == 0 && on (p.outStop));
+        outputHold.setParams (fz, st, p.outStopTime->load(), p.outStopRise->load());
+        if (! outputHold.isIdle())
+            outputHold.process (audio, numChannels, numSamples);
+        else
+            outputHold.process (audio, numChannels, numSamples);   // keeps the buffer primed (cheap)
+    }
+
     // Safety: never let a NaN/Inf escape, and keep self-oscillation from blowing up speakers.
     for (int ch = 0; ch < numChannels; ++ch)
     {
@@ -493,6 +543,27 @@ void SwarmnessAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
             else if (std::abs (d[i]) > 2.0f)
                 d[i] = 2.0f * std::tanh (d[i] * 0.5f);
         }
+    }
+
+    // Output limiter: a brickwall at -0.5 dBFS (instant attack, 120 ms release, linked) - the fuzz into the
+    // reverb must not clip the interface; below the ceiling it does nothing, and in bypass it is out of the way
+    if (bypassSmoothed.getCurrentValue() < 0.999f)
+    {
+        constexpr float ceiling = 0.944f;
+        float worst = 1.0f;
+        for (int i = 0; i < numSamples; ++i)
+        {
+            float pk = 0.0f;
+            for (int ch = 0; ch < numChannels; ++ch)
+                pk = juce::jmax (pk, std::abs (audio[ch][i]));
+            const float needed = pk > ceiling ? ceiling / pk : 1.0f;
+            if (needed < limiterGain) limiterGain = needed;                                   // down at once
+            else                      limiterGain += limiterRelease * (needed - limiterGain);  // back up slowly
+            worst = juce::jmin (worst, limiterGain);
+            for (int ch = 0; ch < numChannels; ++ch)
+                audio[ch][i] *= limiterGain;
+        }
+        meters.limiterGr.store (juce::jmax (meters.limiterGr.load (std::memory_order_relaxed), -juce::Decibels::gainToDecibels (worst)), std::memory_order_relaxed);
     }
 
     // TUNER with MUTE: silent while it is open (a short fade)
@@ -737,6 +808,7 @@ void SwarmnessAudioProcessor::processHive (const BlockContext& ctx, float* const
     s.voicesOn = ctx.engaged (Chain::pitch, on (p.rbOn));
     s.stop = ctx.stopForce > 0 || (ctx.stopForce == 0 && on (p.hvStop));
     s.stopSeconds = p.hvStopTime->load();
+    s.riseSeconds = p.hvStopRise->load();
     s.snap = on (p.rbSnap);
     s.pitchSemis = p.rbPitch->load();
     s.drone = pct (p.rbPrimary);
@@ -1356,8 +1428,8 @@ void SwarmnessAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
     state.setProperty ("pluginVersion", JucePlugin_VersionString, nullptr);
     state.setProperty ("uiScale", uiScale.load(), nullptr);
     state.setProperty ("uiMini", uiMini.load(), nullptr);
-    state.setProperty ("uiMore", uiMore.load(), nullptr);
     state.setProperty ("uiValues", uiValues.load(), nullptr);
+    state.setProperty ("uiInput", inputSource.load(), nullptr);
     state.setProperty ("reverbIR", fileReference ("reverbIR", getReverbIRFile()), nullptr);
     state.setProperty ("namModel", fileReference ("namModel", getNamModelFile()), nullptr);
     state.setProperty ("pedalNam", fileReference ("pedalNam", getNamModelFile (true)), nullptr);
@@ -1389,8 +1461,8 @@ void SwarmnessAudioProcessor::setStateInformation (const void* data, int sizeInB
             tree.removeProperty ("scenes", nullptr);
             uiScale = juce::jlimit (0.7f, 2.0f, (float) tree.getProperty ("uiScale", 1.0f));
             uiMini = (bool) tree.getProperty ("uiMini", false);
-            uiMore = (int) tree.getProperty ("uiMore", 0);
             uiValues = (bool) tree.getProperty ("uiValues", false);
+            inputSource = juce::jlimit (0, 3, (int) tree.getProperty ("uiInput", 0));
             // MIDI bindings ("paramID:kind:number;..."); up to beta.24 only the footswitches ("midi0".."midi3")
             for (auto& b : midiBindings)
             {

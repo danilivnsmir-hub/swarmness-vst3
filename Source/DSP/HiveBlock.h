@@ -110,7 +110,8 @@ public:
         double hostStep = -1.0;     // SYNC: the host position in steps (< 0 = restart the pattern on every note)
         bool venom = false;
         bool stop = false;          // STOP: the repeats slow to a halt like a tape (pitch falls with them), back when released
-        float stopSeconds = 0.8f;   // how long the halt (and the restart) takes
+        float stopSeconds = 0.8f;   // FALL: how long the halt takes
+        float riseSeconds = 0.6f;   // RISE: how long the restart takes
 
         // MANGLE
         float anger = 0.0f, frenzy = 0.0f, buzz = 0.0f, detuneCents = 0.0f, mix = 0.5f;
@@ -348,7 +349,8 @@ private:
         const float loopD = sw::jmax ((float) (kControlBlock + 2), loopDelay.process (loopDelayTarget));
 
         // STOP: the tape slows down (speed 1 -> 0 over stopSeconds) and starts again when released
-        const float stopStep = 1.0f / sw::jmax (0.02f, s.stopSeconds) / (float) sampleRate;
+        const float fallStep = 1.0f / sw::jmax (0.02f, s.stopSeconds) / (float) sampleRate;
+        const float riseStep = 1.0f / sw::jmax (0.02f, s.riseSeconds) / (float) sampleRate;
         const bool stopping = s.stop;
         if (stopping && stopMixTarget < 0.5f)
         {
@@ -359,8 +361,8 @@ private:
                 stopSpeed = 1.0f;
             }
         }
-        if (! stopping && stopMixTarget > 0.5f && stopSpeed >= 0.999f)
-            stopMixTarget = 0.0f;   // back up to speed: fade back to the live loop
+        if (! stopping && stopMixTarget > 0.5f && stopSpeed >= 0.7f)
+            stopMixTarget = 0.0f;   // most of the way back up: blend back to the live loop over ~80 ms
 
         // Humanise: slow random pitch drift, independent per voice
         if (++driftCounter >= (int) (0.4 * sampleRate / kControlBlock))
@@ -460,8 +462,8 @@ private:
                 const float mod = wowDepth * std::sin (swarm::kTwoPi * wowPhase) + flutterDepth * std::sin (swarm::kTwoPi * flutterPhase);
                 const float g = loopGain.getNextValue();
                 // STOP: a second read head rolls over the (frozen) loop at the tape's speed
-                stopSpeed = sw::jlimit (0.0f, 1.0f, stopSpeed + (stopping ? -stopStep : stopStep));
-                stopMix += 0.002f * (stopMixTarget - stopMix);
+                stopSpeed = sw::jlimit (0.0f, 1.0f, stopSpeed + (stopping ? -fallStep : riseStep));
+                stopMix += (stopMixTarget > stopMix ? 0.002f : 0.00025f) * (stopMixTarget - stopMix);
                 const float tape = std::sqrt (stopSpeed);   // quieter as it halts (no DC when it stands still)
                 stopPos += stopSpeed;
                 if (stopPos >= (float) loopSize) stopPos -= (float) loopSize;

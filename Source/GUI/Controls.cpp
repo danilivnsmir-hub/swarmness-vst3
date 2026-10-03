@@ -105,7 +105,7 @@ void Knob::paint (juce::Graphics& g)
     g.drawText (caption, r.removeFromTop (18.0f), juce::Justification::centred, false);
 
     // the value: on hover / while dragging (or always, if the user wants it)
-    const bool showValue = alwaysShowValues || isMouseOver (true) || slider.isMouseButtonDown() || valueEditor != nullptr;
+    const bool showValue = alwaysShowValues || alwaysShowValue || isMouseOver (true) || slider.isMouseButtonDown() || valueEditor != nullptr;
     if (! showValue)
         return;
     g.setFont (font (small ? 12.5f : 15.0f, true));
@@ -151,18 +151,6 @@ void Fader::paint (juce::Graphics& g)
     g.setFont (font (compact ? 13.0f : 15.0f, true));
     g.setColour (Colours::accentBright);
     g.drawText (value, r.removeFromBottom (18.0f), juce::Justification::centred, false);
-}
-
-void MoreToggle::paintButton (juce::Graphics& g, bool isMouseOver, bool isDown)
-{
-    PillToggle::paintButton (g, isMouseOver, isDown);
-    if (hasHiddenChanges != nullptr && hasHiddenChanges() && ! getToggleState())
-    {
-        // a dot: something under MORE is set away from its default
-        const auto r = getLocalBounds().toFloat();
-        g.setColour (Colours::accentBright);
-        g.fillEllipse (r.getRight() - 11.0f, r.getY() + 4.0f, 5.0f, 5.0f);
-    }
 }
 
 //==============================================================================
@@ -666,12 +654,29 @@ void LevelMeter::update (float left, float right)
     repaint();
 }
 
+void LevelMeter::setLimiting (float gainReductionDb)
+{
+    const float shown = gainReductionDb > 0.05f ? gainReductionDb : 0.0f;
+    if (std::abs (shown - limiting) > 0.05f)
+    {
+        limiting = shown;
+        repaint();
+    }
+}
+
 void LevelMeter::paint (juce::Graphics& g)
 {
     auto r = getLocalBounds().toFloat();
     g.setFont (displayFont (17.0f));
     g.setColour (Colours::textDim);
     g.drawText (caption, r.removeFromLeft (32.0f), juce::Justification::centredLeft, false);
+    if (limiting > 0.0f)
+    {
+        // LIM: the output limiter is holding the peaks (brighter the more it takes)
+        g.setFont (font (10.0f, true));
+        g.setColour (Colours::ledRed.withAlpha (juce::jlimit (0.45f, 1.0f, 0.45f + limiting * 0.1f)));
+        g.drawText ("LIM", juce::Rectangle<float> (r.getRight() - 28.0f, r.getY() - 14.0f, 28.0f, 12.0f), juce::Justification::centredRight, false);
+    }
 
     // artwork: the sunken slot; the segments sit inside its rim
     if (Skin::drawThree (g, "meter_bg", r, 20.0f))
@@ -1107,12 +1112,12 @@ void InfoOverlay::paint (juce::Graphics& g)
         { "WASP",     "Overdrive in front of the AMP in four characters: TIGHT (the precision metal drive, asymmetric hard clipping), BOOST (clean, flat), "
                       "SMOOTH (the classic soft-clipping overdrive), RASP (hard-clipping distortion). DRIVE, ATTACK = how tight the low end is before the "
                       "clipping, BRIGHT = voicing, VOLUME (5 = about unity), GATE = noise gate keyed from the guitar." },
-        { "AMP",      "Three amps: CLEAN = CHROME (crystal clean), CRUNCH = BRIT (barking crunch), LEAD = STEEL (tight high gain). "
+        { "AMP",      "Three amps: CLEAN = VELVET (a tube clean fitted to a real amp: warm, a little sag, breaks up from GAIN 5), CRUNCH = BRIT (barking crunch), LEAD = STEEL (tight high gain). "
                       "NAM = a Neural Amp Modeler capture with its own INPUT / EQ / OUTPUT knobs (all at 5 = the capture as it is) - LOAD .NAM, drop one or browse captures on TONE3000. GATE = noise gate keyed from the guitar (on the amp's input and output)." },
         { "CAB",      "Speaker cabinet: four modelled cabinets (MIC = cap..edge, DISTANCE = grille..room) or your own IRs in two slots A / B "
                       "(LOAD IR, TONE3000 or drop a WAV on a slot; A / B MIX blends them, time-aligned; INV B flips B's phase)." },
         { "CHAIN",    "The strip under the header is the signal chain. Drag a block to reorder it (fuzz before or after the pitch, reverb into the fuzz...), "
-                      "click it to open its page, click its LED to switch it on / off, right-click for MIDI learn. Drag it UP / DOWN for parallel paths A / B (an empty path = dry), "
+                      "click it to open its page, click its LED to switch it on / off, right-click for MIDI learn, Copy / Paste of its settings and block presets (from any factory preset, or yours). Drag it UP / DOWN for parallel paths A / B (an empty path = dry), "
                       "the knob at the merge balances A and B. Order and paths are saved with presets." },
         { "EQ",       "COMB = 10-band graphic EQ (+/-12 dB) with LEVEL. CARVE = parametric: 24 dB/oct LOW / HIGH CUT, shelves and 3 bells - drag the nodes, "
                       "wheel = Q, double-click = reset; the output spectrum runs behind the curve." },
@@ -1122,11 +1127,10 @@ void InfoOverlay::paint (juce::Graphics& g)
                       "CRYPT FREEZE and HIVE STOP. The wiring is a scene setting, so every scene can use them differently. VENOM out of the box = HIVE + self-oscillation." },
         { "LICENCE",  "A 7-day trial from the first run, then a licence key from the store (the TRIAL / ACTIVATE button, bottom left). "
                       "One key = three of your computers; DEACTIVATE frees one. Checked online once a month, works offline for 45 days." },
-        { "MORE",     "The busier blocks (SMOKE, HIVE, SHIFT, CRYPT) show their main knobs; MORE opens the rest (a dot = something in there is set). "
-                      "Knob values appear when you hover; \"...\" > Always show knob values brings them back for good." },
+        { "VALUES",   "Knob values appear when you hover or turn a knob; \"...\" > Always show knob values brings them back for good." },
         { "MIDI",     "Right-click ANY control for MIDI learn: switches toggle on each press, selectors step, knobs follow the CC. "
                       "One pedal can drive several controls (e.g. ON and WINGS). Program Change n = preset n of the list." },
-        { "LIVE",     "LEARN under the IN meter: play loud for 5 s and INPUT sets itself (peaks at -12 dBFS). "
+        { "LIVE",     "GATE by INPUT = one noise gate for the whole chain (keyed from the guitar, lets a note's tail fade). LEARN under the IN meter: play loud for 5 s and INPUT sets itself (peaks at -12 dBFS). FREEZE / STOP under the OUT meter hold or tape-stop the whole output. "
                       "SCENES A..D = four versions of the sound inside one preset (click to switch; right-click = MIDI learn or copy the current scene there). "
                       "TUNE = the tuner (MUTE silences the output while it is open). MINI = a small window with the chain, scenes and footswitches for playing live." },
         { "LEVELS",   "INPUT = input gain: how hard the effects and amps are hit (aim for the green zone of the IN meter). "
