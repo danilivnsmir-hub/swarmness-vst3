@@ -537,36 +537,67 @@ void EqPage::selectBand (int band)
     }
 }
 
+void EqPage::setView (int v)
+{
+    v = juce::jlimit (0, 1, v);
+    if (v == view)
+        return;
+    view = v;
+    const bool comb = view == 0;
+    combPower.setVisible (comb);
+    combGraph.setVisible (comb);
+    for (auto& f : combFaders)
+        f->setVisible (comb);
+    for (auto* c : std::initializer_list<juce::Component*> { &carvePower, &carveGraph, &bandSelector, &lowCutKnob, &highCutKnob })
+        c->setVisible (! comb);
+    if (comb)
+    {
+        for (auto* k : { &lowFreqKnob, &lowGainKnob, &highFreqKnob, &highGainKnob })
+            k->setVisible (false);
+        for (auto* arr : { &bellFreqKnobs, &bellGainKnobs, &bellQKnobs })
+            for (auto& k : *arr)
+                k.setVisible (false);
+    }
+    else
+    {
+        selectBand (selectedBand);
+    }
+    resized();
+    repaint();
+}
+
 void EqPage::resized()
 {
-    const float h = (float) getHeight();
-    combArea  = { 0.0f, 0.0f, 500.0f, h };
-    carveArea = { 512.0f, 0.0f, (float) getWidth() - 512.0f, h };
+    const float w = (float) getWidth(), h = (float) getHeight();
+    combArea = carveArea = { 0.0f, 0.0f, w, h };
 
     auto powerFor = [] (juce::Rectangle<float> a) { return juce::Rectangle<int> ((int) a.getRight() - 40, (int) a.getY() + 8, 26, 26); };
     combPower.setBounds (powerFor (combArea));
     carvePower.setBounds (powerFor (carveArea));
 
-    combGraph.setBounds (16, 44, 468, 118);
+    // COMB: the curve across the top, ten faders under it
+    combGraph.setBounds (16, 44, (int) w - 32, 116);
     {
-        const int fw = 42, x0 = 16 + (468 - fw * (int) combFaders.size()) / 2;
+        const int fw = 68, x0 = ((int) w - fw * (int) combFaders.size()) / 2;
         for (size_t i = 0; i < combFaders.size(); ++i)
-            combFaders[i]->setBounds (x0 + fw * (int) i, 174, fw, 276);
+            combFaders[i]->setBounds (x0 + fw * (int) i, 170, fw, (int) h - 182);
     }
 
-    const int cx = (int) carveArea.getX() + 16, cw = (int) carveArea.getWidth() - 32;
-    carveGraph.setBounds (cx, 44, cw, 262);
-    lowCutKnob .setBounds (cx,      336, 76, 104);
-    highCutKnob.setBounds (cx + 78, 336, 76, 104);
-    const int bx = cx + 186;
-    bandSelector.setBounds (bx, 318, cw - 186, 24);
-    auto place = [bx] (std::initializer_list<Knob*> knobs)
+    // CARVE: the curve on the left; the cuts, the band selector and the selected band's knobs on the right
+    const int gw = 640, cx = 16 + gw + 20, cw = (int) w - cx - 16;
+    carveGraph.setBounds (16, 44, gw, (int) h - 58);
+    lowCutKnob .setBounds (cx + cw / 2 - 90, 62, 80, 104);
+    highCutKnob.setBounds (cx + cw / 2 + 10, 62, 80, 104);
+    bandSelector.setBounds (cx, 196, cw, 24);
+    const int by = 232;
+    auto place = [cx, cw, by] (std::initializer_list<Knob*> knobs)
     {
-        int x = bx + 10;
+        const int n = (int) knobs.size(), step = 104;
+        int x = cx + (cw - step * n) / 2 + 12;
         for (auto* k : knobs)
         {
-            k->setBounds (x, 346, 80, 104);
-            x += 104;
+            k->setBounds (x, by, 80, 104);
+            x += step;
         }
     };
     place ({ &lowFreqKnob, &lowGainKnob });
@@ -577,18 +608,22 @@ void EqPage::resized()
 
 void EqPage::paint (juce::Graphics& g)
 {
-    drawPanel (g, combArea);
+    if (view != 1)
+    {
+        drawPanel (g, combArea);
+        drawPanelTitle (g, combArea, "COMB", "10-band graphic EQ  -  drag the faders or the curve", combOn);
+        return;
+    }
     drawPanel (g, carveArea);
-    drawPanelTitle (g, combArea, "COMB", "10-band graphic EQ", combOn);
-    drawPanelTitle (g, carveArea, "CARVE", "parametric EQ", carveOn);
+    drawPanelTitle (g, carveArea, "CARVE", "parametric EQ  -  drag a point on the curve, pick a band for its knobs", carveOn);
 
-    // divider between the cuts and the band knobs
-    const float dx = carveArea.getX() + 16.0f + 172.0f;
-    g.setColour (Colours::panelBorder);
-    g.drawVerticalLine ((int) dx, 322.0f, 444.0f);
+    const float cx = 16.0f + 640.0f + 20.0f, cw = carveArea.getWidth() - cx - 16.0f;
     g.setFont (font (12.0f, true));
     g.setColour (Colours::textFaint);
-    g.drawText ("CUTS  24 dB/oct", juce::Rectangle<float> (carveArea.getX() + 16.0f, 316.0f, 156.0f, 16.0f), juce::Justification::centred, false);
+    g.drawText ("CUTS  24 dB/oct", juce::Rectangle<float> (cx, 44.0f, cw, 16.0f), juce::Justification::centred, false);
+    g.drawText ("BANDS", juce::Rectangle<float> (cx, 176.0f, cw, 16.0f), juce::Justification::centred, false);
+    g.setColour (Colours::panelBorder);
+    g.drawHorizontalLine (170, cx + 20.0f, cx + cw - 20.0f);
 }
 
 void EqPage::tick()
@@ -791,8 +826,9 @@ void ReverbPage::resized()
     typeSelector.setBounds ((int) panelArea.getRight() - 52 - 400, 10, 400, 24);
     freezeToggle.setBounds (typeSelector.getX() - 12 - 76, 10, 76, 24);
 
-    tail.setBounds (16, 46, 700, 244);
-    irArea = { 728.0f, 46.0f, panelArea.getWidth() - 744.0f, 244.0f };
+    const int tailH = getHeight() - 46 - 136;
+    tail.setBounds (16, 46, 700, tailH);
+    irArea = { 728.0f, 46.0f, panelArea.getWidth() - 744.0f, (float) tailH };
     loadButton .setBounds ((int) irArea.getX() + 16, (int) irArea.getBottom() - 46, 150, 30);
     clearButton.setBounds (loadButton.getRight() + 10, loadButton.getY(), 90, 30);
 
@@ -806,7 +842,7 @@ void ReverbPage::resized()
         const bool primary = k == &mixKnob || k == &decayKnob || k == &toneKnob;
         const int w = primary ? 100 : 70, h = primary ? 110 : 90;
         const int cx = (int) (left + slotW * ((float) i++ + 0.5f));
-        k->setBounds (cx - w / 2, 312 + (110 - h) / 2, w, h);
+        k->setBounds (cx - w / 2, getHeight() - 124 + (110 - h) / 2, w, h);
     }
 }
 
@@ -1100,7 +1136,7 @@ void AmpCabSection::resized()
     grilleArea = { cabArea.getX() + 10.0f, 68.0f, cabArea.getWidth() - 20.0f, 104.0f };
     curveArea = { cabArea.getX() + 14.0f, 176.0f, cabArea.getWidth() - 28.0f - 104.0f, h - 186.0f };
     {
-        const int bx = (int) curveArea.getRight() + 8, by = (int) curveArea.getY(), bh = 20, gap = (int) (curveArea.getHeight() - 3 * bh) / 2;
+        const int bx = (int) curveArea.getRight() + 8, by = (int) curveArea.getY(), bh = 20, gap = juce::jmin (14, (int) (curveArea.getHeight() - 3 * bh) / 2);
         loadIrButton .setBounds (bx, by, 96, bh);
         irToneButton .setBounds (bx, by + bh + gap, 96, bh);
         clearIrButton.setBounds (bx, by + 2 * (bh + gap), 96, bh);
@@ -1130,9 +1166,10 @@ void AmpCabSection::paint (juce::Graphics& g)
     AmpFaceplate::drawGrille (g, grilleArea, cabType, cabOn);
     if (! namMode)
     {
-        static const char* about[3] { "Crystal clean: solid-state headroom to the top, a tight bottom and a glassy top - your guitar's own dynamics, "
-                                      "piano-clear arpeggios for intros. SWARM and CRYPT behind it.",
-                                      "Crunch: barking upper mids and a tight bottom, cleans up with the guitar's volume.",
+        static const char* about[3] { "Tube clean: a warm second harmonic as soon as you dig in, a slow sag that keeps the pick, "
+                                      "on the edge at GAIN 5, breaking up from 7. HONEY in front for a sticky clean, SWARM and CRYPT behind it.",
+                                      "Crunch: a cranked British amp - second-harmonic warmth, a sharp knee, barking upper mids; "
+                                      "the power amp joins in from GAIN 7. Cleans up with the guitar's volume.",
                                       "High gain: tight, cutting and fast - chugs that stay tight. WASP in front tightens it more." };
         AmpFaceplate::drawNameplate (g, morphArea, style, AmpBlock::channelModel (juce::jlimit (0, 2, channel)), about[juce::jlimit (0, 2, channel)], ampOn);
     }
@@ -1440,18 +1477,23 @@ void WaspSection::resized()
     characterSelector.setBounds (modeSelector.getX() - 12 - 250, 9, 250, 24);
     const float knobsW = 470.0f;
     {
-        const std::initializer_list<Knob*> row { &driveKnob, &volumeKnob, &brightKnob, &attackKnob, &gateKnob };
-        const float step = (knobsW - 20.0f) / (float) row.size();
+        // DRIVE and VOLUME large on top, the voicing knobs under them
+        const int bw = 96, bh = 132, sw = 72, sh = 104;
+        const int top = 46 + juce::jmax (0, ((int) panelArea.getHeight() - 46 - bh - sh - 10) / 2);
+        driveKnob .setBounds ((int) knobsW / 2 - 8 - bw, top, bw, bh);
+        volumeKnob.setBounds ((int) knobsW / 2 + 8, top, bw, bh);
+        const std::initializer_list<Knob*> row { &brightKnob, &attackKnob, &gateKnob };
+        const float step = (knobsW - 60.0f) / (float) row.size();
         int i = 0;
         for (auto* k : row)
-            k->setBounds ((int) (10.0f + step * ((float) i++ + 0.5f)) - 36, 58, 72, 104);
+            k->setBounds ((int) (30.0f + step * ((float) i++ + 0.5f)) - sw / 2, top + bh + 10, sw, sh);
         // NAM mode: INPUT / OUTPUT where DRIVE / VOLUME are, GATE stays
         namInputKnob.setBounds (driveKnob.getBounds());
         namOutputKnob.setBounds (volumeKnob.getBounds());
     }
     auto displays = juce::Rectangle<float> (knobsW + 10.0f, 44.0f, panelArea.getWidth() - knobsW - 26.0f, panelArea.getHeight() - 56.0f);
     cardArea = displays;
-    clipArea = displays.removeFromRight (displays.getHeight() * 1.25f);
+    clipArea = displays.removeFromRight (juce::jmin (displays.getHeight() * 1.25f, displays.getWidth() * 0.42f));
     displays.removeFromRight (12.0f);
     responseArea = displays;
 

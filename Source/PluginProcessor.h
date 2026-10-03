@@ -158,7 +158,7 @@ public:
     /** Whether knob values are always shown (otherwise on hover). */
     bool getUiValues() const noexcept     { return uiValues.load(); }
     void setUiValues (bool v) noexcept    { uiValues = v; }
-    /** Last page shown in the editor (FX / EQ / CRYPT), kept while the plug-in is loaded. */
+    /** Last block page shown in the editor (MainPanel::Page; -1 = RIG), kept while the plug-in is loaded. */
     int getUiPage() const noexcept         { return uiPage.load(); }
     void setUiPage (int page) noexcept     { uiPage = page; }
 
@@ -386,7 +386,7 @@ private:
     std::atomic<float> uiScale { 1.0f };
     std::atomic<bool> uiMini { false };
     std::atomic<bool> uiValues { false };
-    std::atomic<int> uiPage { 0 };
+    std::atomic<int> uiPage { -1 };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SwarmnessAudioProcessor)
 };

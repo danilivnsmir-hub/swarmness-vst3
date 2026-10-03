@@ -39,6 +39,8 @@ public:
     void setTransport (Transport t) { transport = std::move (t); }
     /** Tests: "now", replaced. */
     void setClock (std::function<juce::Time()> c) { clock = std::move (c); refresh(); }
+    /** Tests / screenshots: behave like a build without licensing (SWARMNESS_NO_LICENCE): always activated. */
+    void setDeveloperBuildForTesting (bool b) { developerBuild = b; refresh(); }
 
     State getState() const noexcept { return state.load(); }
     bool isAuthorised() const noexcept { return state.load() != State::expired; }
@@ -79,6 +81,7 @@ private:
     Transport transport;
     std::function<juce::Time()> clock;
     std::atomic<State> state { State::trial };
+    bool developerBuild = false;   // set from SWARMNESS_NO_LICENCE in the constructor
     std::atomic<int> daysLeft { kTrialDays };
     std::atomic<bool> busy { false };
     juce::String message;

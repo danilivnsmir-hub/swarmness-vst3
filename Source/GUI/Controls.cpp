@@ -1112,12 +1112,14 @@ void InfoOverlay::paint (juce::Graphics& g)
         { "WASP",     "Overdrive in front of the AMP in four characters: TIGHT (the precision metal drive, asymmetric hard clipping), BOOST (clean, flat), "
                       "SMOOTH (the classic soft-clipping overdrive), RASP (hard-clipping distortion). DRIVE, ATTACK = how tight the low end is before the "
                       "clipping, BRIGHT = voicing, VOLUME (5 = about unity), GATE = noise gate keyed from the guitar." },
-        { "AMP",      "Three amps: CLEAN = VELVET (a tube clean fitted to a real amp: warm, a little sag, breaks up from GAIN 5), CRUNCH = BRIT (barking crunch), LEAD = STEEL (tight high gain). "
+        { "AMP",      "Three amps: CLEAN = VELVET (a tube clean fitted to real amps: warm, a slow sag, on the edge at GAIN 5, breaks up from 7), CRUNCH = BRIT (barking crunch), LEAD = STEEL (tight high gain). "
                       "NAM = a Neural Amp Modeler capture with its own INPUT / EQ / OUTPUT knobs (all at 5 = the capture as it is) - LOAD .NAM, drop one or browse captures on TONE3000. GATE = noise gate keyed from the guitar (on the amp's input and output)." },
         { "CAB",      "Speaker cabinet: four modelled cabinets (MIC = cap..edge, DISTANCE = grille..room) or your own IRs in two slots A / B "
                       "(LOAD IR, TONE3000 or drop a WAV on a slot; A / B MIX blends them, time-aligned; INV B flips B's phase)." },
-        { "CHAIN",    "The strip under the header is the signal chain. Drag a block to reorder it (fuzz before or after the pitch, reverb into the fuzz...), "
-                      "click it to open its page, click its LED to switch it on / off, right-click for MIDI learn, Copy / Paste of its settings and block presets (from any factory preset, or yours). Drag it UP / DOWN for parallel paths A / B (an empty path = dry), "
+        { "CHAIN",    "The strip under the header is the signal chain and the way around: click a block and its page opens below (AMP and CAB open together, as the RIG). "
+                      "PRE / RIG / POST under the tiles: in front of the amp, the amp and cabinet, after them. A tile's second line is what the block is set to; "
+                      "a purple / green dot = VENOM / STING switches it. Drag a block to reorder it (fuzz before or after the pitch, reverb into the fuzz...), "
+                      "click its LED to switch it on / off, right-click for MIDI learn, Copy / Paste of its settings and block presets (from any factory preset, or yours). Drag it UP / DOWN for parallel paths A / B (an empty path = dry), "
                       "the knob at the merge balances A and B. Order and paths are saved with presets." },
         { "EQ",       "COMB = 10-band graphic EQ (+/-12 dB) with LEVEL. CARVE = parametric: 24 dB/oct LOW / HIGH CUT, shelves and 3 bells - drag the nodes, "
                       "wheel = Q, double-click = reset; the output spectrum runs behind the curve." },

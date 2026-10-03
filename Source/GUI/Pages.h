@@ -85,6 +85,8 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
     void tick();
+    /** 0 = COMB, 1 = CARVE: each has the whole page. */
+    void setView (int view);
 
 private:
     void selectBand (int band);   // 0 = LOW shelf, 1..3 = bells, 4 = HIGH shelf
@@ -104,7 +106,7 @@ private:
     std::array<Knob, 3> bellFreqKnobs { Knob { "FREQ" }, Knob { "FREQ" }, Knob { "FREQ" } };
     std::array<Knob, 3> bellGainKnobs { Knob { "GAIN", true }, Knob { "GAIN", true }, Knob { "GAIN", true } };
     std::array<Knob, 3> bellQKnobs { Knob { "Q" }, Knob { "Q" }, Knob { "Q" } };
-    int selectedBand = 2;
+    int selectedBand = 2, view = -1;
 
     std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>> buttonAttachments;
 
@@ -168,7 +170,7 @@ private:
 };
 
 //==============================================================================
-/** AMP + CAB, on the RIG page under WASP. */
+/** AMP + CAB: the RIG page (they are tuned together). */
 class AmpCabSection : public juce::Component,
                       public juce::FileDragAndDropTarget
 {

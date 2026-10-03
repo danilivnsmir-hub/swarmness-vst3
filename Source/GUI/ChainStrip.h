@@ -12,6 +12,9 @@
  *  - drag a tile sideways: move it in the chain; drag it up / down: parallel path A / B;
  *    drag it back to the middle: series again
  *  - click the LED: switch the block on / off
+ * Under the tiles a thin band names the zones: PRE (in front of the amp), RIG (AMP + CAB), POST.
+ * A tile's second line is a live value (the amp model, the cabinet, WASP's character...) and
+ * coloured dots mark the blocks a stomp (VENOM / STING) switches.
  */
 class ChainStrip : public juce::Component,
                    public juce::TooltipClient
@@ -26,6 +29,13 @@ public:
     std::function<void (int block)> onBlockRightClick;   // MIDI learn for the block's on / off
     /** Extra activity (e.g. STING engaged by a footswitch) that lights a tile without its power param. */
     std::function<bool (int block)> isBlockActive;
+    /** The tile's second line (empty = the block's function, Chain::subtitles). */
+    std::function<juce::String (int block)> subtitleFor;
+    /** Stomp wiring of a block: bit 0 = VENOM switches it, bit 1 = STING. */
+    std::function<int (int block)> stompMarksFor;
+
+    /** Height of the zone band (PRE / RIG / POST) under the tiles. */
+    static constexpr float zoneBandHeight = 15.0f;
 
     /** Blocks shown on the current page get a bright outline. */
     void setHighlighted (const std::array<bool, Chain::numBlocks>&);
@@ -63,6 +73,8 @@ private:
     Geometry computeGeometry (const Chain::Layout&) const;
     Chain::Layout displayLayout() const;   // the layout while dragging (preview)
     juce::Rectangle<float> ledRect (juce::Rectangle<float> tile) const noexcept;
+    float tileAreaHeight() const noexcept { return juce::jmax (10.0f, (float) getHeight() - zoneBandHeight); }
+    void paintZones (juce::Graphics&) const;
     int blockAt (juce::Point<float>) const;
     bool blockOn (int block) const;
     static bool isHalf (juce::Rectangle<float> r, float fullHeight) { return r.getHeight() < fullHeight * 0.7f; }
@@ -72,6 +84,8 @@ private:
     Geometry geometry;                 // targets for the shown layout
     Rects current {};                  // animated tile rectangles
     std::array<bool, Chain::numBlocks> lit {}, highlighted {};
+    std::array<juce::String, Chain::numBlocks> subtitles;
+    std::array<int, Chain::numBlocks> stompMarks {};
     bool initialised = false;
 
     int hover = -1, pressed = -1, dragInsert = -1, dragLane = Chain::series;

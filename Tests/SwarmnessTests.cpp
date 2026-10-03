@@ -4217,6 +4217,8 @@ int main (int argc, char** argv)
                 p.loadCabIR (juce::File (argv[7 + k]), k);
         }
         p.setUiMini (mini);
+        if (! (argc >= 7 && juce::String (argv[6]) == "licence"))
+            p.getLicence().setDeveloperBuildForTesting (true);   // like the shipped builds: no trial button
         if (argc >= 7 && juce::String (argv[6]) == "licence")   // the trial over, the activation panel open
             p.getLicence().setClock ([] { return juce::Time::getCurrentTime() + juce::RelativeTime::days (8.0); });
         std::unique_ptr<juce::AudioProcessorEditor> editor (p.createEditor());
