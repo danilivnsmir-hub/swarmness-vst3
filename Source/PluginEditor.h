@@ -13,8 +13,8 @@ class MainPanel : public juce::Component
 {
 public:
     static constexpr int baseWidth  = 1100;
-    static constexpr int baseHeight = 800;   // full view
-    static constexpr int miniHeight = 330;   // MINI: chain, scenes and footswitches for playing live
+    static constexpr int baseHeight = 636;   // full view: the chain, ONE block's page, scenes, footswitches
+    static constexpr int miniHeight = 338;   // MINI: chain, scenes and footswitches for playing live
 
     int getBaseHeight() const noexcept { return mini ? miniHeight : baseHeight; }
     bool isMini() const noexcept { return mini; }
@@ -28,9 +28,12 @@ public:
     void resized() override;
     void tick();   // called by the editor's timer
 
-    enum Page { fxPageIndex = 0, eqPageIndex, spacePageIndex, pitchPageIndex, rigPageIndex, numPages };
+    /** One page per block, in the default chain order; AMP and CAB share the RIG page (they are tuned together).
+        A click on a chain tile opens its page. */
+    enum Page { honeyPage = 0, smokePage, shiftPage, hivePage, waspPage, rigPage, swarmPage, wingsPage, combPage, carvePage, cryptPage, numPages };
     void showPage (int page);
     static int pageForBlock (int block);
+    static bool pageShowsBlock (int page, int block) { return pageForBlock (block) == page; }
 
 private:
     /** Static artwork, cached as an image so animated controls repaint cheaply. */
@@ -67,14 +70,16 @@ private:
     juce::Image logo, emblem;
     Backdrop backdrop;
 
-    // Chain + pages (the FX page holds the original sections; EQ and CRYPT have their own components)
+    // Chain + pages: the blocks drawn by the panel itself live in a holder per page (full-panel coordinates);
+    // WASP, AMP + CAB, COMB / CARVE and CRYPT are components of their own
     ChainStrip chainStrip;
-    juce::Component fxPage, pitchPage, rigPage;   // FX = SMOKE / SWARM / WINGS, PITCH = HIVE + SHIFT, RIG = WASP + AMP + CAB
-    EqPage eqPage;
+    std::array<juce::Component, numPages> pages;
+    EqPage eqPage;          // COMB or CARVE, one at a time
     ReverbPage reverbPage;
-    WaspSection wasp;       // RIG page: the overdrive on top,
-    AmpCabSection ampCab;   // AMP + CAB under it
-    int currentPage = fxPageIndex;
+    WaspSection wasp;
+    AmpCabSection ampCab;
+    int currentPage = rigPage;
+    juce::Rectangle<int> pageArea;
 
     // Header
     PresetBar presetBar;

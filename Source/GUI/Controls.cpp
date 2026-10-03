@@ -160,43 +160,32 @@ PowerButton::PowerButton()
     setMouseCursor (juce::MouseCursor::PointingHandCursor);
 }
 
-void PowerButton::paintButton (juce::Graphics& g, bool isMouseOver, bool)
+void PowerButton::paintButton (juce::Graphics& g, bool isMouseOver, bool isDown)
 {
-    const auto r = getLocalBounds().toFloat().reduced (1.5f);
+    // the same hex LED the section titles have, sized like theirs; the button around it is the click target
+    const auto c = getLocalBounds().toFloat().getCentre();
+    const auto led = juce::Rectangle<float> (12.0f, 11.0f).withCentre (c);
     const bool on = getToggleState();
-    const auto c = r.getCentre();
-    const float rad = juce::jmin (r.getWidth(), r.getHeight()) * 0.5f;
-    const auto hexR = juce::Rectangle<float> (rad * 2.0f, rad * 2.0f).withCentre (c);
-
-    // artwork: the round power button, its symbol lit when on
-    if (Skin::draw (g, on ? "power_on" : "power_off", hexR.expanded (2.0f)))
+    if (isMouseOver || isDown)
     {
-        if (isMouseOver)
-        {
-            g.setColour (Colours::accent.withAlpha (0.35f));
-            g.drawEllipse (hexR.reduced (1.0f), 1.2f);
-        }
-        return;
+        g.setColour (Colours::accent.withAlpha (isDown ? 0.3f : 0.16f));
+        g.fillPath (hexagon (led.expanded (6.0f)));
     }
-
-    if (on)
+    if (on || engaged)
     {
-        g.setColour (Colours::accent.withAlpha (0.3f));
-        g.fillPath (hexagon (hexR.expanded (2.0f), true));
+        g.setColour (Colours::accent.withAlpha (on ? 0.35f : 0.18f));
+        g.fillPath (hexagon (led.expanded (4.0f)));
+        if (on)
+            g.setGradientFill (honeyGradient (led));
+        else
+            g.setColour (Colours::accent.withAlpha (0.55f));
+        g.fillPath (hexagon (led));
     }
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff2e2319), c.x, hexR.getY(),
-                                             juce::Colour (0xff0d0907), c.x, hexR.getBottom(), false));
-    g.fillPath (hexagon (hexR.reduced (1.5f), true));
-    g.setColour (on ? Colours::accent : (isMouseOver ? Colours::textDim : Colours::panelBorder.brighter (0.3f)));
-    g.strokePath (hexagon (hexR.reduced (1.5f), true), juce::PathStrokeType (1.3f));
-
-    const float ir = rad * 0.4f;
-    juce::Path glyph;
-    glyph.addCentredArc (c.x, c.y, ir, ir, 0.0f, juce::degreesToRadians (35.0f), juce::degreesToRadians (325.0f), true);
-    glyph.startNewSubPath (c.x, c.y - ir * 1.25f);
-    glyph.lineTo (c.x, c.y - ir * 0.25f);
-    g.setColour (on ? Colours::accentBright : Colours::textFaint);
-    g.strokePath (glyph, juce::PathStrokeType (1.8f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    else
+    {
+        g.setColour (isMouseOver ? Colours::textDim : Colours::textFaint);
+        g.strokePath (hexagon (led), juce::PathStrokeType (1.2f));
+    }
 }
 
 //==============================================================================
@@ -1112,12 +1101,14 @@ void InfoOverlay::paint (juce::Graphics& g)
         { "WASP",     "Overdrive in front of the AMP in four characters: TIGHT (the precision metal drive, asymmetric hard clipping), BOOST (clean, flat), "
                       "SMOOTH (the classic soft-clipping overdrive), RASP (hard-clipping distortion). DRIVE, ATTACK = how tight the low end is before the "
                       "clipping, BRIGHT = voicing, VOLUME (5 = about unity), GATE = noise gate keyed from the guitar." },
-        { "AMP",      "Three amps: CLEAN = VELVET (a tube clean fitted to a real amp: warm, a little sag, breaks up from GAIN 5), CRUNCH = BRIT (barking crunch), LEAD = STEEL (tight high gain). "
+        { "AMP",      "Three amps: CLEAN = VELVET (a tube clean fitted to real amps: warm, a slow sag, on the edge at GAIN 5, breaks up from 7), CRUNCH = BRIT (barking crunch), LEAD = STEEL (tight high gain). "
                       "NAM = a Neural Amp Modeler capture with its own INPUT / EQ / OUTPUT knobs (all at 5 = the capture as it is) - LOAD .NAM, drop one or browse captures on TONE3000. GATE = noise gate keyed from the guitar (on the amp's input and output)." },
         { "CAB",      "Speaker cabinet: four modelled cabinets (MIC = cap..edge, DISTANCE = grille..room) or your own IRs in two slots A / B "
                       "(LOAD IR, TONE3000 or drop a WAV on a slot; A / B MIX blends them, time-aligned; INV B flips B's phase)." },
-        { "CHAIN",    "The strip under the header is the signal chain. Drag a block to reorder it (fuzz before or after the pitch, reverb into the fuzz...), "
-                      "click it to open its page, click its LED to switch it on / off, right-click for MIDI learn, Copy / Paste of its settings and block presets (from any factory preset, or yours). Drag it UP / DOWN for parallel paths A / B (an empty path = dry), "
+        { "CHAIN",    "The strip under the header is the signal chain and the way around: click a block and its page opens below (AMP and CAB open together, as the RIG). "
+                      "PRE / RIG / POST under the tiles: in front of the amp, the amp and cabinet, after them. A tile's second line is what the block is set to; "
+                      "a purple / green dot = VENOM / STING switches it. Drag a block to reorder it (fuzz before or after the pitch, reverb into the fuzz...), "
+                      "click its LED to switch it on / off, right-click for MIDI learn, Copy / Paste of its settings and block presets (from any factory preset, or yours). Drag it UP / DOWN for parallel paths A / B (an empty path = dry), "
                       "the knob at the merge balances A and B. Order and paths are saved with presets." },
         { "EQ",       "COMB = 10-band graphic EQ (+/-12 dB) with LEVEL. CARVE = parametric: 24 dB/oct LOW / HIGH CUT, shelves and 3 bells - drag the nodes, "
                       "wheel = Q, double-click = reset; the output spectrum runs behind the curve." },

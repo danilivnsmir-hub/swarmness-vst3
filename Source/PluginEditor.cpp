@@ -49,10 +49,13 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     addAndMakeVisible (backdrop);
 
     // Pages
-    fxPage.setInterceptsMouseClicks (false, true);
-    addAndMakeVisible (fxPage);
-    rigPage.setInterceptsMouseClicks (false, true);
-    addChildComponent (rigPage);
+    for (auto& page : pages)
+    {
+        page.setInterceptsMouseClicks (false, true);
+        addChildComponent (page);
+    }
+    addChildComponent (wasp);
+    addChildComponent (ampCab);
     addChildComponent (eqPage);
     addChildComponent (reverbPage);
 
@@ -73,6 +76,35 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     chainStrip.isBlockActive = [this] (int block)
     {
         return (block == Chain::shift && processor.getMeters().noiseEngaged.load()) || blockEngaged (block);
+    };
+    // the tiles' second line: what the block is set to, where one word says it
+    chainStrip.subtitleFor = [this] (int block) -> juce::String
+    {
+        using namespace ParamIDs;
+        auto index = [this] (const char* id) { return juce::roundToInt (state.getRawParameterValue (id)->load()); };
+        auto pick = [] (const juce::StringArray& names, int i) { return names[juce::jlimit (0, names.size() - 1, i)].toUpperCase(); };
+        switch (block)
+        {
+            case Chain::amp:   { const int ch = index (ampChannel); return ch >= 3 ? juce::String ("NAM") : juce::String (AmpBlock::channelModel (ch)); }
+            case Chain::cab:   return pick (ParamChoices::cabTypes, index (cabType));
+            case Chain::drive: return paramOn (drvNam) ? juce::String ("NAM") : pick (ParamChoices::waspCharacters, index (drvCharacter));
+            case Chain::crypt: return pick (ParamChoices::reverbTypes, index (revType));
+            case Chain::smoke: return pick (ParamChoices::fuzzVoices, index (fuzzVoice)) + " FUZZ";
+            case Chain::shift:
+            {
+                auto st = [] (int v) { return (v > 0 ? "+" : "") + juce::String (v); };
+                return st (index (shiftA)) + " / " + st (index (shiftB));
+            }
+            default:           return {};
+        }
+    };
+    chainStrip.stompMarksFor = [this] (int block)
+    {
+        using namespace ParamIDs;
+        auto wired = [this] (const char* id) { return id != nullptr && state.getRawParameterValue (id)->load() > 0.5f; };
+        if (block == Chain::shift)
+            return (wired (linkOct1) || wired (linkOct2) ? 1 : 0) | (wired (stingShiftA) || wired (stingShiftB) ? 2 : 0);
+        return (wired (venomBlock[block]) ? 1 : 0) | (wired (stingBlock[block]) ? 2 : 0);
     };
     addAndMakeVisible (chainStrip);
 
@@ -109,12 +141,8 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     sceneBar.onRightClick = [this] (int k) { showMidiMenu (ParamIDs::scene, &sceneBar, k); };
     addAndMakeVisible (sceneBar);
 
-    // Pages
-    pitchPage.setInterceptsMouseClicks (false, true);
-    addChildComponent (pitchPage);
-
     // SHIFT (footswitch shifter: the power button keeps SHIFT A on, the footswitches engage it while held)
-    attachButton (pitchPage, shiftPower, shOn, "SHIFT on / off: on = SHIFT A sounds all the time (like a latched pedal). "
+    attachButton (pages[shiftPage], shiftPower, shOn, "SHIFT on / off: on = SHIFT A sounds all the time (like a latched pedal). "
                                                "The SHIFT A / B footswitches still engage it while held when it is off"); 
     shiftAKnob.attach (state, shiftA, "SHIFT A: interval of the SHIFT A footswitch, -24..+24 semitones (octaves, fifths, fourths...)");
     shiftBKnob.attach (state, shiftB, "SHIFT B: interval of the SHIFT B footswitch (while both are held it wins - or both sound with STACK)");
@@ -125,14 +153,14 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     chaosKnob .attach (state, chaos,  "FRENZY: random pitch jumps, wider and faster as you turn it up (SNAP = on 4ths / 5ths / octaves)");
     speedKnob .attach (state, speed,  "BUZZ: all-pass feedback + amplitude modulation - slow phasing up to ring-mod shrieks");
     shDetuneKnob.attach (state, shDetune, "DETUNE: fine offset of the shifted note, -50..+50 cents - a sour SHIFT");
-    attachButton (pitchPage, stackToggle, shStack, "STACK: holding SHIFT A and B together plays both intervals at once (a second voice splits off to B). Off = B wins");
-    attachButton (pitchPage, shSnapToggle, shSnap, "SNAP: FRENZY jumps land on 4ths / 5ths / octaves (off = random in-between pitches)");
-    attachButton (pitchPage, shRawToggle, shRaw, "RAW: cheap-pedal-DSP character - warble, rough splices, lo-fi converters. Off = clean modern engine");
+    attachButton (pages[shiftPage], stackToggle, shStack, "STACK: holding SHIFT A and B together plays both intervals at once (a second voice splits off to B). Off = B wins");
+    attachButton (pages[shiftPage], shSnapToggle, shSnap, "SNAP: FRENZY jumps land on 4ths / 5ths / octaves (off = random in-between pitches)");
+    attachButton (pages[shiftPage], shRawToggle, shRaw, "RAW: cheap-pedal-DSP character - warble, rough splices, lo-fi converters. Off = clean modern engine");
     pitchScope.setTooltip ("Live SHIFT transposition (with FRENZY / ANGER movement)");
 
     // HIVE - VOICES
-    attachButton (pitchPage, hivePower, rbOn, "HIVE on / off (voices + trails). The VENOM footswitch switches it on while held, like a momentary pedal");
-    attachButton (pitchPage, snapToggle, rbSnap, "SNAP: PITCH in whole semitones, and FRENZY jumps land on 4ths / 5ths / octaves (off = atonal in-between pitches)");
+    attachButton (pages[hivePage], hivePower, rbOn, "HIVE on / off (voices + trails). The VENOM footswitch switches it on while held, like a momentary pedal");
+    attachButton (pages[hivePage], snapToggle, rbSnap, "SNAP: PITCH in whole semitones, and FRENZY jumps land on 4ths / 5ths / octaves (off = atonal in-between pitches)");
     pitchKnob    .attach (state, rbPitch,     "PITCH: DRONE interval, -12..+12 semitones (SNAP = whole semitones). Also how far an UP / DOWN step moves a repeat");
     pitchKnob.setSnap ([this] (double v) { return paramOn (ParamIDs::rbSnap) ? std::round (v) : v; });
     primaryKnob  .attach (state, rbPrimary,   "DRONE: level of the main harmony voice (and its trails). HIVE harmonises what reaches it: after SHIFT in the chain it follows the shifted note");
@@ -144,53 +172,54 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     rbDivKnob .attach (state, rbDiv,   "TIME as a tempo division (SYNC on) = length of one step");
     toneKnob  .attach (state, rbTone,  "TONE: brightness of the voices and the trails");
     gateKnob  .attach (state, trChop,  "GATE: chops every step - 0% = whole repeats, higher = shorter, stuttering chops");
-    attachButton (pitchPage, trDryToggle, trDry, "DRY: the repeats start from your note instead of the DRONE - HIVE becomes a delay "
+    attachButton (pages[hivePage], trDryToggle, trDry, "DRY: the repeats start from your note instead of the DRONE - HIVE becomes a delay "
                                                  "(HOLD steps = plain echoes, UP / DOWN = a pitch-shifting delay). DRONE / QUEEN still sound on top if turned up");
-    attachButton (pitchPage, hvStopToggle, hvStop, "STOP: the repeats slow to a halt like a tape (pitch falls with them) and start again when released - "
+    attachButton (pages[hivePage], hvStopToggle, hvStop, "STOP: the repeats slow to a halt like a tape (pitch falls with them) and start again when released - "
                                                    "the STOP knob sets how long; wire VENOM or STING to it for a pedal. Right-click: MIDI learn");
     hvStopTimeKnob.attach (state, hvStopTime, "FALL: how long the tape takes to halt after STOP goes down");
     hvStopRiseKnob.attach (state, hvStopRise, "RISE: how long the tape takes to come back up to speed when STOP is released (the live repeats blend back in on the way)");
-    pitchPage.addAndMakeVisible (hvStopTimeKnob);
-    pitchPage.addAndMakeVisible (hvStopRiseKnob);
-    attachButton (pitchPage, rbSyncToggle, rbSync, "SYNC: lock the repeats to the host tempo - while the song plays, the STEPS follow the bar grid");
+    pages[hivePage].addAndMakeVisible (hvStopTimeKnob);
+    pages[hivePage].addAndMakeVisible (hvStopRiseKnob);
+    attachButton (pages[hivePage], rbSyncToggle, rbSync, "SYNC: lock the repeats to the host tempo - while the song plays, the STEPS follow the bar grid");
     // MANGLE
     hvMangleKnob.attach (state, hvMangle, "MANGLE: chaos for the voices and trails in one knob - first sour detuned voices (ANGER), "
                                           "then random pitch jumps (FRENZY, on 4ths / 5ths / octaves with SNAP), then all-pass buzz and AM (BUZZ) on top");
     rbDetuneKnob.attach (state, rbDetune, "DETUNE: -50..+50 cents - DRONE up / QUEEN down for width");
     rbMixKnob.attach (state, rbMix, "MIX: dry / HIVE voices. 50% = both at full level, 100% = only the voices and trails");
-    attachButton (pitchPage, rbRawToggle, rbRaw, "RAW: cheap-pedal-DSP character for the voices - warble, rough splices, lo-fi converters. Off = clean modern engine");
+    attachButton (pages[hivePage], rbRawToggle, rbRaw, "RAW: cheap-pedal-DSP character for the voices - warble, rough splices, lo-fi converters. Off = clean modern engine");
 
     for (auto* c : std::initializer_list<juce::Component*> { &pitchScope, &shiftAKnob, &shiftBKnob, &riseKnob, &fallKnob, &blendKnob,
-                                                             &panicKnob, &chaosKnob, &speedKnob, &shDetuneKnob,
-                                                             &pitchKnob, &primaryKnob, &secondaryKnob, &trackingKnob,
+                                                             &panicKnob, &chaosKnob, &speedKnob, &shDetuneKnob })
+        pages[shiftPage].addAndMakeVisible (c);
+    for (auto* c : std::initializer_list<juce::Component*> { &pitchKnob, &primaryKnob, &secondaryKnob, &trackingKnob,
                                                              &magicKnob, &rbTimeKnob, &toneKnob, &gateKnob, &stepGrid,
                                                              &hvMangleKnob, &rbDetuneKnob, &rbMixKnob })
-        pitchPage.addAndMakeVisible (c);
-    pitchPage.addChildComponent (rbDivKnob);
+        pages[hivePage].addAndMakeVisible (c);
+    pages[hivePage].addChildComponent (rbDivKnob);
 
     // HONEY
-    attachButton (fxPage, honeyPower, hnOn, "HONEY sustainer / compressor on / off");
-    attachButton (fxPage, limitToggle, hnLimit, "LIMIT: a fast peak limiter after the compressor (ceiling -6 dBFS, the top of the IN meter's green zone) - stops the picks that a slow ATTACK lets through");
+    attachButton (pages[honeyPage], honeyPower, hnOn, "HONEY sustainer / compressor on / off");
+    attachButton (pages[honeyPage], limitToggle, hnLimit, "LIMIT: a fast peak limiter after the compressor (ceiling -6 dBFS, the top of the IN meter's green zone) - stops the picks that a slow ATTACK lets through");
     honeySustainKnob.attach (state, hnSustain, "SUSTAIN: threshold down and ratio up together, like one knob on a pedal - a touch at 0, everything squashed into sticky sustain at 100");
     honeyAttackKnob .attach (state, hnAttack,  "ATTACK: 1 .. 40 ms - slower lets the pick through before the squash");
     honeyBlendKnob  .attach (state, hnBlend,   "BLEND: parallel blend - dry at 0, only the compressed signal at 100");
     honeyLevelKnob  .attach (state, hnLevel,   "LEVEL: output on top of the automatic make-up (SUSTAIN alone keeps the loudness about even)");
     honeyMeter.setTooltip ("Gain reduction: how much HONEY is turning down right now");
     for (auto* c : std::initializer_list<juce::Component*> { &honeySustainKnob, &honeyAttackKnob, &honeyBlendKnob, &honeyLevelKnob, &honeyMeter })
-        fxPage.addAndMakeVisible (c);
+        pages[honeyPage].addAndMakeVisible (c);
 
     // SWARM
-    attachButton (fxPage, swarmPower, swarmOn,   "SWARM chorus on / off");
-    attachButton (fxPage, deepToggle, swarmDeep, "Deep mode: 8 voices with feedback");
+    attachButton (pages[swarmPage], swarmPower, swarmOn,   "SWARM chorus on / off");
+    attachButton (pages[swarmPage], deepToggle, swarmDeep, "Deep mode: 8 voices with feedback");
     swarmDepthKnob.attach (state, swarmDepth, "Modulation depth");
     swarmRateKnob .attach (state, swarmRate,  "Modulation rate");
     swarmMixKnob  .attach (state, swarmMix,   "Chorus mix: 50% = dry and chorus both at full level, 100% = pure vibrato");
     swarmRingKnob .attach (state, swarmRing,  "RING: the voices through a ring modulator - a slow tremble at the bottom, metallic bells and clangs up top (40 Hz .. 1.3 kHz); the dry signal stays clean");
     for (auto* c : std::initializer_list<juce::Component*> { &swarmDepthKnob, &swarmRateKnob, &swarmMixKnob, &swarmRingKnob })
-        fxPage.addAndMakeVisible (c);
+        pages[swarmPage].addAndMakeVisible (c);
 
     // FUZZ
-    attachButton (fxPage, fuzzPower, fuzzOn,   "SMOKE fuzz on / off");
+    attachButton (pages[smokePage], fuzzPower, fuzzOn,   "SMOKE fuzz on / off");
     fuzzVoiceSelector.setTooltip ("VOICE: DOWN = doom low-mids and full bottom, MID = jumbo fuzz, UP = tight, screaming upper mids");
     fuzzKnob     .attach (state, fuzz,      "FUZZ: from dirty crunch to wall-of-fuzz sustain");
     fuzzToneKnob .attach (state, fuzzTone,  "TONE: dark <-> bright (also opens the fizz)");
@@ -202,21 +231,19 @@ MainPanel::MainPanel (SwarmnessAudioProcessor& p)
     fuzzCrushKnob.attach (state, fuzzCrush, "CRUSH: fewer bits and a lower sample rate on the fuzz (16 -> 4 bits, 48 -> 4 kHz, aliasing and all) - digital grit on top of the diodes; CLEAN underneath stays clean");
     for (auto* c : std::initializer_list<juce::Component*> { &fuzzVoiceSelector, &fuzzKnob, &fuzzToneKnob, &fuzzScoopKnob,
                                                              &fuzzGlareKnob, &fuzzGateKnob, &fuzzSagKnob, &fuzzBlendKnob, &fuzzCrushKnob })
-        fxPage.addAndMakeVisible (c);
+        pages[smokePage].addAndMakeVisible (c);
 
     // FLOW
-    attachButton (fxPage, flowPower,  flowOn,   "WINGS gate on / off");
-    attachButton (fxPage, hardToggle, flowHard, "Hard stutter gate (off = smooth tremolo)");
-    attachButton (fxPage, syncToggle, flowSync, "Sync to host tempo");
+    attachButton (pages[wingsPage], flowPower,  flowOn,   "WINGS gate on / off");
+    attachButton (pages[wingsPage], hardToggle, flowHard, "Hard stutter gate (off = smooth tremolo)");
+    attachButton (pages[wingsPage], syncToggle, flowSync, "Sync to host tempo");
     flowAmountKnob.attach (state, flowAmount, "Gate depth");
     flowSpeedKnob .attach (state, flowSpeed,  "Gate rate (free)");
     flowDivKnob   .attach (state, flowDiv,    "Gate rate (tempo division)");
-    fxPage.addAndMakeVisible (flowAmountKnob);
-    fxPage.addAndMakeVisible (flowSpeedKnob);
-    fxPage.addChildComponent (flowDivKnob);
-    fxPage.addAndMakeVisible (wingsGrid);
-    rigPage.addAndMakeVisible (wasp);
-    rigPage.addAndMakeVisible (ampCab);
+    pages[wingsPage].addAndMakeVisible (flowAmountKnob);
+    pages[wingsPage].addAndMakeVisible (flowSpeedKnob);
+    pages[wingsPage].addChildComponent (flowDivKnob);
+    pages[wingsPage].addAndMakeVisible (wingsGrid);
 
     // OUTPUT
     inputKnob .attach (state, input,  "INPUT: input gain - how hard SMOKE, WASP, the AMP and the pitch tracking are hit. Aim for peaks in the green zone of the IN meter");
@@ -336,16 +363,19 @@ int MainPanel::pageForBlock (int block)
 {
     switch (block)
     {
-        case Chain::comb:
-        case Chain::carve: return eqPageIndex;
-        case Chain::crypt: return spacePageIndex;
-        case Chain::shift:
-        case Chain::pitch: return pitchPageIndex;
-        case Chain::drive:
+        case Chain::honey: return honeyPage;
+        case Chain::smoke: return smokePage;
+        case Chain::shift: return shiftPage;
+        case Chain::pitch: return hivePage;
+        case Chain::drive: return waspPage;
         case Chain::amp:
-        case Chain::cab:   return rigPageIndex;
-        case Chain::honey: return fxPageIndex;
-        default:           return fxPageIndex;
+        case Chain::cab:   return rigPage;
+        case Chain::swarm: return swarmPage;
+        case Chain::wings: return wingsPage;
+        case Chain::comb:  return combPage;
+        case Chain::carve: return carvePage;
+        case Chain::crypt: return cryptPage;
+        default:           return rigPage;
     }
 }
 
@@ -363,21 +393,23 @@ void MainPanel::setMini (bool shouldBeMini)
 
 void MainPanel::showPage (int page)
 {
-    currentPage = juce::jlimit (0, numPages - 1, page);
+    currentPage = page < 0 || page >= numPages ? (int) rigPage : page;
     processor.setUiPage (currentPage);
-    fxPage.setVisible (! mini && currentPage == fxPageIndex);
-    pitchPage.setVisible (! mini && currentPage == pitchPageIndex);
-    rigPage.setVisible (! mini && currentPage == rigPageIndex);
-    eqPage.setVisible (! mini && currentPage == eqPageIndex);
-    reverbPage.setVisible (! mini && currentPage == spacePageIndex);
+    for (int i = 0; i < numPages; ++i)
+        pages[(size_t) i].setVisible (! mini && currentPage == i);
+    wasp.setVisible (! mini && currentPage == waspPage);
+    ampCab.setVisible (! mini && currentPage == rigPage);
+    eqPage.setView (currentPage == carvePage ? 1 : 0);
+    eqPage.setVisible (! mini && (currentPage == combPage || currentPage == carvePage));
+    reverbPage.setVisible (! mini && currentPage == cryptPage);
     miniButton.setToggleState (mini, juce::dontSendNotification);
     miniButton.setButtonText (mini ? "FULL" : "MINI");
-    if (currentPage != eqPageIndex)
+    if (! eqPage.isVisible())
         processor.getSpectrumTap().setActive (false);
 
     std::array<bool, Chain::numBlocks> hi {};
     for (int b = 0; b < Chain::numBlocks; ++b)
-        hi[(size_t) b] = pageForBlock (b) == currentPage;
+        hi[(size_t) b] = pageShowsBlock (currentPage, b);
     chainStrip.setHighlighted (hi);
     backdrop.repaint();
 }
@@ -408,27 +440,59 @@ void MainPanel::resized()
     miniButton.setBounds (baseWidth - 16 - 32 - 8 - 52, 16, 52, 32);
     infoButton.setBounds (baseWidth - 16 - 32, 16, 32, 32);
 
-    // Chain strip and the page area below it
-    chainStrip.setBounds (16, 70, baseWidth - 32, 66);
-    const auto pageArea = juce::Rectangle<int> (16, 144, baseWidth - 32, 464);
-    eqPage.setBounds (pageArea);
-    reverbPage.setBounds (pageArea);
+    // Chain strip (tiles + the PRE / RIG / POST band) and the page area below it: one block at a time.
+    // The chain is the navigation, so it gets the room; a page keeps its knobs together in the middle.
+    chainStrip.setBounds (16, 70, baseWidth - 32, 60 + (int) ChainStrip::zoneBandHeight);
+    pageArea = { 16, 154, baseWidth - 32, 290 };
+    for (auto* c : std::initializer_list<juce::Component*> { &eqPage, &reverbPage, &wasp, &ampCab })
+        c->setBounds (pageArea);
+    for (auto& page : pages)
+        page.setBounds (getLocalBounds());
 
-    fxPage.setBounds (getLocalBounds());
-    pitchPage.setBounds (getLocalBounds());
-    rigPage.setBounds (getLocalBounds());
+    const auto P = pageArea.toFloat();
+    honeyArea = fuzzArea = swarmArea = flowArea = hiveArea = shiftArea = P;
 
-    // FX page: SMOKE across the top, SWARM and WINGS under it
-    fuzzArea   = { 16.0f,  144.0f, (float) baseWidth - 32.0f, 226.0f };
-    honeyArea  = { 16.0f,  382.0f, 330.0f, 226.0f };
-    swarmArea  = { 358.0f, 382.0f, 310.0f, 226.0f };
-    flowArea   = { 680.0f, 382.0f, (float) baseWidth - 16.0f - 680.0f, 226.0f };
-    // PITCH page: HIVE on top, SHIFT below
-    hiveArea   = { 16.0f, 144.0f, (float) baseWidth - 32.0f, 262.0f };
-    shiftArea  = { 16.0f, 418.0f, (float) baseWidth - 32.0f, 190.0f };
+    // a block's power button is the LED in front of its title; the switches line up at the right
+    auto powerFor = [] (juce::Rectangle<float> a) { return titleLedBounds (a); };
+    auto pillFor  = [] (juce::Rectangle<float> a, int slot) { return juce::Rectangle<int> ((int) a.getRight() - 16 - 60 - 66 * slot, (int) a.getY() + 9, 60, 24); };
+    constexpr int bigW = 92, bigH = 128, smallW = 70, smallH = 100, bigStep = 124, smallStep = 96;
+    // knobs side by side, centred between x0 and x1; big ones and small ones share a centre line
+    auto row = [] (std::initializer_list<std::pair<Knob*, bool>> knobs, int x0, int x1, int centreY)
+    {
+        int total = 0;
+        for (auto& k : knobs) total += k.second ? bigStep : smallStep;
+        int x = (x0 + x1 - total) / 2;
+        for (auto& [k, big] : knobs)
+        {
+            const int step = big ? bigStep : smallStep, w = big ? bigW : smallW, h = big ? bigH : smallH;
+            k->setBounds (x + (step - w) / 2, centreY - h / 2, w, h);
+            x += step;
+        }
+    };
+    const int px0 = (int) P.getX() + 24, px1 = (int) P.getRight() - 24, py = (int) P.getY();
+    const int bodyTop = py + 44, bodyBottom = (int) P.getBottom() - 12, bodyMid = (bodyTop + bodyBottom) / 2;
 
-    auto powerFor = [] (juce::Rectangle<float> a) { return juce::Rectangle<int> ((int) a.getRight() - 40, (int) a.getY() + 8, 26, 26); };
-    auto pillFor  = [] (juce::Rectangle<float> a, int slot) { return juce::Rectangle<int> ((int) a.getRight() - 40 - 66 * (slot + 1), (int) a.getY() + 9, 60, 24); };
+    // HONEY: four knobs, the gain-reduction bar under them
+    honeyPower.setBounds (powerFor (honeyArea));
+    limitToggle.setBounds (pillFor (honeyArea, 0));
+    row ({ { &honeySustainKnob, true }, { &honeyAttackKnob, true }, { &honeyBlendKnob, true }, { &honeyLevelKnob, true } }, px0, px1, bodyMid - 20);
+    honeyMeter.setBounds ((int) P.getCentreX() - 240, bodyMid + 64, 480, 24);
+
+    // SMOKE: one row - the three that shape it large, the details smaller
+    fuzzPower.setBounds (powerFor (fuzzArea));
+    fuzzVoiceSelector.setBounds ((int) fuzzArea.getRight() - 16 - 150, (int) fuzzArea.getY() + 10, 150, 22);
+    row ({ { &fuzzKnob, true }, { &fuzzToneKnob, true }, { &fuzzBlendKnob, true }, { &fuzzScoopKnob, false }, { &fuzzGlareKnob, false },
+           { &fuzzGateKnob, false }, { &fuzzSagKnob, false }, { &fuzzCrushKnob, false } }, px0, px1, bodyMid);
+
+    // SHIFT: the live pitch display on the left; SHIFT A / B and MIX large, the movement knobs under them
+    shiftPower  .setBounds (powerFor (shiftArea));
+    stackToggle .setBounds (pillFor (shiftArea, 2));
+    shSnapToggle.setBounds (pillFor (shiftArea, 1));
+    shRawToggle .setBounds (pillFor (shiftArea, 0));
+    pitchScope.setBounds (px0 - 4, bodyTop + 4, 300, bodyBottom - bodyTop - 4);
+    row ({ { &shiftAKnob, true }, { &shiftBKnob, true }, { &blendKnob, true } }, px0 + 310, px1, bodyTop + bigH / 2);
+    row ({ { &riseKnob, false }, { &fallKnob, false }, { &panicKnob, false }, { &chaosKnob, false }, { &speedKnob, false }, { &shDetuneKnob, false } },
+         px0 + 310, px1, bodyBottom - smallH / 2);
 
     // HIVE: VOICES | TRAILS | MANGLE
     {
@@ -440,9 +504,8 @@ void MainPanel::resized()
             hiveSections[(size_t) i] = { x, hiveArea.getY(), w, hiveArea.getHeight() };
             x += w;
         }
-        const int y1 = (int) hiveArea.getY() + 58, y2 = (int) hiveArea.getY() + 158, kh = 100;
-        int kw = 72;
-        auto row = [&] (juce::Rectangle<float> sec, int y, std::initializer_list<juce::Component*> comps, int slots = 3)
+        const int y1 = (int) hiveArea.getY() + 64, y2 = (int) hiveArea.getY() + 176, kw = 72, kh = 102;
+        auto sectionRow = [&] (juce::Rectangle<float> sec, int y, std::initializer_list<juce::Component*> comps, int slots = 3)
         {
             const int gap = ((int) sec.getWidth() - kw * slots) / (slots + 1);
             int cx = (int) sec.getX() + gap;
@@ -458,133 +521,53 @@ void MainPanel::resized()
         const auto& mangleSec = hiveSections[2];
 
         hivePower.setBounds (powerFor (hiveArea));
-
-        row (voiceSec, y1, { &pitchKnob, &primaryKnob, &secondaryKnob });
-        row (voiceSec, y2, { &trackingKnob, nullptr, nullptr });
-        // switches live in the section's heading row, right-aligned
+        sectionRow (voiceSec, y1, { &pitchKnob, &primaryKnob, &secondaryKnob });
+        sectionRow (voiceSec, y2, { &trackingKnob, nullptr, nullptr });
         snapToggle.setBounds ((int) voiceSec.getRight() - 12 - 60, (int) voiceSec.getY() + 36, 60, 22);
 
         rbSyncToggle.setBounds ((int) trailSec.getRight() - 12 - 60, (int) trailSec.getY() + 36, 60, 22);
         trDryToggle .setBounds ((int) trailSec.getRight() - 12 - 126, (int) trailSec.getY() + 36, 60, 22);
         hvStopToggle.setBounds ((int) trailSec.getRight() - 12 - 192, (int) trailSec.getY() + 36, 60, 22);
-        // TRAILS: TRAILS and TIME large on the left (the small STOP / TONE / GATE under MORE), a tall step grid on the right
         {
-            const int kx = (int) trailSec.getX() + 12, ky = (int) hiveArea.getY() + 62, sw = 60, sh = 96;
-            magicKnob     .setBounds (kx,          ky,      sw, sh);
-            rbTimeKnob    .setBounds (kx + sw,     ky,      sw, sh);
-            hvStopTimeKnob.setBounds (kx + 2 * sw, ky,      sw, sh);
-            toneKnob      .setBounds (kx,          ky + sh, sw, sh);
-            gateKnob      .setBounds (kx + sw,     ky + sh, sw, sh);
-            hvStopRiseKnob.setBounds (kx + 2 * sw, ky + sh, sw, sh);
+            const int kx = (int) trailSec.getX() + 12, ky = y1, sw = 62, sh = 112;
+            magicKnob     .setBounds (kx,          ky,      sw, 100);
+            rbTimeKnob    .setBounds (kx + sw,     ky,      sw, 100);
+            hvStopTimeKnob.setBounds (kx + 2 * sw, ky,      sw, 100);
+            toneKnob      .setBounds (kx,          ky + sh, sw, 100);
+            gateKnob      .setBounds (kx + sw,     ky + sh, sw, 100);
+            hvStopRiseKnob.setBounds (kx + 2 * sw, ky + sh, sw, 100);
             rbDivKnob.setBounds (rbTimeKnob.getBounds());
-            const int gx = kx + 3 * sw + 12;
-            stepGrid.setBounds (gx, (int) hiveArea.getY() + 64, (int) trailSec.getRight() - 14 - gx, (int) hiveArea.getBottom() - 12 - ((int) hiveArea.getY() + 64));
+            const int gx = kx + 3 * sw + 14;
+            stepGrid.setBounds (gx, y1, (int) trailSec.getRight() - 14 - gx, (int) hiveArea.getBottom() - 12 - y1);
         }
 
         rbRawToggle.setBounds ((int) mangleSec.getRight() - 12 - 60, (int) mangleSec.getY() + 36, 60, 22);
-        row (mangleSec, y1, { &hvMangleKnob }, 1);
-        row (mangleSec, y2, { &rbDetuneKnob, &rbMixKnob }, 2);
+        sectionRow (mangleSec, y1, { &hvMangleKnob }, 1);
+        sectionRow (mangleSec, y2, { &rbDetuneKnob, &rbMixKnob }, 2);
     }
 
-    // SHIFT: live pitch display on the left, nine knobs, STACK / SNAP / RAW in the title row
-    {
-        pitchScope.setBounds ((int) shiftArea.getX() + 16, (int) shiftArea.getY() + 44, 250, 132);
-        shiftPower  .setBounds (powerFor (shiftArea));
-        stackToggle .setBounds (pillFor (shiftArea, 2));
-        shSnapToggle.setBounds (pillFor (shiftArea, 1));
-        shRawToggle .setBounds (pillFor (shiftArea, 0));
-        const int x0 = (int) shiftArea.getX() + 282, x1 = (int) shiftArea.getRight() - 10;
-        const std::vector<Knob*> knobs { &shiftAKnob, &shiftBKnob, &riseKnob, &fallKnob, &blendKnob, &panicKnob, &chaosKnob, &speedKnob, &shDetuneKnob };
-        const float step = (float) (x1 - x0) / (float) knobs.size();
-        int k = 0;
-        for (auto* knob : knobs)
-        {
-            // SHIFT A / B and MIX large, the rest small
-            const bool primary = knob == &shiftAKnob || knob == &shiftBKnob || knob == &blendKnob;
-            const int kw = primary ? 88 : 64, kh = primary ? 124 : 96;
-            knob->setBounds (x0 + juce::roundToInt (step * ((float) k++ + 0.5f)) - kw / 2, (int) shiftArea.getY() + 44 + (124 - kh) / 2, kw, kh);
-        }
-    }
-
-    auto threeKnobs = [] (juce::Rectangle<float> a, std::initializer_list<Knob*> knobs)
-    {
-        const int kw = 88, kh = 124, y = (int) a.getY() + 40 + ((int) a.getHeight() - 40 - kh) / 2;
-        const int gap = ((int) a.getWidth() - kw * (int) knobs.size()) / ((int) knobs.size() + 1);
-        int x = (int) a.getX() + gap;
-        for (auto* k : knobs)
-        {
-            k->setBounds (x, y, kw, kh);
-            x += kw + gap;
-        }
-    };
-
-    // HONEY: four knobs and the gain-reduction bar under them
-    honeyPower.setBounds (powerFor (honeyArea));
-    limitToggle.setBounds (pillFor (honeyArea, 0));
-    {
-        const int kw = 72, kh = 104, gap = ((int) honeyArea.getWidth() - 4 * kw) / 5;
-        int x = (int) honeyArea.getX() + gap;
-        for (auto* k : { &honeySustainKnob, &honeyAttackKnob, &honeyBlendKnob, &honeyLevelKnob })
-        {
-            k->setBounds (x, (int) honeyArea.getY() + 50, kw, kh);
-            x += kw + gap;
-        }
-        honeyMeter.setBounds ((int) honeyArea.getX() + 18, (int) honeyArea.getBottom() - 42, (int) honeyArea.getWidth() - 36, 22);
-    }
-
-    // SWARM
+    // SWARM: four knobs
     swarmPower.setBounds (powerFor (swarmArea));
     deepToggle.setBounds (pillFor (swarmArea, 0));
-    {
-        const int kw = 66, kh = 100, gap = ((int) swarmArea.getWidth() - 4 * kw) / 5;
-        int x = (int) swarmArea.getX() + gap;
-        for (auto* k : { &swarmDepthKnob, &swarmRateKnob, &swarmMixKnob, &swarmRingKnob })
-        {
-            k->setBounds (x, (int) swarmArea.getY() + 52, kw, kh);
-            x += kw + gap;
-        }
-    }
+    row ({ { &swarmDepthKnob, true }, { &swarmRateKnob, true }, { &swarmMixKnob, true }, { &swarmRingKnob, true } }, px0, px1, bodyMid);
 
-    // FUZZ
-    fuzzPower.setBounds (powerFor (fuzzArea));
-    fuzzVoiceSelector.setBounds ((int) fuzzArea.getRight() - 40 - 8 - 150, (int) fuzzArea.getY() + 10, 150, 22);
-    {
-        // the primary three large, the rest small, all in one row
-        const int kw = 88, sw = 64, kh = 124, sh = 96, y = (int) fuzzArea.getY() + 40 + ((int) fuzzArea.getHeight() - 40 - kh) / 2;
-        const int total = 3 * kw + 5 * sw, gap = ((int) fuzzArea.getWidth() - total) / 9;
-        int x = (int) fuzzArea.getX() + gap;
-        for (auto* k : { &fuzzKnob, &fuzzToneKnob, &fuzzBlendKnob, &fuzzScoopKnob, &fuzzGlareKnob, &fuzzGateKnob, &fuzzSagKnob, &fuzzCrushKnob })
-        {
-            const bool primary = k == &fuzzKnob || k == &fuzzToneKnob || k == &fuzzBlendKnob;
-            k->setBounds (x, primary ? y : y + (kh - sh) / 2, primary ? kw : sw, primary ? kh : sh);
-            x += (primary ? kw : sw) + gap;
-        }
-    }
-
-    // FLOW
+    // WINGS: depth and rate on the left, the step pattern next to them
     flowPower.setBounds (powerFor (flowArea));
-    syncToggle.setBounds ((int) flowArea.getRight() - 44 - 54,  (int) flowArea.getY() + 9, 54, 24);
-    hardToggle.setBounds ((int) flowArea.getRight() - 44 - 112, (int) flowArea.getY() + 9, 54, 24);
+    syncToggle.setBounds ((int) flowArea.getRight() - 16 - 54,  (int) flowArea.getY() + 9, 54, 24);
+    hardToggle.setBounds ((int) flowArea.getRight() - 16 - 112, (int) flowArea.getY() + 9, 54, 24);
     {
-        // two knobs at the left, the step pattern at the right
-        const int kw = 62, kh = 100, x0 = (int) flowArea.getX() + 12, y0 = (int) flowArea.getY() + 52;
-        flowAmountKnob.setBounds (x0, y0, kw, kh);
-        flowSpeedKnob.setBounds (x0 + kw + 6, y0, kw, kh);
+        flowAmountKnob.setBounds (px0, bodyMid - bigH / 2, bigW, bigH);
+        flowSpeedKnob.setBounds (px0 + bigStep, bodyMid - bigH / 2, bigW, bigH);
         flowDivKnob.setBounds (flowSpeedKnob.getBounds());
-        const int gx = flowSpeedKnob.getRight() + 16;
-        wingsGrid.setBounds (gx, (int) flowArea.getY() + 46, (int) flowArea.getRight() - 14 - gx, (int) flowArea.getBottom() - 14 - ((int) flowArea.getY() + 46));
+        const int gx = flowSpeedKnob.getRight() + 28;
+        wingsGrid.setBounds (gx, bodyTop, px1 - gx, bodyBottom - bodyTop);
     }
-
-    // RIG page: WASP on top, AMP + CAB under it
-    wasp.setBounds (16, 144, baseWidth - 32, 200);
-    ampCab.setBounds (16, 356, baseWidth - 32, 252);
-
 
     // Footer: footswitches centred (LINK mini switches beside the octaves), meters at the sides
     {
         // scenes above the footswitches (full view: under the pages)
-        sceneBar.setBounds (16, mini ? 144 : 616, baseWidth - 32, 40);
-        const int fy = mini ? 196 : 668, fw = 92, fh = 118, spacing = 120;
+        sceneBar.setBounds (16, mini ? 154 : 452, baseWidth - 32, 40);
+        const int fy = mini ? 206 : 504, fw = 92, fh = 118, spacing = 120;
         const int total = spacing * 4 + fw;
         int x = (baseWidth - total) / 2;
         for (auto* f : { &oct1Switch, &oct2Switch, &magicSwitch, &stingSwitch, &bypassSwitch })
@@ -726,48 +709,56 @@ void MainPanel::paintBackdrop (juce::Graphics& g)
     if (mini)
         return;
 
-    if (currentPage == fxPageIndex)
+    // the panel draws the frames of the blocks it lays out itself (the other pages paint their own)
+    auto blockPanel = [&] (juce::Rectangle<float> a, const char* title, const char* description, bool on)
     {
-        for (auto a : { honeyArea, swarmArea, fuzzArea, flowArea })
-            drawPanel (g, a);
-        drawSectionTitle (g, titleRow (honeyArea), "HONEY", lastSectionStates[5]);
-        drawSectionTitle (g, titleRow (fuzzArea),  "SMOKE", lastSectionStates[3]);
-        drawSectionTitle (g, titleRow (swarmArea), "SWARM", lastSectionStates[2]);
-        drawSectionTitle (g, titleRow (flowArea),  "WINGS", lastSectionStates[4]);
-    }
-
-    if (currentPage == pitchPageIndex)
-    {
-        drawPanel (g, hiveArea);
-        drawPanel (g, shiftArea);
-
-        drawSectionTitle (g, titleRow (hiveArea), "HIVE", lastSectionStates[1]);
+        drawPanel (g, a);
+        drawSectionTitle (g, titleRow (a), title, on, false);   // the block's PowerButton is the LED
         g.setFont (font (12.5f, true));
         g.setColour (Colours::textFaint);
-        g.drawText ("harmonies and pitch-shifting repeats  -  VENOM switches it on while held", titleRow (hiveArea).withTrimmedLeft (86.0f),
+        g.drawText (description, titleRow (a).withTrimmedLeft (22.0f + (float) juce::GlyphArrangement::getStringWidthInt (displayFont (23.0f), title) + 12.0f),
                     juce::Justification::centredLeft, false);
+    };
 
-        static const char* sectionNames[] { "VOICES", "TRAILS", "MANGLE" };
-        for (size_t i = 0; i < hiveSections.size(); ++i)
+    switch (currentPage)
+    {
+        case honeyPage:
+            blockPanel (honeyArea, "HONEY", "sustainer / compressor  -  even picking and long notes in front of everything; LIMIT catches the peaks", lastSectionStates[5]);
+            break;
+        case smokePage:
+            blockPanel (fuzzArea, "SMOKE", "fuzz  -  VOICE picks where the mids sit, CLEAN keeps the pick attack under the wall", lastSectionStates[3]);
+            break;
+        case shiftPage:
+            blockPanel (shiftArea, "SHIFT", "pitch shifter  -  on = SHIFT A all the time, the footswitches engage it while held", lastSectionStates[0]);
+            break;
+        case swarmPage:
+            blockPanel (swarmArea, "SWARM", "chorus  -  DEEP = eight voices with feedback, RING sends the voices through a ring modulator", lastSectionStates[2]);
+            break;
+        case wingsPage:
+            blockPanel (flowArea, "WINGS", "tremolo / stutter gate  -  draw the steps, HARD for a gate, SYNC to the host tempo", lastSectionStates[4]);
+            break;
+        case hivePage:
         {
-            const auto& sec = hiveSections[i];
-            if (i > 0)
+            blockPanel (hiveArea, "HIVE", "harmonies and pitch-shifting repeats  -  VENOM switches it on while held", lastSectionStates[1]);
+            static const char* sectionNames[] { "VOICES", "TRAILS", "MANGLE" };
+            for (size_t i = 0; i < hiveSections.size(); ++i)
             {
-                g.setGradientFill (juce::ColourGradient (Colours::panelBorder.withAlpha (0.0f), sec.getX(), sec.getY() + 36.0f,
-                                                         Colours::panelBorder, sec.getX(), sec.getBottom() - 20.0f, false));
-                g.fillRect (juce::Rectangle<float> (sec.getX() - 0.5f, sec.getY() + 40.0f, 1.0f, sec.getHeight() - 52.0f));
+                const auto& sec = hiveSections[i];
+                if (i > 0)
+                {
+                    g.setGradientFill (juce::ColourGradient (Colours::panelBorder.withAlpha (0.0f), sec.getX(), sec.getY() + 36.0f,
+                                                             Colours::panelBorder, sec.getX(), sec.getBottom() - 20.0f, false));
+                    g.fillRect (juce::Rectangle<float> (sec.getX() - 0.5f, sec.getY() + 40.0f, 1.0f, sec.getHeight() - 52.0f));
+                }
+                g.setFont (displayFont (16.0f));
+                g.setColour (lastSectionStates[1] ? Colours::accent : Colours::textDim);
+                g.drawText (sectionNames[i], juce::Rectangle<float> (sec.getX() + 16.0f, sec.getY() + 36.0f, 120.0f, 22.0f),
+                            juce::Justification::centredLeft, false);
             }
-            g.setFont (displayFont (16.0f));
-            g.setColour (lastSectionStates[1] ? Colours::accent : Colours::textDim);
-            g.drawText (sectionNames[i], juce::Rectangle<float> (sec.getX() + 16.0f, sec.getY() + 36.0f, 120.0f, 22.0f),
-                        juce::Justification::centredLeft, false);
+            break;
         }
-
-        drawSectionTitle (g, titleRow (shiftArea), "SHIFT", lastSectionStates[0]);
-        g.setFont (font (12.5f, true));
-        g.setColour (Colours::textFaint);
-        g.drawText ("pitch shifter  -  on = SHIFT A all the time, footswitches engage it while held", titleRow (shiftArea).withTrimmedLeft (86.0f),
-                    juce::Justification::centredLeft, false);
+        default:
+            break;
     }
 }
 
@@ -802,11 +793,10 @@ void MainPanel::tick()
     chainStrip.refresh();
     eqPage.tick();
     reverbPage.tick();
-    if (rigPage.isVisible())
-    {
+    if (wasp.isVisible())
         wasp.tick();
+    if (ampCab.isVisible())
         ampCab.tick();
-    }
 
     // MIDI learn: the control waiting for a message pulses
     const auto learning = processor.getMidiLearnParam();
@@ -833,6 +823,12 @@ void MainPanel::tick()
     const bool hiveSynced = paramOn (ParamIDs::rbSync);
     rbTimeKnob.setVisible (! hiveSynced);
     rbDivKnob.setVisible (hiveSynced);
+
+    // the power LEDs also glow (faintly) while a stomp / footswitch has the block on
+    shiftPower.setEngaged (noiseOn);
+    for (auto [button, block] : { std::pair<PowerButton*, int> { &hivePower, Chain::pitch }, { &swarmPower, Chain::swarm },
+                                  { &fuzzPower, Chain::smoke }, { &flowPower, Chain::wings }, { &honeyPower, Chain::honey } })
+        button->setEngaged (blockEngaged (block));
 
     const bool voicesOn = blockEngaged (Chain::pitch);
     const std::array<bool, 6> states { noiseOn, voicesOn, blockEngaged (Chain::swarm),
@@ -1045,7 +1041,7 @@ void MainPanel::addStompWiring (juce::PopupMenu& menu, bool venom)
         if (p == nullptr) return;
         const int current = juce::roundToInt (p->convertFrom0to1 (p->getValue()));
         juce::PopupMenu sub;
-        static const char* labels[] { "-  (its own power button)", "On while held", "Off while held" };
+        static const char* labels[] { "-  (its own power LED)", "On while held", "Off while held" };
         for (int a = 0; a < 3; ++a)
             sub.addItem (labels[a], true, current == a, [p, a] { p->beginChangeGesture(); p->setValueNotifyingHost (p->convertTo0to1 ((float) a)); p->endChangeGesture(); });
         menu.addSubMenu (name + (current == 1 ? "  -  On" : current == 2 ? "  -  Off" : juce::String()), sub, true, nullptr, current != 0);

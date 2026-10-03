@@ -16,8 +16,13 @@ namespace
     juce::Time fromIso (const juce::String& s) { return juce::Time::fromISO8601 (s); }
 }
 
+#ifndef SWARMNESS_NO_LICENCE
+ #define SWARMNESS_NO_LICENCE 0   // the test runner builds the licence code on its own, with licensing on
+#endif
+
 Licence::Licence() : juce::Thread ("Swarmness licence")
 {
+    developerBuild = SWARMNESS_NO_LICENCE != 0;
     clock = [] { return juce::Time::getCurrentTime(); };
     juce::PropertiesFile::Options o;
     o.applicationName = "Swarmness";
@@ -100,11 +105,8 @@ void Licence::compute()
     }
     settings->saveIfNeeded();
 
-   #if SWARMNESS_NO_LICENCE
-    state = State::activated;   // a developer build: no trial, no key
-   #else
-    state = activated ? State::activated : (daysLeft > 0 ? State::trial : State::expired);
-   #endif
+    // a developer build (SWARMNESS_NO_LICENCE): no trial, no key
+    state = (developerBuild || activated) ? State::activated : (daysLeft > 0 ? State::trial : State::expired);
 }
 
 void Licence::activate (const juce::String& key, std::function<void()> onDone)

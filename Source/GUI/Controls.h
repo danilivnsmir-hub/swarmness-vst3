@@ -99,13 +99,18 @@ private:
 };
 
 //==============================================================================
-/** Round section power switch with glowing ring. */
+/** A block's on / off: the hex LED in front of its title - lit = on, glowing faintly = off but engaged
+    right now (a stomp or a footswitch has it), dark = off. */
 class PowerButton : public juce::ToggleButton
 {
 public:
     PowerButton();
     void paintButton (juce::Graphics&, bool isMouseOver, bool isDown) override;
+    /** Engaged by something else (VENOM / STING, a SHIFT footswitch) while its own switch may be off. */
+    void setEngaged (bool e) { if (e != engaged) { engaged = e; repaint(); } }
     SWARM_RIGHT_CLICK_SAFE_BUTTON
+private:
+    bool engaged = false;
 };
 
 //==============================================================================

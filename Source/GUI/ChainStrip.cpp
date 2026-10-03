@@ -4,7 +4,8 @@ using namespace Theme;
 
 namespace
 {
-    constexpr float kInW = 30.0f, kOutW = 38.0f, kGap = 18.0f, kSplitGap = 26.0f, kMergeGap = 46.0f;
+    constexpr float kInW = 26.0f, kOutW = 34.0f, kGap = 12.0f, kSplitGap = 22.0f, kMergeGap = 42.0f;
+    constexpr float kPoint = 0.3f;    // the tiles' hex points (a flatter capsule than a honeycomb cell: room for the names)
 }
 
 ChainStrip::ChainStrip (juce::AudioProcessorValueTreeState& s) : state (s)
@@ -67,7 +68,7 @@ void ChainStrip::setHighlighted (const std::array<bool, Chain::numBlocks>& h)
 ChainStrip::Geometry ChainStrip::computeGeometry (const Chain::Layout& l) const
 {
     Geometry g;
-    const float h = (float) getHeight();
+    const float h = tileAreaHeight();
     g.cableY = h * 0.5f;
     g.laneAY = h * 0.25f + 0.5f;
     g.laneBY = h * 0.75f - 0.5f;
@@ -144,9 +145,12 @@ void ChainStrip::resized()
 
 juce::Rectangle<float> ChainStrip::ledRect (juce::Rectangle<float> tile) const noexcept
 {
-    const bool half = isHalf (tile, (float) getHeight());
-    const float s = half ? 9.0f : 10.0f;
-    return juce::Rectangle<float> (s, s - 1.0f).withCentre ({ tile.getX() + (half ? 14.0f : 15.0f), tile.getCentreY() });
+    const bool half = isHalf (tile, tileAreaHeight());
+    // full tiles: the LED sits on top in the middle, the name and its value centred under it;
+    // half tiles (parallel paths) are too low for that: LED on the left
+    if (half)
+        return juce::Rectangle<float> (9.0f, 8.0f).withCentre ({ tile.getX() + 14.0f, tile.getCentreY() });
+    return juce::Rectangle<float> (10.0f, 9.0f).withCentre ({ tile.getCentreX(), tile.getY() + 9.5f });
 }
 
 Chain::Layout ChainStrip::displayLayout() const
@@ -175,6 +179,20 @@ void ChainStrip::refresh()
         now[(size_t) b] = blockOn (b) || (isBlockActive != nullptr && isBlockActive (b));
     bool changed = now != lit;
     lit = now;
+
+    for (int b = 0; b < Chain::numBlocks; ++b)
+    {
+        auto sub = subtitleFor != nullptr ? subtitleFor (b) : juce::String();
+        if (sub.isEmpty())
+            sub = Chain::subtitles[b];
+        const int marks = stompMarksFor != nullptr ? stompMarksFor (b) : 0;
+        if (sub != subtitles[(size_t) b] || marks != stompMarks[(size_t) b])
+        {
+            subtitles[(size_t) b] = sub;
+            stompMarks[(size_t) b] = marks;
+            changed = true;
+        }
+    }
 
     geometry = computeGeometry (displayLayout());
     if (! initialised)
@@ -211,7 +229,7 @@ void ChainStrip::refresh()
             if (sp.index == k && ! dragging)
             {
                 show = true;
-                mixKnobs[(size_t) k].setBounds (juce::Rectangle<int> (34, 34).withCentre ({ juce::roundToInt (sp.mergeX), getHeight() / 2 }));
+                mixKnobs[(size_t) k].setBounds (juce::Rectangle<int> (34, 34).withCentre ({ juce::roundToInt (sp.mergeX), juce::roundToInt (tileAreaHeight() * 0.5f) }));
             }
         if (mixKnobs[(size_t) k].isVisible() != show)
         {
@@ -235,7 +253,7 @@ int ChainStrip::blockAt (juce::Point<float> p) const
 //==============================================================================
 void ChainStrip::paint (juce::Graphics& g)
 {
-    const auto bounds = getLocalBounds().toFloat();
+    const auto bounds = getLocalBounds().toFloat().withHeight (tileAreaHeight());
     const auto& geo = geometry;
     const float cy = geo.cableY;
     const auto cable = Colours::accentDeep.withAlpha (0.6f);
@@ -319,7 +337,7 @@ void ChainStrip::paint (juce::Graphics& g)
     for (int b = 0; b < Chain::numBlocks; ++b)
     {
         const auto& r = geo.rects[(size_t) b];
-        if (! isHalf (r, bounds.getHeight()))
+        if (! isHalf (r, tileAreaHeight()))
             arrow (r.getX() - kGap * 0.5f, cy);
     }
     arrow (right - 6.0f, cy);
@@ -329,7 +347,7 @@ void ChainStrip::paint (juce::Graphics& g)
     auto drawTile = [&] (int b, juce::Rectangle<float> r, bool floating)
     {
         const bool half = isHalf (r, bounds.getHeight());
-        const auto shape = hexCapsule (r);
+        const auto shape = hexCapsule (r, kPoint);
         const bool on = lit[(size_t) b];
         const bool hi = highlighted[(size_t) b];
         const bool hov = hover == b && ! dragging;
@@ -405,7 +423,8 @@ void ChainStrip::paint (juce::Graphics& g)
 
         // name (+ subtitle on full-height tiles)
         // eleven blocks share the strip: names squeeze rather than getting cut
-        auto text = r.withTrimmedLeft (half ? 21.0f : 23.0f).withTrimmedRight (half ? 7.0f : 7.0f);
+        auto text = half ? r.withTrimmedLeft (21.0f).withTrimmedRight (r.getHeight() * kPoint * 0.5f + 2.0f)
+                         : r.reduced (r.getHeight() * kPoint * 0.5f + 2.0f, 0.0f);
         if (half)
         {
             g.setFont (displayFont (16.0f));
@@ -414,15 +433,33 @@ void ChainStrip::paint (juce::Graphics& g)
             g.drawFittedText (Chain::names[b], text.translated (0.0f, 1.0f).toNearestInt(), juce::Justification::centredLeft, 1, 0.5f);
             return;
         }
-        g.setFont (displayFont (19.0f));
-        const auto nameArea = text.withTrimmedBottom (text.getHeight() * 0.42f).translated (0.0f, 2.0f);
+        g.setFont (displayFont (21.0f));
+        const float top = r.getY();
+        const auto nameArea = text.withY (top + 15.0f).withHeight (22.0f);
         if (dark) g.setColour (Colours::background);
         else if (on || hi) g.setGradientFill (honeyGradient (nameArea)); else g.setColour (Colours::textDim);
-        g.drawFittedText (Chain::names[b], nameArea.toNearestInt(), juce::Justification::bottomLeft, 1, 0.55f);
-        g.setFont (font (9.5f, true));
+        g.drawFittedText (Chain::names[b], nameArea.toNearestInt(), juce::Justification::centred, 1, 0.55f);
+        g.setFont (font (11.0f, true));
         g.setColour (dark ? Colours::background.withAlpha (0.75f) : hi ? Colours::text.withAlpha (0.8f) : Colours::textFaint);
-        g.drawFittedText (Chain::subtitles[b], text.withTrimmedTop (text.getHeight() * 0.58f).toNearestInt(), juce::Justification::topLeft, 1, 0.5f);
+        g.drawFittedText (subtitles[(size_t) b].isNotEmpty() ? subtitles[(size_t) b] : juce::String (Chain::subtitles[b]),
+                          text.withY (top + 37.0f).withHeight (13.0f).toNearestInt(), juce::Justification::centred, 1, 0.5f);
+
+        // stomp wiring: VENOM purple, STING green, on the tile's top edge
+        const int marks = stompMarks[(size_t) b];
+        float mx = r.getRight() - r.getHeight() * kPoint - 6.0f;
+        for (int bit : { 1, 0 })
+            if ((marks >> bit) & 1)
+            {
+                const auto dot = juce::Rectangle<float> (7.0f, 7.0f).withCentre ({ mx, r.getY() + 1.0f });
+                g.setColour (Colours::background);
+                g.fillEllipse (dot.expanded (1.5f));
+                g.setColour (bit == 0 ? juce::Colour (0xffb46bff) : juce::Colour (0xff5fd36b));
+                g.fillEllipse (dot);
+                mx -= 9.0f;
+            }
     };
+
+    paintZones (g);
 
     for (int b = 0; b < Chain::numBlocks; ++b)
         if (! (dragging && b == pressed))
@@ -433,9 +470,9 @@ void ChainStrip::paint (juce::Graphics& g)
         // where it will land, then the lifted tile
         const auto target = geo.rects[(size_t) pressed];
         g.setColour (Colours::accentBright.withAlpha (0.12f));
-        g.fillPath (hexCapsule (target));
+        g.fillPath (hexCapsule (target, kPoint));
         g.setColour (Colours::accentBright.withAlpha (0.7f));
-        g.strokePath (hexCapsule (target), juce::PathStrokeType (1.0f, juce::PathStrokeType::mitered, juce::PathStrokeType::butt));
+        g.strokePath (hexCapsule (target, kPoint), juce::PathStrokeType (1.0f, juce::PathStrokeType::mitered, juce::PathStrokeType::butt));
         drawTile (pressed, target.withPosition (dragPos - grabOffset), true);
 
         g.setFont (font (11.0f, true));
@@ -443,6 +480,47 @@ void ChainStrip::paint (juce::Graphics& g)
         const char* where = dragLane == Chain::pathA ? "PARALLEL A" : (dragLane == Chain::pathB ? "PARALLEL B" : "SERIES");
         g.drawText (where, juce::Rectangle<float> (target.getX(), target.getY() - 1.0f, target.getWidth(), 11.0f), juce::Justification::centredTop, false);
     }
+}
+
+void ChainStrip::paintZones (juce::Graphics& g) const
+{
+    // PRE = everything in front of the amp, RIG = AMP + CAB, POST = after them (from the tiles' targets, so
+    // a block dragged across the amp changes its zone as it lands)
+    const auto& rects = geometry.rects;
+    const auto amp = rects[(size_t) Chain::amp], cab = rects[(size_t) Chain::cab];
+    const float rigL = juce::jmin (amp.getX(), cab.getX()), rigR = juce::jmax (amp.getRight(), cab.getRight());
+    float preL = 1.0e6f, preR = -1.0f, postL = 1.0e6f, postR = -1.0f;
+    for (int b = 0; b < Chain::numBlocks; ++b)
+    {
+        if (b == Chain::amp || b == Chain::cab)
+            continue;
+        const auto& r = rects[(size_t) b];
+        if (r.getCentreX() < rigL)       { preL = juce::jmin (preL, r.getX()); preR = juce::jmax (preR, r.getRight()); }
+        else if (r.getCentreX() > rigR)  { postL = juce::jmin (postL, r.getX()); postR = juce::jmax (postR, r.getRight()); }
+    }
+
+    const float y = tileAreaHeight() + 5.0f;
+    auto zone = [&] (float x0, float x1, const char* name, bool rig)
+    {
+        if (x1 <= x0)
+            return;
+        x0 += 6.0f;
+        x1 -= 6.0f;
+        const auto colour = rig ? Colours::accent.withAlpha (0.75f) : Colours::textFaint;
+        g.setFont (font (10.5f, true));
+        const float tw = juce::GlyphArrangement::getStringWidth (g.getCurrentFont(), name) + 12.0f;
+        const float cx = (x0 + x1) * 0.5f;
+        g.setColour (colour.withAlpha (rig ? 0.45f : 0.35f));
+        g.fillRect (juce::Rectangle<float> (x0, y, juce::jmax (0.0f, cx - tw * 0.5f - x0), 1.0f));
+        g.fillRect (juce::Rectangle<float> (cx + tw * 0.5f, y, juce::jmax (0.0f, x1 - cx - tw * 0.5f), 1.0f));
+        g.fillRect (juce::Rectangle<float> (x0, y - 4.0f, 1.0f, 5.0f));
+        g.fillRect (juce::Rectangle<float> (x1 - 1.0f, y - 4.0f, 1.0f, 5.0f));
+        g.setColour (colour);
+        g.drawText (name, juce::Rectangle<float> (tw, 12.0f).withCentre ({ cx, y + 0.5f }), juce::Justification::centred, false);
+    };
+    zone (preL, preR, "PRE", false);
+    zone (rigL, rigR, "RIG", true);
+    zone (postL, postR, "POST", false);
 }
 
 //==============================================================================
@@ -496,7 +574,7 @@ void ChainStrip::mouseDrag (const juce::MouseEvent& e)
     dragPos = e.position;
 
     // lane from the height: up = path A, down = path B, middle = series
-    const float h = (float) getHeight();
+    const float h = tileAreaHeight();
     dragLane = e.position.y < h * 0.28f ? Chain::pathA : (e.position.y > h * 0.72f ? Chain::pathB : Chain::series);
 
     // position: how many of the other tiles lie to the left of the dragged tile's centre

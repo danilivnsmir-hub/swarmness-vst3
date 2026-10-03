@@ -140,7 +140,12 @@ namespace ampsim
                 a.C2 = 4.363e-8f; a.C3 = 2.253e-8f;
                 a.st[0].Rk = 505.0f; a.st[0].fb = 0.5839f; a.st[0].Rs = 2.736e5f; a.st[0].cathDb = -4.819f; a.st[0].cathHz = 77.42f; a.st[0].lpHz = 1.992e4f; a.st[0].div = 0.9987f;
                 a.st[1].Rk = 1313.0f; a.st[1].fb = 0.0002097f; a.st[1].Rs = 1.01e4f; a.st[1].cathDb = -14.72f; a.st[1].cathHz = 109.3f; a.st[1].lpHz = 1.769e4f; a.st[1].div = 0.9584f;
-                a.outDb += -3.2f;   // level-matched to the other models at noon
+                // played, the fit was still too polite: at noon it did not compress at all (quiet legato / tapping notes
+                // sank under the picked ones, which reads as a gate and as "no power"; a real cranked tube clean
+                // keeps them ~14 dB closer). More input, the power amp worked harder, a faster, deeper sag: ~7 dB
+                // at noon with a little breakup on hard hits, still clean at GAIN 3
+                a.inDb += 4.0f; a.paRef = 0.97f; a.sag = 1.0f; a.sagMs = 60.0f;
+                a.outDb += -9.4f;   // level-matched to the other models at noon
                 break;
             }
             case 2: // BRIT - British crunch: hot V1a, cold-biased V1b, V2a, an extra stage, cathode follower, EL34s
@@ -164,6 +169,15 @@ namespace ampsim
                 // clip), the knee of its compression, intermodulation, fizz, crest factor, recovery and the
                 // small-signal tone; at noon the user's DI comes out within ~2 dB of the capture everywhere
                 a.R1 = 1e5f; a.gridKg = 1.024e-5f; a.inDb = 36.88f; a.paAsym = 0.3434f; a.paRef = 2.5f;   // (the fit left the power amp linear; 2.5 lets it squash from GAIN 7 up, like the real one)
+                // played, the open non-master capture was too polite: at noon quiet legato / tapping notes sank ~6 dB
+                // compressed where crunch amps hold them 12-20 dB closer (it read as a gate and as "no power").
+                // +8 dB of input: ~12 dB at noon, the capture's character lower down the GAIN range
+                a.inDb += 8.0f;
+                // against a real British stack WITH its cabinet the direct-capture fit came out 5-10 dB short at 1.2-5 kHz
+                // (a 1.8 kHz cut, the transformer rolling off from 4.7 kHz): a low-mid hump without the bark - nasal when
+                // cranked, a thicker, fuzzier breed of amp. Bark back at 1.7 kHz, the transformer open to 9 kHz, the voice
+                // coil's rise from 3 kHz: within ~2 dB of the stack from 125 Hz to 3 kHz on the DI
+                a.voiceHz = 1700.0f; a.voiceDb = 3.0f; a.voiceQ = 0.8f; a.xfLp = 9000.0f; a.coilHz = 3000.0f; a.coilDb = 6.0f;
                 a.bias = 0.5019f; a.satKnee = 1.883f; a.nfb = 1.119f; a.piMax = 1.594f; a.sag = 0.2089f;
                 a.sagMs = 75.51f; a.voiceHz = 1820.0f; a.voiceDb = -4.482f; a.voiceQ = 0.9199f; a.brightDb = 2.129f;
                 a.brightHz = 2254.0f; a.presenceHz = 4460.0f; a.depthHz = 87.22f; a.spkHz = 105.4f; a.spkQ = 0.6176f;
@@ -175,7 +189,7 @@ namespace ampsim
                 a.st[2].Rk = 9298.0f; a.st[2].fb = 0.9744f; a.st[2].Rs = 1.568e4f; a.st[2].cathDb = -3.031f; a.st[2].cathHz = 38.56f; a.st[2].lpHz = 4977.0f; a.st[2].C = 3.35e-8f; a.st[2].div = 0.05397f;
                 a.st[3].Rk = 6019.0f; a.st[3].fb = 0.03207f; a.st[3].Rs = 6.789e4f; a.st[3].cathDb = -12.65f; a.st[3].cathHz = 30.0f; a.st[3].lpHz = 1.539e4f; a.st[3].C = 9.975e-8f;
 
-                a.outDb += 2.4f;   // level-matched to the other models at noon
+                a.outDb += -1.1f;   // level-matched to the other models at noon
                 break;
             }
             case 3: // thick fuzz-crunch: four hot stages, big coupling caps, dark, low feedback
