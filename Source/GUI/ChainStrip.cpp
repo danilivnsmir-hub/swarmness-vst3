@@ -146,8 +146,11 @@ void ChainStrip::resized()
 juce::Rectangle<float> ChainStrip::ledRect (juce::Rectangle<float> tile) const noexcept
 {
     const bool half = isHalf (tile, tileAreaHeight());
-    const float s = half ? 9.0f : 10.0f;
-    return juce::Rectangle<float> (s, s - 1.0f).withCentre ({ tile.getX() + (half ? 14.0f : 16.0f), tile.getCentreY() });
+    // full tiles: the LED sits on top in the middle, the name and its value centred under it;
+    // half tiles (parallel paths) are too low for that: LED on the left
+    if (half)
+        return juce::Rectangle<float> (9.0f, 8.0f).withCentre ({ tile.getX() + 14.0f, tile.getCentreY() });
+    return juce::Rectangle<float> (10.0f, 9.0f).withCentre ({ tile.getCentreX(), tile.getY() + 9.5f });
 }
 
 Chain::Layout ChainStrip::displayLayout() const
@@ -420,7 +423,8 @@ void ChainStrip::paint (juce::Graphics& g)
 
         // name (+ subtitle on full-height tiles)
         // eleven blocks share the strip: names squeeze rather than getting cut
-        auto text = r.withTrimmedLeft (half ? 21.0f : 25.0f).withTrimmedRight (r.getHeight() * kPoint * 0.5f + 2.0f);
+        auto text = half ? r.withTrimmedLeft (21.0f).withTrimmedRight (r.getHeight() * kPoint * 0.5f + 2.0f)
+                         : r.reduced (r.getHeight() * kPoint * 0.5f + 2.0f, 0.0f);
         if (half)
         {
             g.setFont (displayFont (16.0f));
@@ -430,14 +434,15 @@ void ChainStrip::paint (juce::Graphics& g)
             return;
         }
         g.setFont (displayFont (21.0f));
-        const auto nameArea = text.withTrimmedBottom (text.getHeight() * 0.42f).translated (0.0f, 2.0f);
+        const float top = r.getY();
+        const auto nameArea = text.withY (top + 15.0f).withHeight (22.0f);
         if (dark) g.setColour (Colours::background);
         else if (on || hi) g.setGradientFill (honeyGradient (nameArea)); else g.setColour (Colours::textDim);
-        g.drawFittedText (Chain::names[b], nameArea.toNearestInt(), juce::Justification::bottomLeft, 1, 0.55f);
+        g.drawFittedText (Chain::names[b], nameArea.toNearestInt(), juce::Justification::centred, 1, 0.55f);
         g.setFont (font (11.0f, true));
         g.setColour (dark ? Colours::background.withAlpha (0.75f) : hi ? Colours::text.withAlpha (0.8f) : Colours::textFaint);
         g.drawFittedText (subtitles[(size_t) b].isNotEmpty() ? subtitles[(size_t) b] : juce::String (Chain::subtitles[b]),
-                          text.withTrimmedTop (text.getHeight() * 0.58f).withTrimmedTop (1.0f).toNearestInt(), juce::Justification::topLeft, 1, 0.5f);
+                          text.withY (top + 37.0f).withHeight (13.0f).toNearestInt(), juce::Justification::centred, 1, 0.5f);
 
         // stomp wiring: VENOM purple, STING green, on the tile's top edge
         const int marks = stompMarks[(size_t) b];

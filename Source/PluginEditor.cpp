@@ -452,8 +452,9 @@ void MainPanel::resized()
     const auto P = pageArea.toFloat();
     honeyArea = fuzzArea = swarmArea = flowArea = hiveArea = shiftArea = P;
 
-    auto powerFor = [] (juce::Rectangle<float> a) { return juce::Rectangle<int> ((int) a.getRight() - 40, (int) a.getY() + 8, 26, 26); };
-    auto pillFor  = [] (juce::Rectangle<float> a, int slot) { return juce::Rectangle<int> ((int) a.getRight() - 40 - 66 * (slot + 1), (int) a.getY() + 9, 60, 24); };
+    // a block's power button is the LED in front of its title; the switches line up at the right
+    auto powerFor = [] (juce::Rectangle<float> a) { return titleLedBounds (a); };
+    auto pillFor  = [] (juce::Rectangle<float> a, int slot) { return juce::Rectangle<int> ((int) a.getRight() - 16 - 60 - 66 * slot, (int) a.getY() + 9, 60, 24); };
     constexpr int bigW = 92, bigH = 128, smallW = 70, smallH = 100, bigStep = 124, smallStep = 96;
     // knobs side by side, centred between x0 and x1; big ones and small ones share a centre line
     auto row = [] (std::initializer_list<std::pair<Knob*, bool>> knobs, int x0, int x1, int centreY)
@@ -479,7 +480,7 @@ void MainPanel::resized()
 
     // SMOKE: one row - the three that shape it large, the details smaller
     fuzzPower.setBounds (powerFor (fuzzArea));
-    fuzzVoiceSelector.setBounds ((int) fuzzArea.getRight() - 40 - 8 - 150, (int) fuzzArea.getY() + 10, 150, 22);
+    fuzzVoiceSelector.setBounds ((int) fuzzArea.getRight() - 16 - 150, (int) fuzzArea.getY() + 10, 150, 22);
     row ({ { &fuzzKnob, true }, { &fuzzToneKnob, true }, { &fuzzBlendKnob, true }, { &fuzzScoopKnob, false }, { &fuzzGlareKnob, false },
            { &fuzzGateKnob, false }, { &fuzzSagKnob, false }, { &fuzzCrushKnob, false } }, px0, px1, bodyMid);
 
@@ -552,8 +553,8 @@ void MainPanel::resized()
 
     // WINGS: depth and rate on the left, the step pattern next to them
     flowPower.setBounds (powerFor (flowArea));
-    syncToggle.setBounds ((int) flowArea.getRight() - 44 - 54,  (int) flowArea.getY() + 9, 54, 24);
-    hardToggle.setBounds ((int) flowArea.getRight() - 44 - 112, (int) flowArea.getY() + 9, 54, 24);
+    syncToggle.setBounds ((int) flowArea.getRight() - 16 - 54,  (int) flowArea.getY() + 9, 54, 24);
+    hardToggle.setBounds ((int) flowArea.getRight() - 16 - 112, (int) flowArea.getY() + 9, 54, 24);
     {
         flowAmountKnob.setBounds (px0, bodyMid - bigH / 2, bigW, bigH);
         flowSpeedKnob.setBounds (px0 + bigStep, bodyMid - bigH / 2, bigW, bigH);
@@ -712,7 +713,7 @@ void MainPanel::paintBackdrop (juce::Graphics& g)
     auto blockPanel = [&] (juce::Rectangle<float> a, const char* title, const char* description, bool on)
     {
         drawPanel (g, a);
-        drawSectionTitle (g, titleRow (a), title, on);
+        drawSectionTitle (g, titleRow (a), title, on, false);   // the block's PowerButton is the LED
         g.setFont (font (12.5f, true));
         g.setColour (Colours::textFaint);
         g.drawText (description, titleRow (a).withTrimmedLeft (22.0f + (float) juce::GlyphArrangement::getStringWidthInt (displayFont (23.0f), title) + 12.0f),
@@ -822,6 +823,12 @@ void MainPanel::tick()
     const bool hiveSynced = paramOn (ParamIDs::rbSync);
     rbTimeKnob.setVisible (! hiveSynced);
     rbDivKnob.setVisible (hiveSynced);
+
+    // the power LEDs also glow (faintly) while a stomp / footswitch has the block on
+    shiftPower.setEngaged (noiseOn);
+    for (auto [button, block] : { std::pair<PowerButton*, int> { &hivePower, Chain::pitch }, { &swarmPower, Chain::swarm },
+                                  { &fuzzPower, Chain::smoke }, { &flowPower, Chain::wings }, { &honeyPower, Chain::honey } })
+        button->setEngaged (blockEngaged (block));
 
     const bool voicesOn = blockEngaged (Chain::pitch);
     const std::array<bool, 6> states { noiseOn, voicesOn, blockEngaged (Chain::swarm),
@@ -1034,7 +1041,7 @@ void MainPanel::addStompWiring (juce::PopupMenu& menu, bool venom)
         if (p == nullptr) return;
         const int current = juce::roundToInt (p->convertFrom0to1 (p->getValue()));
         juce::PopupMenu sub;
-        static const char* labels[] { "-  (its own power button)", "On while held", "Off while held" };
+        static const char* labels[] { "-  (its own power LED)", "On while held", "Off while held" };
         for (int a = 0; a < 3; ++a)
             sub.addItem (labels[a], true, current == a, [p, a] { p->beginChangeGesture(); p->setValueNotifyingHost (p->convertTo0to1 ((float) a)); p->endChangeGesture(); });
         menu.addSubMenu (name + (current == 1 ? "  -  On" : current == 2 ? "  -  Off" : juce::String()), sub, true, nullptr, current != 0);

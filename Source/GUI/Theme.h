@@ -209,11 +209,19 @@ namespace Theme
         }
     }
 
-    /** Section title: hex LED + spiky metal lettering in the honey gradient when active. */
-    inline void drawSectionTitle (juce::Graphics& g, juce::Rectangle<float> area, const juce::String& title, bool active)
+    /** Where a panel's title LED sits (area = the panel): a block's power button goes exactly there. */
+    inline juce::Rectangle<int> titleLedBounds (juce::Rectangle<float> panel)
+    {
+        return juce::Rectangle<int> (24, 24).withCentre ({ juce::roundToInt (panel.getX() + 16.0f + 6.0f), juce::roundToInt (panel.getY() + 8.0f + 13.0f) });
+    }
+
+    /** Section title: hex LED + spiky metal lettering in the honey gradient when active.
+        drawLed = false: the space stays, a power button (PowerButton) is the LED. */
+    inline void drawSectionTitle (juce::Graphics& g, juce::Rectangle<float> area, const juce::String& title, bool active, bool drawLed = true)
     {
         const auto led = area.removeFromLeft (12.0f).withSizeKeepingCentre (12.0f, 11.0f);
-        if (active)
+        if (! drawLed) {}
+        else if (active)
         {
             g.setColour (Colours::accent.withAlpha (0.35f));
             g.fillPath (hexagon (led.expanded (4.0f)));

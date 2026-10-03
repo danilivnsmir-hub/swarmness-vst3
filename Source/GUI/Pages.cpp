@@ -10,11 +10,17 @@ namespace
     void drawPanelTitle (juce::Graphics& g, juce::Rectangle<float> area, const juce::String& title, const juce::String& subtitle, bool active)
     {
         auto row = area.reduced (16.0f, 0.0f).withTrimmedTop (8.0f).withHeight (26.0f);
-        drawSectionTitle (g, row, title, active);
+        drawSectionTitle (g, row, title, active, false);   // the block's PowerButton is the LED
         g.setFont (font (12.5f, true));
         g.setColour (Colours::textFaint);
         g.drawText (subtitle, row.withTrimmedLeft (22.0f + (float) juce::GlyphArrangement::getStringWidthInt (displayFont (23.0f), title) + 12.0f),
                     juce::Justification::centredLeft, false);
+    }
+
+    /** The block is sounding right now (its switch, or a stomp / footswitch holding it on). */
+    bool engagedNow (SwarmnessAudioProcessor& p, int block)
+    {
+        return (p.getMeters().engagedBlocks.load (std::memory_order_relaxed) & (1u << block)) != 0;
     }
 
     juce::String hzLabel (double f)
@@ -571,9 +577,8 @@ void EqPage::resized()
     const float w = (float) getWidth(), h = (float) getHeight();
     combArea = carveArea = { 0.0f, 0.0f, w, h };
 
-    auto powerFor = [] (juce::Rectangle<float> a) { return juce::Rectangle<int> ((int) a.getRight() - 40, (int) a.getY() + 8, 26, 26); };
-    combPower.setBounds (powerFor (combArea));
-    carvePower.setBounds (powerFor (carveArea));
+    combPower.setBounds (titleLedBounds (combArea));
+    carvePower.setBounds (titleLedBounds (carveArea));
 
     // COMB: the curve across the top, ten faders under it
     {
@@ -629,6 +634,8 @@ void EqPage::paint (juce::Graphics& g)
 
 void EqPage::tick()
 {
+    combPower.setEngaged (engagedNow (processor, Chain::comb));
+    carvePower.setEngaged (engagedNow (processor, Chain::carve));
     const bool c = combPower.getToggleState(), v = carvePower.getToggleState();
     if (c != combOn || v != carveOn)
     {
@@ -823,8 +830,8 @@ ReverbPage::ReverbPage (SwarmnessAudioProcessor& p)
 void ReverbPage::resized()
 {
     panelArea = getLocalBounds().toFloat();
-    power.setBounds ((int) panelArea.getRight() - 40, 8, 26, 26);
-    typeSelector.setBounds ((int) panelArea.getRight() - 52 - 400, 10, 400, 24);
+    power.setBounds (titleLedBounds (panelArea));
+    typeSelector.setBounds ((int) panelArea.getRight() - 16 - 400, 10, 400, 24);
     freezeToggle.setBounds (typeSelector.getX() - 12 - 76, 10, 76, 24);
 
     const int tailH = getHeight() - 46 - 124;
@@ -891,6 +898,7 @@ void ReverbPage::paint (juce::Graphics& g)
 
 void ReverbPage::tick()
 {
+    power.setEngaged (engagedNow (processor, Chain::crypt));
     const bool nowOn = power.getToggleState();
     const bool nowIr = (int) state.getRawParameterValue (ParamIDs::revType)->load() == ReverbStage::impulse;
     const auto desc = processor.getReverbIRDescription();
@@ -1099,8 +1107,8 @@ void AmpCabSection::resized()
     ampArea = { 0.0f, 0.0f, 690.0f, h };
     cabArea = { 702.0f, 0.0f, w - 702.0f, h };
 
-    ampPower.setBounds ((int) ampArea.getRight() - 40, 8, 26, 26);
-    channelSelector.setBounds ((int) ampArea.getRight() - 52 - 300, 10, 300, 24);
+    ampPower.setBounds (titleLedBounds (ampArea));
+    channelSelector.setBounds ((int) ampArea.getRight() - 16 - 300, 10, 300, 24);
     {
         const std::initializer_list<Knob*> row { &gainKnob, &bassKnob, &midKnob, &trebleKnob, &presenceKnob, &depthKnob, &masterKnob };
         const std::initializer_list<Knob*> namRow { &namInputKnob, &namBassKnob, &namMidKnob, &namTrebleKnob, &namPresenceKnob, &namDepthKnob, &namOutputKnob };
@@ -1128,7 +1136,7 @@ void AmpCabSection::resized()
     gateKnob .setBounds ((int) morphArea.getRight() + 20, 146, 72, 102);
     levelKnob.setBounds (gateKnob.getRight() + 8, 146, 72, 102);
 
-    cabPower.setBounds ((int) cabArea.getRight() - 40, 8, 26, 26);
+    cabPower.setBounds (titleLedBounds (cabArea));
     cabSelector.setBounds ((int) cabArea.getX() + 14, 40, (int) cabArea.getWidth() - 28, 24);
     {
         const std::initializer_list<Knob*> row { &micKnob, &distKnob, &lowCutKnob, &highCutKnob, &cabLevelKnob };
@@ -1253,6 +1261,8 @@ void AmpCabSection::paint (juce::Graphics& g)
 
 void AmpCabSection::tick()
 {
+    ampPower.setEngaged (engagedNow (processor, Chain::amp));
+    cabPower.setEngaged (engagedNow (processor, Chain::cab));
     const bool nowAmp = ampPower.getToggleState(), nowCab = cabPower.getToggleState();
     const int nowChannel = juce::roundToInt (state.getRawParameterValue (ParamIDs::ampChannel)->load());
     const int nowType = juce::roundToInt (state.getRawParameterValue (ParamIDs::cabType)->load());
@@ -1476,8 +1486,8 @@ DriveBlock::Settings WaspSection::current() const
 void WaspSection::resized()
 {
     panelArea = getLocalBounds().toFloat();
-    power.setBounds ((int) panelArea.getRight() - 40, 8, 26, 26);
-    modeSelector.setBounds ((int) panelArea.getRight() - 40 - 12 - 150, 9, 150, 24);
+    power.setBounds (titleLedBounds (panelArea));
+    modeSelector.setBounds ((int) panelArea.getRight() - 16 - 150, 9, 150, 24);
     characterSelector.setBounds (modeSelector.getX() - 12 - 250, 9, 250, 24);
     const float knobsW = 470.0f;
     {
@@ -1661,6 +1671,7 @@ void WaspSection::paint (juce::Graphics& g)
 
 void WaspSection::tick()
 {
+    power.setEngaged (engagedNow (processor, Chain::drive));
     const auto s = current();
     bool changed = false;
     if (const auto st = processor.getTone3000Status (Tone3000::Target::pedal); st != toneStatus)

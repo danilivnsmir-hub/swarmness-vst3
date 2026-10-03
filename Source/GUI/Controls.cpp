@@ -160,43 +160,32 @@ PowerButton::PowerButton()
     setMouseCursor (juce::MouseCursor::PointingHandCursor);
 }
 
-void PowerButton::paintButton (juce::Graphics& g, bool isMouseOver, bool)
+void PowerButton::paintButton (juce::Graphics& g, bool isMouseOver, bool isDown)
 {
-    const auto r = getLocalBounds().toFloat().reduced (1.5f);
+    // the same hex LED the section titles have, sized like theirs; the button around it is the click target
+    const auto c = getLocalBounds().toFloat().getCentre();
+    const auto led = juce::Rectangle<float> (12.0f, 11.0f).withCentre (c);
     const bool on = getToggleState();
-    const auto c = r.getCentre();
-    const float rad = juce::jmin (r.getWidth(), r.getHeight()) * 0.5f;
-    const auto hexR = juce::Rectangle<float> (rad * 2.0f, rad * 2.0f).withCentre (c);
-
-    // artwork: the round power button, its symbol lit when on
-    if (Skin::draw (g, on ? "power_on" : "power_off", hexR.expanded (2.0f)))
+    if (isMouseOver || isDown)
     {
-        if (isMouseOver)
-        {
-            g.setColour (Colours::accent.withAlpha (0.35f));
-            g.drawEllipse (hexR.reduced (1.0f), 1.2f);
-        }
-        return;
+        g.setColour (Colours::accent.withAlpha (isDown ? 0.3f : 0.16f));
+        g.fillPath (hexagon (led.expanded (6.0f)));
     }
-
-    if (on)
+    if (on || engaged)
     {
-        g.setColour (Colours::accent.withAlpha (0.3f));
-        g.fillPath (hexagon (hexR.expanded (2.0f), true));
+        g.setColour (Colours::accent.withAlpha (on ? 0.35f : 0.18f));
+        g.fillPath (hexagon (led.expanded (4.0f)));
+        if (on)
+            g.setGradientFill (honeyGradient (led));
+        else
+            g.setColour (Colours::accent.withAlpha (0.55f));
+        g.fillPath (hexagon (led));
     }
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff2e2319), c.x, hexR.getY(),
-                                             juce::Colour (0xff0d0907), c.x, hexR.getBottom(), false));
-    g.fillPath (hexagon (hexR.reduced (1.5f), true));
-    g.setColour (on ? Colours::accent : (isMouseOver ? Colours::textDim : Colours::panelBorder.brighter (0.3f)));
-    g.strokePath (hexagon (hexR.reduced (1.5f), true), juce::PathStrokeType (1.3f));
-
-    const float ir = rad * 0.4f;
-    juce::Path glyph;
-    glyph.addCentredArc (c.x, c.y, ir, ir, 0.0f, juce::degreesToRadians (35.0f), juce::degreesToRadians (325.0f), true);
-    glyph.startNewSubPath (c.x, c.y - ir * 1.25f);
-    glyph.lineTo (c.x, c.y - ir * 0.25f);
-    g.setColour (on ? Colours::accentBright : Colours::textFaint);
-    g.strokePath (glyph, juce::PathStrokeType (1.8f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    else
+    {
+        g.setColour (isMouseOver ? Colours::textDim : Colours::textFaint);
+        g.strokePath (hexagon (led), juce::PathStrokeType (1.2f));
+    }
 }
 
 //==============================================================================
